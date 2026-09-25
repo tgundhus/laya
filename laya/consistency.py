@@ -296,8 +296,8 @@ class DecisionCache:
     order is positional), the per-call token budget, the checkpoint and the model's fingerprint,
     plus the routing decision when the checkpoint has per-language temperatures, the one way
     the language reaches an answer. Values are compact JSON, compressed when that is smaller;
-    nothing of the request text is stored. Decisions leave oldest first: once they are `ttl` seconds old, and when more
-    than `maxsize` are held. A hit writes nothing, so reads never wait on a write.
+    nothing of the request text is stored. Decisions leave oldest first: once they are `ttl`
+    seconds old, and when more than `maxsize` are held. A hit writes nothing; only a miss stores.
 
     An `Agent` call may pass `lang`, which a hook cannot see. On an `Agent` with per-language
     temperatures the cache therefore stands aside rather than risk replaying an answer scored for

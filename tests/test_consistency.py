@@ -242,7 +242,8 @@ check_raises("args/ttl is not a bool", ValueError, lambda: DecisionCache(ttl=Tru
 check_raises("args/maxsize must be positive", ValueError, lambda: DecisionCache(maxsize=0))
 check_raises("args/maxsize is an int", ValueError, lambda: DecisionCache(maxsize=2.5))
 check_raises("args/fingerprint is a string", TypeError, lambda: DecisionCache(fingerprint=1))
-check("args/no bound and no expiry are allowed", DecisionCache(ttl=None, maxsize=None).cache_info()["maxsize"], None)
+check("args/no bound and no expiry are allowed",
+      DecisionCache(ttl=None, maxsize=None).cache_info()["maxsize"], None)
 
 
 # --------------------------------------------------------------- results that are not JSON
@@ -398,9 +399,9 @@ for name in ("DecisionCache", "decision_margins"):
     check_true("export/%s is in __all__" % name, name in laya.__all__)
 
 # --------------------------------------------------------------- the archived Feishu runs
-# research/benchmarks/feishu_zh keeps three repeats of 64 cases for Jev and Laya. Every answer
-# that changed side between Jev's runs must sit inside a 0.1 margin, while that band flags only
-# a few percent of all answers; Laya's repeats must be identical.
+# research/benchmarks/feishu_zh keeps three repeats of 64 cases for Jev and Laya. An answer that
+# changed side between Jev's runs must sit inside a 0.1 margin in every run, while that band
+# flags only a few percent of all answers; Laya's repeats must be identical.
 ARCHIVE = os.path.join(ROOT, "research", "benchmarks", "feishu_zh", "results", "v1")
 THRESHOLDS = {"related": 0.5, "action": 0.5, "urgent": 0.75, "value": 0.5}
 for backend in ("jev", "laya"):
@@ -426,8 +427,9 @@ for backend in ("jev", "laya"):
                 covered += sum(per[name] < 0.1 for per in margins)
     total = sum(len(rep["response"]["answers"]) for reps in groups.values() for rep in reps)
     if backend == "jev":
-        check("archive/jev has answers that changed between runs", unstable, 9)
-        check("archive/a 0.1 margin flags every one of them", covered, unstable)
+        # 3 answers changed side between runs; counted once per run, that is 9 readings.
+        check("archive/jev readings of answers that changed between runs", unstable, 9)
+        check("archive/a 0.1 margin flags each of them in every run", covered, unstable)
         check_true("archive/while flagging under 5%% of answers (%d/%d)" % (flagged, total),
                    flagged < 0.05 * total)
         # 38 of the 64 choice answers repeat their probabilities, but 9 of those still change
