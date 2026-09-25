@@ -134,6 +134,24 @@ check_true("laya.hooks/run_coroutine_sync exists",
 for event in HOOK_EVENTS:
     check_true("BaseHook/%s callable" % event, callable(getattr(BaseHook, event, None)))
 
+# DecisionCache is a hook object; decision_margins reads a result. Both are top-level.
+for name in ("DecisionCache", "decision_margins"):
+    check_true("__all__/%s" % name, name in laya.__all__)
+    check_true("laya.%s exists" % name, hasattr(laya, name))
+check_param("DecisionCache.__init__", laya.DecisionCache.__init__, "path", None,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD)
+for param, default in (("ttl", None), ("maxsize", 100_000), ("fingerprint", None)):
+    check_param("DecisionCache.__init__", laya.DecisionCache.__init__, param, default,
+                inspect.Parameter.KEYWORD_ONLY)
+for method in ("on_predict_start", "on_predict_end", "prune", "cache_info", "cache_clear", "close"):
+    check_true("DecisionCache/%s callable" % method, callable(getattr(laya.DecisionCache, method, None)))
+check("DecisionCache/cache_info keys", list(laya.DecisionCache().cache_info()),
+      ["size", "maxsize", "hits", "misses", "conflicts"])
+check_true("DecisionCache/accepted as a hook",
+           len(__import__("laya.hooks", fromlist=["normalise_hooks"]).normalise_hooks([laya.DecisionCache()])) == 1)
+check_param("decision_margins", laya.decision_margins, "result", inspect.Parameter.empty)
+check_param("decision_margins", laya.decision_margins, "noul_threshold", 0.5)
+
 # process-wide default registry lives in laya.hooks (not the top level)
 for helper in ("default_hooks", "set_default_hooks", "add_default_hook", "clear_default_hooks",
                "compose_hooks"):

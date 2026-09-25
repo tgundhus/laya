@@ -1,5 +1,6 @@
 """Laya: Fast, non-autoregressive System 1 decision engine with calibrated probabilities."""
 
+from .consistency import DecisionCache, decision_margins
 from .email import clean_email_body, email_state
 from .hooks import AsyncHook, BaseHook, Hook, PredictContext, PredictHook
 from .lang import analyse as detect_language
@@ -100,5 +101,7 @@ __all__ = [
     "AsyncHook",
     "decide",
     "DecisionResult",
+    "DecisionCache",
+    "decision_margins",
     "__version__",
 ]
