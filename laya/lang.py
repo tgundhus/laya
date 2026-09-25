@@ -11,9 +11,14 @@ Script detection is exact. The Latin-script language guess is a stopword/diacrit
 is explicitly best-effort: pass an explicit model or `lang=` when you already know the language.
 """
 import re
+import string
 import unicodedata
+from collections import Counter
 from collections.abc import Mapping
 from typing import Dict, List, Optional, Union
+
+# Deleting these from the ASCII bytes of a text leaves everything but its letters.
+_ASCII_LETTER_BYTES = string.ascii_letters.encode("ascii")
 
 # Unicode blocks that the English (ModernBERT-large, 50k English BPE) checkpoint cannot read.
 _SCRIPT_RANGES = [
@@ -176,6 +181,8 @@ _SHARED_WORDS = {w for w in {word for words in _STOP.values() for word in words}
 # English function words no other list holds (`in`, `is`, `as`, `was` are shared with German,
 # Dutch and Portuguese). They alone carry the English rescue of `latin_profile`.
 _EN_ONLY_WORDS = _STOP["en"] - _SHARED_WORDS
+# Per language, the words of its list no other list holds: the evidence that may name it.
+_OWN_WORDS = {lg: words - _SHARED_WORDS for lg, words in _STOP.items()}
 
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 # A token whose dot or @ joins word characters is an identifier, not prose: `github.com`,
@@ -247,6 +254,10 @@ def _script_counts(text: str) -> Dict[str, int]:
     is the last key. `analyse` needs both the dominant script and the per-script fractions, and
     used to walk the text twice (once per function) to get them; one pass serves both.
     """
+    if text.isascii():
+        # An ASCII letter is always Latin and nothing else in ASCII is a letter, so counting them
+        # in C gives what the walk below would, about 40x faster on English text.
+        return {"latin": len(text) - len(text.encode("ascii").translate(None, _ASCII_LETTER_BYTES))}
     counts: Dict[str, int] = {}
     latin = 0
     for ch in text:
@@ -391,16 +402,21 @@ def latin_profile(text: str) -> Dict[str, object]:
     claims: shared function words alone (`la`, `e`, `o`) identify no particular language.
     """
     # 'İ'.lower() is 'i' + a combining dot, which matches no word list
-    words = _WORD.findall(_IDENTIFIER.sub(" ", text).replace("İ", "i").lower())
+    # An identifier needs a `.` or `@`, so without either there is nothing to remove.
+    prose = _IDENTIFIER.sub(" ", text) if "." in text or "@" in text else text
+    words = _WORD.findall(prose.replace("İ", "i").lower())
     lowered = text.lower()
-    diac = sum(1 for ch in lowered if ch in _NON_EN_DIACRITICS)
+    # Every diacritic in the set is outside ASCII, so ASCII text has none.
+    diac = 0 if lowered.isascii() else sum(1 for ch in lowered if ch in _NON_EN_DIACRITICS)
     diac_rate = diac / max(1, len(lowered))
     non_english = diac_rate >= NON_EN_DIACRITIC_RATE
     if len(words) < 4:
         return {"language": None, "english_hits": 0, "diacritic_rate": diac_rate,
                 "looks_non_english": non_english}
 
-    scores = {lg: sum(1 for w in words if w in sw) for lg, sw in _STOP.items()}
+    # Each distinct word is looked up once, weighted by how often it occurs.
+    counts = Counter(words)
+    scores = {lg: sum(counts[w] for w in counts.keys() & sw) for lg, sw in _STOP.items()}
     en = scores.get("en", 0)
     # Only a language that matched at least one word no other list claims may be named. Without
     # that condition the top score can be pure overlap -- `la` and `e` in Romanian text made
@@ -408,7 +424,7 @@ def latin_profile(text: str) -> Dict[str, object]:
     # from the running rather than merely losing the tie, so a lesser score with real evidence
     # still gets named, and the text stays undecided when no list has any.
     evidenced = {lg: s for lg, s in scores.items()
-                 if lg != "en" and any(w not in _SHARED_WORDS for w in set(words) & _STOP[lg])}
+                 if lg != "en" and not counts.keys().isdisjoint(_OWN_WORDS[lg])}
     best_lg, best = max(evidenced.items(), key=lambda kv: kv[1], default=(None, 0))
 
     lang = None
@@ -463,7 +479,11 @@ def _named_prose_language(segment: str):
     """
     if not segment.strip() or _CODE_LINE.search(segment):
         return None
-    prose = " ".join(tok for tok in segment.split() if not _JOINED.search(tok))
+    # A joiner match cannot span whitespace, so a segment with none has no token to drop.
+    if _JOINED.search(segment):
+        prose = " ".join(tok for tok in segment.split() if not _JOINED.search(tok))
+    else:
+        prose = " ".join(segment.split())
     if any(ch.islower() for ch in prose):
         prose = _LETTER_RUN.sub(lambda m: " " if m.group().isupper() else m.group(), prose)
     tokens = _WORD.findall(prose)
@@ -510,10 +530,13 @@ def _analyse_text(text: str) -> Dict[str, object]:
     prof = _profile_from_counts(counts)
     script = _script_from_counts(counts)
     non_latin = round(1.0 - prof.get("latin", 0.0), 4) if prof else 0.0
-    n_non_latin = round(non_latin * sum(ch.isalpha() for ch in text))
-    if script == "latin" and _non_latin_words(text) and (
-            non_latin >= NON_LATIN_FRACTION or (
-                non_latin >= NON_LATIN_MIN_FRACTION and n_non_latin >= NON_LATIN_MIN_LETTERS)):
+    # `counts` holds every letter exactly once, so its total is the text's letter count.
+    n_non_latin = round(non_latin * sum(counts.values()))
+    large_share = non_latin >= NON_LATIN_FRACTION or (
+        non_latin >= NON_LATIN_MIN_FRACTION and n_non_latin >= NON_LATIN_MIN_LETTERS)
+    # The share test is cheap and settles ordinary Latin text, where the share is 0; only a large
+    # share is worth walking the text for non-Latin words.
+    if script == "latin" and large_share and _non_latin_words(text):
         script = max((s for s in prof if s != "latin"), key=prof.get)
     if script == "unknown":
         return {"script": "unknown", "script_profile": prof, "language": None,
