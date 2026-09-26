@@ -1,0 +1,1758 @@
+{
+  "torch": "2.14.0+cu130",
+  "threads": 4,
+  "repeats": 3,
+  "warmup": 1,
+  "checkpoints": {
+    "english": {
+      "path": "synthetic ckpt: english",
+      "max_len": 512,
+      "head_max_len": 192,
+      "points": [
+        {
+          "state_tokens_requested": 20,
+          "k": 1,
+          "state_tokens": 20,
+          "head_tokens": [
+            35
+          ],
+          "row_tokens": [
+            56
+          ],
+          "encoder_tokens": {
+            "today": 56,
+            "today_padded": 56,
+            "late": 57,
+            "late_padded": 57,
+            "asym": 57
+          },
+          "head_layer_tokens": {
+            "today": 56,
+            "late": 56,
+            "asym": 56
+          },
+          "encoder_attn_pairs": {
+            "today": 87808,
+            "late": 47852,
+            "asym": 83272
+          },
+          "gflops_est": {
+            "today": 41.64,
+            "late": 42.16,
+            "asym": 42.3,
+            "today_head_share": 0.068
+          },
+          "median_ms": {
+            "today": 342.2,
+            "late": 470.79,
+            "today_encoder": 246.03,
+            "today_tail": 18.19
+          },
+          "speedup": 0.73,
+          "today_encoder_share": 0.931,
+          "today_head_share": 0.069,
+          "raw_ms": {
+            "today": [
+              279.63,
+              376.07,
+              342.2
+            ],
+            "late": [
+              449.09,
+              470.79,
+              498.75
+            ],
+            "today_encoder": [
+              251.35,
+              242.97,
+              246.03
+            ],
+            "today_tail": [
+              18.19,
+              17.26,
+              19.0
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 20,
+          "k": 3,
+          "state_tokens": 20,
+          "head_tokens": [
+            35,
+            27,
+            34
+          ],
+          "row_tokens": [
+            56,
+            48,
+            55
+          ],
+          "encoder_tokens": {
+            "today": 159,
+            "today_padded": 168,
+            "late": 118,
+            "late_padded": 127,
+            "asym": 118
+          },
+          "head_layer_tokens": {
+            "today": 168,
+            "late": 168,
+            "asym": 168
+          },
+          "encoder_attn_pairs": {
+            "today": 237020,
+            "late": 100632,
+            "asym": 197784
+          },
+          "gflops_est": {
+            "today": 124.79,
+            "late": 96.1,
+            "asym": 90.32,
+            "today_head_share": 0.068
+          },
+          "median_ms": {
+            "today": 443.54,
+            "late": 524.27,
+            "today_encoder": 399.48,
+            "today_tail": 24.91
+          },
+          "speedup": 0.85,
+          "today_encoder_share": 0.941,
+          "today_head_share": 0.059,
+          "raw_ms": {
+            "today": [
+              382.29,
+              443.54,
+              485.73
+            ],
+            "late": [
+              524.27,
+              520.74,
+              591.73
+            ],
+            "today_encoder": [
+              419.6,
+              399.48,
+              389.35
+            ],
+            "today_tail": [
+              26.42,
+              24.91,
+              24.47
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 20,
+          "k": 10,
+          "state_tokens": 20,
+          "head_tokens": [
+            35,
+            27,
+            34,
+            32,
+            32,
+            34,
+            32,
+            31,
+            17,
+            20
+          ],
+          "row_tokens": [
+            56,
+            48,
+            55,
+            53,
+            53,
+            55,
+            53,
+            52,
+            38,
+            41
+          ],
+          "encoder_tokens": {
+            "today": 504,
+            "today_padded": 560,
+            "late": 316,
+            "late_padded": 372,
+            "asym": 316
+          },
+          "head_layer_tokens": {
+            "today": 560,
+            "late": 560,
+            "asym": 560
+          },
+          "encoder_attn_pairs": {
+            "today": 720888,
+            "late": 265216,
+            "asym": 562744
+          },
+          "gflops_est": {
+            "today": 415.67,
+            "late": 284.78,
+            "asym": 247.57,
+            "today_head_share": 0.068
+          },
+          "median_ms": {
+            "today": 1362.71,
+            "late": 951.77,
+            "today_encoder": 1364.99,
+            "today_tail": 86.53
+          },
+          "speedup": 1.43,
+          "today_encoder_share": 0.94,
+          "today_head_share": 0.06,
+          "raw_ms": {
+            "today": [
+              1556.85,
+              1296.0,
+              1362.71
+            ],
+            "late": [
+              951.77,
+              1198.48,
+              947.33
+            ],
+            "today_encoder": [
+              1345.39,
+              1538.6,
+              1364.99
+            ],
+            "today_tail": [
+              108.36,
+              86.53,
+              82.28
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 100,
+          "k": 1,
+          "state_tokens": 100,
+          "head_tokens": [
+            35
+          ],
+          "row_tokens": [
+            136
+          ],
+          "encoder_tokens": {
+            "today": 136,
+            "today_padded": 136,
+            "late": 137,
+            "late_padded": 137,
+            "asym": 137
+          },
+          "head_layer_tokens": {
+            "today": 136,
+            "late": 136,
+            "asym": 136
+          },
+          "encoder_attn_pairs": {
+            "today": 425872,
+            "late": 300304,
+            "asym": 395224
+          },
+          "gflops_est": {
+            "today": 102.08,
+            "late": 102.25,
+            "asym": 102.64,
+            "today_head_share": 0.067
+          },
+          "median_ms": {
+            "today": 338.13,
+            "late": 564.32,
+            "today_encoder": 292.97,
+            "today_tail": 23.72
+          },
+          "speedup": 0.6,
+          "today_encoder_share": 0.925,
+          "today_head_share": 0.075,
+          "raw_ms": {
+            "today": [
+              402.83,
+              332.87,
+              338.13
+            ],
+            "late": [
+              564.32,
+              572.79,
+              563.56
+            ],
+            "today_encoder": [
+              383.9,
+              285.77,
+              292.97
+            ],
+            "today_tail": [
+              29.81,
+              21.84,
+              23.72
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 100,
+          "k": 3,
+          "state_tokens": 100,
+          "head_tokens": [
+            35,
+            27,
+            34
+          ],
+          "row_tokens": [
+            136,
+            128,
+            135
+          ],
+          "encoder_tokens": {
+            "today": 399,
+            "today_padded": 408,
+            "late": 198,
+            "late_padded": 207,
+            "asym": 198
+          },
+          "head_layer_tokens": {
+            "today": 408,
+            "late": 408,
+            "asym": 408
+          },
+          "encoder_attn_pairs": {
+            "today": 1232888,
+            "late": 353084,
+            "asym": 617936
+          },
+          "gflops_est": {
+            "today": 306.03,
+            "late": 164.48,
+            "asym": 159.39,
+            "today_head_share": 0.067
+          },
+          "median_ms": {
+            "today": 988.81,
+            "late": 681.37,
+            "today_encoder": 921.58,
+            "today_tail": 60.78
+          },
+          "speedup": 1.45,
+          "today_encoder_share": 0.938,
+          "today_head_share": 0.062,
+          "raw_ms": {
+            "today": [
+              1026.72,
+              943.7,
+              988.81
+            ],
+            "late": [
+              693.89,
+              681.37,
+              568.15
+            ],
+            "today_encoder": [
+              1051.09,
+              921.58,
+              909.59
+            ],
+            "today_tail": [
+              70.03,
+              60.78,
+              59.49
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 100,
+          "k": 10,
+          "state_tokens": 100,
+          "head_tokens": [
+            35,
+            27,
+            34,
+            32,
+            32,
+            34,
+            32,
+            31,
+            17,
+            20
+          ],
+          "row_tokens": [
+            136,
+            128,
+            135,
+            133,
+            133,
+            135,
+            133,
+            132,
+            118,
+            121
+          ],
+          "encoder_tokens": {
+            "today": 1304,
+            "today_padded": 1360,
+            "late": 396,
+            "late_padded": 452,
+            "asym": 396
+          },
+          "head_layer_tokens": {
+            "today": 1360,
+            "late": 1360,
+            "asym": 1360
+          },
+          "encoder_attn_pairs": {
+            "today": 3982948,
+            "late": 517668,
+            "asym": 1338432
+          },
+          "gflops_est": {
+            "today": 1019.52,
+            "late": 382.17,
+            "asym": 347.1,
+            "today_head_share": 0.067
+          },
+          "median_ms": {
+            "today": 2781.24,
+            "late": 1199.9,
+            "today_encoder": 2639.19,
+            "today_tail": 160.37
+          },
+          "speedup": 2.32,
+          "today_encoder_share": 0.943,
+          "today_head_share": 0.057,
+          "raw_ms": {
+            "today": [
+              2781.24,
+              2927.45,
+              2762.99
+            ],
+            "late": [
+              1199.9,
+              1247.78,
+              1014.53
+            ],
+            "today_encoder": [
+              2458.63,
+              2639.19,
+              2717.44
+            ],
+            "today_tail": [
+              160.28,
+              160.37,
+              185.0
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 300,
+          "k": 1,
+          "state_tokens": 300,
+          "head_tokens": [
+            35
+          ],
+          "row_tokens": [
+            336
+          ],
+          "encoder_tokens": {
+            "today": 336,
+            "today_padded": 336,
+            "late": 337,
+            "late_padded": 337,
+            "asym": 337
+          },
+          "head_layer_tokens": {
+            "today": 336,
+            "late": 336,
+            "asym": 336
+          },
+          "encoder_attn_pairs": {
+            "today": 1834272,
+            "late": 1572704,
+            "asym": 1737624
+          },
+          "gflops_est": {
+            "today": 255.94,
+            "late": 255.56,
+            "asym": 256.23,
+            "today_head_share": 0.066
+          },
+          "median_ms": {
+            "today": 790.66,
+            "late": 947.94,
+            "today_encoder": 647.83,
+            "today_tail": 47.89
+          },
+          "speedup": 0.83,
+          "today_encoder_share": 0.931,
+          "today_head_share": 0.069,
+          "raw_ms": {
+            "today": [
+              710.83,
+              790.66,
+              845.77
+            ],
+            "late": [
+              947.94,
+              935.66,
+              978.63
+            ],
+            "today_encoder": [
+              642.98,
+              647.83,
+              697.05
+            ],
+            "today_tail": [
+              47.89,
+              47.26,
+              72.75
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 300,
+          "k": 3,
+          "state_tokens": 300,
+          "head_tokens": [
+            35,
+            27,
+            34
+          ],
+          "row_tokens": [
+            336,
+            328,
+            335
+          ],
+          "encoder_tokens": {
+            "today": 999,
+            "today_padded": 1008,
+            "late": 398,
+            "late_padded": 407,
+            "asym": 398
+          },
+          "head_layer_tokens": {
+            "today": 1008,
+            "late": 1008,
+            "asym": 1008
+          },
+          "encoder_attn_pairs": {
+            "today": 5422088,
+            "late": 1625484,
+            "asym": 2082336
+          },
+          "gflops_est": {
+            "today": 767.45,
+            "late": 339.44,
+            "asym": 335.13,
+            "today_head_share": 0.066
+          },
+          "median_ms": {
+            "today": 2241.48,
+            "late": 1085.37,
+            "today_encoder": 2107.37,
+            "today_tail": 175.69
+          },
+          "speedup": 2.07,
+          "today_encoder_share": 0.923,
+          "today_head_share": 0.077,
+          "raw_ms": {
+            "today": [
+              2414.5,
+              1970.37,
+              2241.48
+            ],
+            "late": [
+              1085.37,
+              997.07,
+              1127.09
+            ],
+            "today_encoder": [
+              2107.37,
+              1961.35,
+              2541.93
+            ],
+            "today_tail": [
+              192.9,
+              149.14,
+              175.69
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 300,
+          "k": 10,
+          "state_tokens": 300,
+          "head_tokens": [
+            35,
+            27,
+            34,
+            32,
+            32,
+            34,
+            32,
+            31,
+            17,
+            20
+          ],
+          "row_tokens": [
+            336,
+            328,
+            335,
+            333,
+            333,
+            335,
+            333,
+            332,
+            318,
+            321
+          ],
+          "encoder_tokens": {
+            "today": 3304,
+            "today_padded": 3360,
+            "late": 596,
+            "late_padded": 652,
+            "asym": 596
+          },
+          "head_layer_tokens": {
+            "today": 3360,
+            "late": 3360,
+            "asym": 3360
+          },
+          "encoder_attn_pairs": {
+            "today": 17842948,
+            "late": 1790068,
+            "asym": 3198832
+          },
+          "gflops_est": {
+            "today": 2557.09,
+            "late": 632.86,
+            "asym": 600.19,
+            "today_head_share": 0.066
+          },
+          "median_ms": {
+            "today": 7683.38,
+            "late": 1836.77,
+            "today_encoder": 6872.32,
+            "today_tail": 515.37
+          },
+          "speedup": 4.18,
+          "today_encoder_share": 0.93,
+          "today_head_share": 0.07,
+          "raw_ms": {
+            "today": [
+              7683.38,
+              7984.57,
+              7317.76
+            ],
+            "late": [
+              1832.13,
+              1843.71,
+              1836.77
+            ],
+            "today_encoder": [
+              6872.32,
+              6911.88,
+              6111.11
+            ],
+            "today_tail": [
+              521.02,
+              515.37,
+              505.08
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 800,
+          "k": 1,
+          "state_tokens": 476,
+          "head_tokens": [
+            35
+          ],
+          "row_tokens": [
+            512
+          ],
+          "encoder_tokens": {
+            "today": 512,
+            "today_padded": 512,
+            "late": 513,
+            "late_padded": 513,
+            "asym": 513
+          },
+          "head_layer_tokens": {
+            "today": 512,
+            "late": 512,
+            "asym": 512
+          },
+          "encoder_attn_pairs": {
+            "today": 3735424,
+            "late": 3354176,
+            "asym": 3580696
+          },
+          "gflops_est": {
+            "today": 394.6,
+            "late": 393.72,
+            "asym": 394.65,
+            "today_head_share": 0.065
+          },
+          "median_ms": {
+            "today": 1045.57,
+            "late": 1214.96,
+            "today_encoder": 955.62,
+            "today_tail": 85.96
+          },
+          "speedup": 0.86,
+          "today_encoder_share": 0.917,
+          "today_head_share": 0.083,
+          "raw_ms": {
+            "today": [
+              983.38,
+              1045.57,
+              1115.08
+            ],
+            "late": [
+              1133.5,
+              1214.96,
+              1256.29
+            ],
+            "today_encoder": [
+              955.62,
+              1082.74,
+              933.03
+            ],
+            "today_tail": [
+              85.96,
+              88.07,
+              80.76
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 800,
+          "k": 3,
+          "state_tokens": 476,
+          "head_tokens": [
+            35,
+            27,
+            34
+          ],
+          "row_tokens": [
+            512,
+            504,
+            511
+          ],
+          "encoder_tokens": {
+            "today": 1527,
+            "today_padded": 1536,
+            "late": 574,
+            "late_padded": 583,
+            "asym": 574
+          },
+          "head_layer_tokens": {
+            "today": 1536,
+            "late": 1536,
+            "asym": 1536
+          },
+          "encoder_attn_pairs": {
+            "today": 11093864,
+            "late": 3406956,
+            "asym": 4032768
+          },
+          "gflops_est": {
+            "today": 1183.26,
+            "late": 497.74,
+            "asym": 494.13,
+            "today_head_share": 0.065
+          },
+          "median_ms": {
+            "today": 3226.43,
+            "late": 1471.21,
+            "today_encoder": 3037.4,
+            "today_tail": 243.81
+          },
+          "speedup": 2.19,
+          "today_encoder_share": 0.926,
+          "today_head_share": 0.074,
+          "raw_ms": {
+            "today": [
+              3226.43,
+              3127.22,
+              3403.74
+            ],
+            "late": [
+              1471.21,
+              1359.51,
+              1528.54
+            ],
+            "today_encoder": [
+              2951.91,
+              3037.4,
+              3162.99
+            ],
+            "today_tail": [
+              243.81,
+              241.51,
+              257.64
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 800,
+          "k": 10,
+          "state_tokens": 476,
+          "head_tokens": [
+            35,
+            27,
+            34,
+            32,
+            32,
+            34,
+            32,
+            31,
+            17,
+            20
+          ],
+          "row_tokens": [
+            512,
+            504,
+            511,
+            509,
+            509,
+            511,
+            509,
+            508,
+            494,
+            497
+          ],
+          "encoder_tokens": {
+            "today": 5064,
+            "today_padded": 5120,
+            "late": 772,
+            "late_padded": 828,
+            "asym": 772
+          },
+          "head_layer_tokens": {
+            "today": 5120,
+            "late": 5120,
+            "asym": 5120
+          },
+          "encoder_attn_pairs": {
+            "today": 36657348,
+            "late": 3571540,
+            "asym": 5497744
+          },
+          "gflops_est": {
+            "today": 3942.68,
+            "late": 861.59,
+            "asym": 831.05,
+            "today_head_share": 0.065
+          },
+          "median_ms": {
+            "today": 11190.06,
+            "late": 2610.4,
+            "today_encoder": 10734.0,
+            "today_tail": 1038.6
+          },
+          "speedup": 4.29,
+          "today_encoder_share": 0.912,
+          "today_head_share": 0.088,
+          "raw_ms": {
+            "today": [
+              11280.63,
+              11122.26,
+              11190.06
+            ],
+            "late": [
+              2600.19,
+              2644.84,
+              2610.4
+            ],
+            "today_encoder": [
+              10758.21,
+              10552.15,
+              10734.0
+            ],
+            "today_tail": [
+              1038.6,
+              1125.31,
+              946.69
+            ]
+          }
+        }
+      ]
+    },
+    "multilingual": {
+      "path": "synthetic ckpt: multilingual",
+      "max_len": 1024,
+      "head_max_len": 256,
+      "points": [
+        {
+          "state_tokens_requested": 20,
+          "k": 1,
+          "state_tokens": 20,
+          "head_tokens": [
+            35
+          ],
+          "row_tokens": [
+            56
+          ],
+          "encoder_tokens": {
+            "today": 56,
+            "today_padded": 56,
+            "late": 57,
+            "late_padded": 57,
+            "asym": 57
+          },
+          "head_layer_tokens": {
+            "today": 56,
+            "late": 56,
+            "asym": 56
+          },
+          "encoder_attn_pairs": {
+            "today": 68992,
+            "late": 37598,
+            "asym": 65318
+          },
+          "gflops_est": {
+            "today": 14.17,
+            "late": 14.29,
+            "asym": 14.38,
+            "today_head_share": 0.112
+          },
+          "median_ms": {
+            "today": 104.46,
+            "late": 158.73,
+            "today_encoder": 90.99,
+            "today_tail": 12.05
+          },
+          "speedup": 0.66,
+          "today_encoder_share": 0.883,
+          "today_head_share": 0.117,
+          "raw_ms": {
+            "today": [
+              108.05,
+              104.46,
+              101.66
+            ],
+            "late": [
+              167.02,
+              158.73,
+              154.11
+            ],
+            "today_encoder": [
+              92.33,
+              90.99,
+              89.29
+            ],
+            "today_tail": [
+              12.19,
+              10.67,
+              12.05
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 20,
+          "k": 3,
+          "state_tokens": 20,
+          "head_tokens": [
+            35,
+            27,
+            34
+          ],
+          "row_tokens": [
+            56,
+            48,
+            55
+          ],
+          "encoder_tokens": {
+            "today": 159,
+            "today_padded": 168,
+            "late": 118,
+            "late_padded": 127,
+            "asym": 118
+          },
+          "head_layer_tokens": {
+            "today": 168,
+            "late": 168,
+            "asym": 168
+          },
+          "encoder_attn_pairs": {
+            "today": 186230,
+            "late": 79068,
+            "asym": 155100
+          },
+          "gflops_est": {
+            "today": 42.44,
+            "late": 33.07,
+            "asym": 31.31,
+            "today_head_share": 0.112
+          },
+          "median_ms": {
+            "today": 154.91,
+            "late": 196.99,
+            "today_encoder": 142.29,
+            "today_tail": 15.26
+          },
+          "speedup": 0.79,
+          "today_encoder_share": 0.903,
+          "today_head_share": 0.097,
+          "raw_ms": {
+            "today": [
+              162.85,
+              154.91,
+              145.52
+            ],
+            "late": [
+              194.32,
+              213.13,
+              196.99
+            ],
+            "today_encoder": [
+              139.08,
+              169.59,
+              142.29
+            ],
+            "today_tail": [
+              15.05,
+              15.26,
+              15.65
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 20,
+          "k": 10,
+          "state_tokens": 20,
+          "head_tokens": [
+            35,
+            27,
+            34,
+            32,
+            32,
+            34,
+            32,
+            31,
+            17,
+            20
+          ],
+          "row_tokens": [
+            56,
+            48,
+            55,
+            53,
+            53,
+            55,
+            53,
+            52,
+            38,
+            41
+          ],
+          "encoder_tokens": {
+            "today": 504,
+            "today_padded": 560,
+            "late": 316,
+            "late_padded": 372,
+            "asym": 316
+          },
+          "head_layer_tokens": {
+            "today": 560,
+            "late": 560,
+            "asym": 560
+          },
+          "encoder_attn_pairs": {
+            "today": 566412,
+            "late": 208384,
+            "asym": 441232
+          },
+          "gflops_est": {
+            "today": 141.29,
+            "late": 98.71,
+            "asym": 87.08,
+            "today_head_share": 0.112
+          },
+          "median_ms": {
+            "today": 411.32,
+            "late": 379.44,
+            "today_encoder": 359.13,
+            "today_tail": 43.03
+          },
+          "speedup": 1.08,
+          "today_encoder_share": 0.893,
+          "today_head_share": 0.107,
+          "raw_ms": {
+            "today": [
+              411.32,
+              514.86,
+              393.06
+            ],
+            "late": [
+              396.08,
+              379.44,
+              307.34
+            ],
+            "today_encoder": [
+              359.13,
+              446.65,
+              311.13
+            ],
+            "today_tail": [
+              43.03,
+              65.64,
+              37.8
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 100,
+          "k": 1,
+          "state_tokens": 100,
+          "head_tokens": [
+            35
+          ],
+          "row_tokens": [
+            136
+          ],
+          "encoder_tokens": {
+            "today": 136,
+            "today_padded": 136,
+            "late": 137,
+            "late_padded": 137,
+            "asym": 137
+          },
+          "head_layer_tokens": {
+            "today": 136,
+            "late": 136,
+            "asym": 136
+          },
+          "encoder_attn_pairs": {
+            "today": 335344,
+            "late": 236154,
+            "asym": 310774
+          },
+          "gflops_est": {
+            "today": 34.99,
+            "late": 34.91,
+            "asym": 35.14,
+            "today_head_share": 0.11
+          },
+          "median_ms": {
+            "today": 137.8,
+            "late": 244.12,
+            "today_encoder": 132.9,
+            "today_tail": 15.06
+          },
+          "speedup": 0.56,
+          "today_encoder_share": 0.898,
+          "today_head_share": 0.102,
+          "raw_ms": {
+            "today": [
+              174.47,
+              137.8,
+              135.72
+            ],
+            "late": [
+              263.4,
+              218.07,
+              244.12
+            ],
+            "today_encoder": [
+              152.24,
+              132.9,
+              115.88
+            ],
+            "today_tail": [
+              15.06,
+              23.19,
+              12.65
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 100,
+          "k": 3,
+          "state_tokens": 100,
+          "head_tokens": [
+            35,
+            27,
+            34
+          ],
+          "row_tokens": [
+            136,
+            128,
+            135
+          ],
+          "encoder_tokens": {
+            "today": 399,
+            "today_padded": 408,
+            "late": 198,
+            "late_padded": 207,
+            "asym": 198
+          },
+          "head_layer_tokens": {
+            "today": 408,
+            "late": 408,
+            "asym": 408
+          },
+          "encoder_attn_pairs": {
+            "today": 970714,
+            "late": 277624,
+            "asym": 485796
+          },
+          "gflops_est": {
+            "today": 104.86,
+            "late": 58.39,
+            "asym": 57.05,
+            "today_head_share": 0.11
+          },
+          "median_ms": {
+            "today": 284.0,
+            "late": 239.27,
+            "today_encoder": 251.74,
+            "today_tail": 31.53
+          },
+          "speedup": 1.19,
+          "today_encoder_share": 0.889,
+          "today_head_share": 0.111,
+          "raw_ms": {
+            "today": [
+              276.78,
+              310.46,
+              284.0
+            ],
+            "late": [
+              316.62,
+              234.54,
+              239.27
+            ],
+            "today_encoder": [
+              272.6,
+              244.56,
+              251.74
+            ],
+            "today_tail": [
+              31.53,
+              31.05,
+              34.12
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 100,
+          "k": 10,
+          "state_tokens": 100,
+          "head_tokens": [
+            35,
+            27,
+            34,
+            32,
+            32,
+            34,
+            32,
+            31,
+            17,
+            20
+          ],
+          "row_tokens": [
+            136,
+            128,
+            135,
+            133,
+            133,
+            135,
+            133,
+            132,
+            118,
+            121
+          ],
+          "encoder_tokens": {
+            "today": 1304,
+            "today_padded": 1360,
+            "late": 396,
+            "late_padded": 452,
+            "asym": 396
+          },
+          "head_layer_tokens": {
+            "today": 1360,
+            "late": 1360,
+            "asym": 1360
+          },
+          "encoder_attn_pairs": {
+            "today": 3135712,
+            "late": 406940,
+            "asym": 1051976
+          },
+          "gflops_est": {
+            "today": 349.19,
+            "late": 140.51,
+            "asym": 130.14,
+            "today_head_share": 0.11
+          },
+          "median_ms": {
+            "today": 819.66,
+            "late": 398.47,
+            "today_encoder": 716.05,
+            "today_tail": 91.89
+          },
+          "speedup": 2.06,
+          "today_encoder_share": 0.886,
+          "today_head_share": 0.114,
+          "raw_ms": {
+            "today": [
+              925.11,
+              819.66,
+              798.42
+            ],
+            "late": [
+              456.62,
+              398.47,
+              393.48
+            ],
+            "today_encoder": [
+              776.11,
+              716.05,
+              709.78
+            ],
+            "today_tail": [
+              96.75,
+              91.89,
+              88.42
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 300,
+          "k": 1,
+          "state_tokens": 300,
+          "head_tokens": [
+            35
+          ],
+          "row_tokens": [
+            336
+          ],
+          "encoder_tokens": {
+            "today": 336,
+            "today_padded": 336,
+            "late": 337,
+            "late_padded": 337,
+            "asym": 337
+          },
+          "head_layer_tokens": {
+            "today": 336,
+            "late": 336,
+            "asym": 336
+          },
+          "encoder_attn_pairs": {
+            "today": 1451744,
+            "late": 1243754,
+            "asym": 1374374
+          },
+          "gflops_est": {
+            "today": 88.79,
+            "late": 88.37,
+            "asym": 88.77,
+            "today_head_share": 0.107
+          },
+          "median_ms": {
+            "today": 262.76,
+            "late": 313.33,
+            "today_encoder": 214.28,
+            "today_tail": 30.51
+          },
+          "speedup": 0.84,
+          "today_encoder_share": 0.875,
+          "today_head_share": 0.125,
+          "raw_ms": {
+            "today": [
+              256.35,
+              262.76,
+              289.13
+            ],
+            "late": [
+              313.33,
+              310.36,
+              384.44
+            ],
+            "today_encoder": [
+              216.94,
+              214.28,
+              212.91
+            ],
+            "today_tail": [
+              33.34,
+              30.51,
+              29.75
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 300,
+          "k": 3,
+          "state_tokens": 300,
+          "head_tokens": [
+            35,
+            27,
+            34
+          ],
+          "row_tokens": [
+            336,
+            328,
+            335
+          ],
+          "encoder_tokens": {
+            "today": 999,
+            "today_padded": 1008,
+            "late": 398,
+            "late_padded": 407,
+            "asym": 398
+          },
+          "head_layer_tokens": {
+            "today": 1008,
+            "late": 1008,
+            "asym": 1008
+          },
+          "encoder_attn_pairs": {
+            "today": 4291114,
+            "late": 1285224,
+            "asym": 1646996
+          },
+          "gflops_est": {
+            "today": 266.12,
+            "late": 124.31,
+            "asym": 123.44,
+            "today_head_share": 0.107
+          },
+          "median_ms": {
+            "today": 748.86,
+            "late": 464.68,
+            "today_encoder": 648.68,
+            "today_tail": 84.41
+          },
+          "speedup": 1.61,
+          "today_encoder_share": 0.885,
+          "today_head_share": 0.115,
+          "raw_ms": {
+            "today": [
+              686.49,
+              769.24,
+              748.86
+            ],
+            "late": [
+              419.41,
+              481.39,
+              464.68
+            ],
+            "today_encoder": [
+              616.12,
+              722.05,
+              648.68
+            ],
+            "today_tail": [
+              83.86,
+              84.41,
+              87.05
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 300,
+          "k": 10,
+          "state_tokens": 300,
+          "head_tokens": [
+            35,
+            27,
+            34,
+            32,
+            32,
+            34,
+            32,
+            31,
+            17,
+            20
+          ],
+          "row_tokens": [
+            336,
+            328,
+            335,
+            333,
+            333,
+            335,
+            333,
+            332,
+            318,
+            321
+          ],
+          "encoder_tokens": {
+            "today": 3304,
+            "today_padded": 3360,
+            "late": 596,
+            "late_padded": 652,
+            "asym": 596
+          },
+          "head_layer_tokens": {
+            "today": 3360,
+            "late": 3360,
+            "asym": 3360
+          },
+          "encoder_attn_pairs": {
+            "today": 14120512,
+            "late": 1414540,
+            "asym": 2529976
+          },
+          "gflops_est": {
+            "today": 886.41,
+            "late": 250.01,
+            "asym": 241.08,
+            "today_head_share": 0.107
+          },
+          "median_ms": {
+            "today": 2454.05,
+            "late": 708.99,
+            "today_encoder": 2130.79,
+            "today_tail": 289.26
+          },
+          "speedup": 3.46,
+          "today_encoder_share": 0.88,
+          "today_head_share": 0.12,
+          "raw_ms": {
+            "today": [
+              2440.94,
+              2454.05,
+              2519.02
+            ],
+            "late": [
+              697.38,
+              757.95,
+              708.99
+            ],
+            "today_encoder": [
+              2123.62,
+              2130.79,
+              2313.02
+            ],
+            "today_tail": [
+              289.26,
+              291.42,
+              286.9
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 800,
+          "k": 1,
+          "state_tokens": 800,
+          "head_tokens": [
+            35
+          ],
+          "row_tokens": [
+            836
+          ],
+          "encoder_tokens": {
+            "today": 836,
+            "today_padded": 836,
+            "late": 837,
+            "late_padded": 837,
+            "asym": 837
+          },
+          "head_layer_tokens": {
+            "today": 836,
+            "late": 836,
+            "asym": 836
+          },
+          "encoder_attn_pairs": {
+            "today": 7042744,
+            "late": 6562754,
+            "asym": 6833374
+          },
+          "gflops_est": {
+            "today": 234.01,
+            "late": 232.76,
+            "asym": 233.59,
+            "today_head_share": 0.101
+          },
+          "median_ms": {
+            "today": 716.19,
+            "late": 772.22,
+            "today_encoder": 616.7,
+            "today_tail": 121.12
+          },
+          "speedup": 0.93,
+          "today_encoder_share": 0.836,
+          "today_head_share": 0.164,
+          "raw_ms": {
+            "today": [
+              714.41,
+              727.51,
+              716.19
+            ],
+            "late": [
+              775.69,
+              772.22,
+              764.16
+            ],
+            "today_encoder": [
+              688.86,
+              616.7,
+              608.15
+            ],
+            "today_tail": [
+              150.46,
+              121.12,
+              120.2
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 800,
+          "k": 3,
+          "state_tokens": 800,
+          "head_tokens": [
+            35,
+            27,
+            34
+          ],
+          "row_tokens": [
+            836,
+            828,
+            835
+          ],
+          "encoder_tokens": {
+            "today": 2499,
+            "today_padded": 2508,
+            "late": 898,
+            "late_padded": 907,
+            "asym": 898
+          },
+          "head_layer_tokens": {
+            "today": 2508,
+            "late": 2508,
+            "asym": 2508
+          },
+          "encoder_attn_pairs": {
+            "today": 20992114,
+            "late": 6604224,
+            "asym": 7349996
+          },
+          "gflops_est": {
+            "today": 701.53,
+            "late": 304.16,
+            "asym": 304.47,
+            "today_head_share": 0.101
+          },
+          "median_ms": {
+            "today": 2403.6,
+            "late": 1147.7,
+            "today_encoder": 2139.13,
+            "today_tail": 413.61
+          },
+          "speedup": 2.09,
+          "today_encoder_share": 0.838,
+          "today_head_share": 0.162,
+          "raw_ms": {
+            "today": [
+              2300.38,
+              2403.6,
+              2627.57
+            ],
+            "late": [
+              1147.7,
+              1024.75,
+              1230.13
+            ],
+            "today_encoder": [
+              2213.37,
+              2040.02,
+              2139.13
+            ],
+            "today_tail": [
+              426.71,
+              365.32,
+              413.61
+            ]
+          }
+        },
+        {
+          "state_tokens_requested": 800,
+          "k": 10,
+          "state_tokens": 800,
+          "head_tokens": [
+            35,
+            27,
+            34,
+            32,
+            32,
+            34,
+            32,
+            31,
+            17,
+            20
+          ],
+          "row_tokens": [
+            836,
+            828,
+            835,
+            833,
+            833,
+            835,
+            833,
+            832,
+            818,
+            821
+          ],
+          "encoder_tokens": {
+            "today": 8304,
+            "today_padded": 8360,
+            "late": 1096,
+            "late_padded": 1152,
+            "asym": 1096
+          },
+          "head_layer_tokens": {
+            "today": 8360,
+            "late": 8360,
+            "asym": 8360
+          },
+          "encoder_attn_pairs": {
+            "today": 69582512,
+            "late": 6733540,
+            "asym": 9024976
+          },
+          "gflops_est": {
+            "today": 2336.98,
+            "late": 553.86,
+            "asym": 548.55,
+            "today_head_share": 0.101
+          },
+          "median_ms": {
+            "today": 9112.06,
+            "late": 2460.5,
+            "today_encoder": 8066.77,
+            "today_tail": 1365.42
+          },
+          "speedup": 3.7,
+          "today_encoder_share": 0.855,
+          "today_head_share": 0.145,
+          "raw_ms": {
+            "today": [
+              9148.62,
+              9112.06,
+              8974.52
+            ],
+            "late": [
+              1993.36,
+              2460.5,
+              2464.49
+            ],
+            "today_encoder": [
+              7961.37,
+              8227.2,
+              8066.77
+            ],
+            "today_tail": [
+              1512.56,
+              1365.42,
+              1325.08
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
