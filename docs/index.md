@@ -21,6 +21,7 @@ is one copy to keep current.
 | get typed values back from a JSON schema or a pydantic model | [Schema-driven decisions](structured.md) |
 | log, redact, cache or gate every decision without forking Laya | [Prediction hooks](hooks/index.md) |
 | adopt Laya incrementally without granting execution permission | [Staged adoption](staged-adoption.md) |
+| give a repeated request the answer it got before, or see how close an answer is to flipping | [Decision consistency](consistency.md) |
 | route, screen or triage inside a LangChain or LangGraph app | [LangChain & LangGraph](langchain.md) |
 | run the SDK or the `laya-serve` HTTP API in a container, on CPU or an NVIDIA GPU | [Docker quickstart](docker.md) |
 | build for ARM64 hosts or DGX Spark | [ARM64 and DGX Spark containers](docker-platforms.md) |

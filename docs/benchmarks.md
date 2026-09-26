@@ -14,6 +14,7 @@ and result files behind the main tables.
 | A workflow such as triage or moderation | The application-workflow table in `BENCHMARKS.md` | Whether the dataset was in the training mix or held out |
 | The `laya-typed-decisions` checkpoint | The typed-decisions table in `BENCHMARKS.md` | It was fine-tuned on that benchmark's training split; the base checkpoints have separate rows |
 | Response time | The T4, GB10, laptop CPU and server CPU sections in `BENCHMARKS.md` | Device, batch size, number of questions, warm-up and whether HTTP time is included |
+| Where the time inside one request goes | [Where a request's time goes](performance.md) | It was measured on CPU with random weights; rerun the script on your device |
 
 The published Jev figures alongside the original Laya suites come from third-party studies
 with different prompts and sample sizes. They are useful context, but are not a controlled

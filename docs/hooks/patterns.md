@@ -106,6 +106,11 @@ laya.load("convaiinnovations/laya", on_predict_start=read, on_predict_end=write)
 Guard the cache with a lock when serving concurrently. On the Router the cached payload still
 gets a `routing` key, so the return shape is unchanged.
 
+This sketch keeps every decision forever, keys option orders together although the model reads
+them positionally, and hands the stored object to every caller. `laya.DecisionCache` is the
+shipped version: bounded, expiring, optionally persistent, and keyed on the model that answered;
+see [Decision consistency](../consistency.md).
+
 ### Metrics
 
 Counters and histograms from `ctx.model`, `ctx.usage` and `ctx.elapsed_ms`. Keep it lenient.
