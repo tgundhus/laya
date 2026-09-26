@@ -188,8 +188,15 @@ class Stages:
         return out
 
 
-def run(router, scenario):
-    """One request as a caller makes it: routed by the Router, not pinned to a checkpoint."""
+def run(router, scenario, repeat_state=False):
+    """One request as a caller makes it: routed by the Router, not pinned to a checkpoint.
+
+    Each run stands for a new request -- a state the Router has not seen, with a question set it
+    has -- so the Router's memory of recent language detections is cleared first, and the
+    question-head cache is left warm. `repeat_state` keeps both, for a repeated request.
+    """
+    if not repeat_state and hasattr(router_mod, "_DETECTIONS"):
+        router_mod._DETECTIONS.clear()
     _, state, questions, kw = scenario
     if isinstance(state, list):
         return router.predict_batch([{"state": s, "questions": questions} for s in state])
@@ -358,7 +365,7 @@ def main():
         hits = []
         for _ in range(max(50, args.repeats)):
             start = time.perf_counter()
-            run(cached_router, SCENARIOS[name])
+            run(cached_router, SCENARIOS[name], repeat_state=True)
             hits.append(time.perf_counter() - start)
         results["scenarios"][name + ", DecisionCache hit"] = {"latency_ms": summary(hits)}
         print("%-45s %9.3f ms" % (name + ", cache hit", statistics.median(hits) * 1e3), flush=True)

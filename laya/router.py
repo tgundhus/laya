@@ -28,10 +28,12 @@ primary routing signal.
 synthetic workflows and should not be a silent default.
 """
 import gc
+import hashlib
 import json
 import os
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Sequence as SequenceABC
 from typing import Any, Dict, List, Optional, Sequence, Union
 
@@ -127,6 +129,56 @@ def match_typed_decisions_workflow(questions: Dict[str, Any]) -> Optional[str]:
         if ids == sig:
             return wf
     return None
+
+
+# Language detection reads the state and nothing else, and on a long English state it is most of
+# what routing costs -- about 0.6 ms for a 1,400-character email -- so a repeated request, and a
+# DecisionCache hit most of all, paid it again every time. Results are kept for recently routed
+# states under a 16-byte hash of the state, and each caller gets its own copy.
+_DETECTIONS: "OrderedDict[bytes, Dict[str, Any]]" = OrderedDict()
+_DETECTIONS_LOCK = threading.Lock()
+_DETECTIONS_MAX = 4096
+
+
+def _detection_key(state: Any) -> Optional[bytes]:
+    """A hash naming `state` exactly, or None for a state it cannot name (then detect afresh)."""
+    if isinstance(state, str):
+        data = b"s" + state.encode("utf-8", "surrogatepass")
+    elif isinstance(state, (bytes, bytearray)):
+        data = b"b" + bytes(state)
+    else:
+        try:
+            # No `default=`: an object JSON cannot write could read differently to `analyse` than
+            # the string it would be written as, so such a state is simply not remembered.
+            data = b"j" + json.dumps(state, ensure_ascii=False, sort_keys=False).encode("utf-8", "surrogatepass")
+        except (TypeError, ValueError):
+            return None
+    return hashlib.blake2b(data, digest_size=16).digest()
+
+
+def _copy_detection(det: Dict[str, Any]) -> Dict[str, Any]:
+    copy = dict(det)
+    if isinstance(copy.get("script_profile"), dict):
+        copy["script_profile"] = dict(copy["script_profile"])
+    return copy
+
+
+def _detect(state: Any) -> Dict[str, Any]:
+    """`analyse(state)`, remembered for recently routed states."""
+    key = _detection_key(state)
+    if key is None:
+        return analyse(state)
+    with _DETECTIONS_LOCK:
+        det = _DETECTIONS.get(key)
+        if det is not None:
+            _DETECTIONS.move_to_end(key)
+            return _copy_detection(det)
+    det = analyse(state)
+    with _DETECTIONS_LOCK:
+        _DETECTIONS[key] = _copy_detection(det)
+        while len(_DETECTIONS) > _DETECTIONS_MAX:
+            _DETECTIONS.popitem(last=False)
+    return det
 
 
 def _question_schema(questions: Dict[str, Any]) -> str:
@@ -513,7 +565,7 @@ class Router(HookRegistry):
                         source, "English" if resolved else "non-English"),
                     detection=None, workflow=workflow)
 
-        det = analyse(state)
+        det = _detect(state)
         if det["script"] == "unknown":
             key = self.default
             reason = "no letters detected in state; using default (%s)" % key
