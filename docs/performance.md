@@ -59,7 +59,7 @@ each), so drift in the machine cancels out.
 | option | ticket, 3 questions | email, 3 questions | answers against the fp32 baseline |
 |---|---|---|---|
 | int8 dynamic quantization of the encoder | **1.80x faster** | **1.64x faster** | shifted; 1 of 3 decisions changed |
-| ONNX Runtime (`ONNXAgent`) | 1.17x faster | 1.30x slower | identical |
+| ONNX Runtime (`ONNXAgent`), export before the fix below | 1.17x faster | 1.30x slower | identical |
 | `torch.inference_mode()` | 1.02x | 1.01x | identical |
 | 2 threads instead of 4 | 1.48x slower | 1.65x slower | identical |
 | 1 thread instead of 4 | 2.58x slower | 2.63x slower | identical |
@@ -71,21 +71,22 @@ bf16 do change the arithmetic: check them against your own labels before you rel
 
 - **Replaying a decision.** A repeated request through a
   [`DecisionCache`](consistency.md#replaying-decisions) skips everything from tokenization to
-  decoding: 0.106 ms for the ticket and 0.729 ms for the email, against 503 ms and 2,237 ms. What
-  is left is mostly routing, which reads the whole state.
+  decoding: 0.106 ms for the ticket and 0.729 ms for the email in this run, against 503 ms and
+  2,237 ms. Most of what was left was language detection, which the Router now remembers for
+  recently seen states (below).
 - **Batching.** 32 tickets in one `predict_batch` took 12.3 s, 384 ms per ticket against 503 ms
   one at a time. On a GPU batching is worth far more: BENCHMARKS.md has 7.2 ms per question
   batched on a T4 against 33 ms for one.
 - **int8 dynamic quantization** of the encoder's linear layers is the largest CPU gain, and the
   one that changes answers. It is a trade: speed for arithmetic that differs from the checkpoint
   as trained.
-- **ONNX Runtime** gave identical answers but was faster only on the short input, and slower on
-  the email. Measure it on your own inputs before switching.
+- **ONNX Runtime** gives identical answers, but in fp32 it is faster only on short inputs (see
+  [the CPU fast path](#the-cpu-fast-path)); its int8 model is the fastest CPU option measured.
 - **Threads.** Use every physical core. BENCHMARKS.md adds that inter-op threads should be pinned
   to 1.
 - **bf16** only pays on hardware with native BF16 (`LAYA_CPU_AMP=bf16`), as BENCHMARKS.md warns.
 
-Two stages got cheaper in this change, with identical output:
+Three stages got cheaper in this change, with identical output:
 
 - **Language detection** skips work that cannot change its answer: it counts ASCII letters in C,
   tests the non-Latin share before walking the text for non-Latin words, and scores each distinct
@@ -98,6 +99,58 @@ Two stages got cheaper in this change, with identical output:
   tokenizer and question, which took encoding for three questions on a ticket from 0.71 to
   0.13 ms, for ten from 2.07 to 0.21 ms, and for a batch of 32 tickets from 22.6 to 4.0 ms, with
   identical rows (`research/scripts/bench_question_heads.py`).
+- **Routing a repeated state.** Language detection reads the state and nothing else, so the
+  Router keeps recent results under a 16-byte hash of the state. Routing a state it has seen
+  takes 7, 10 and 39 µs for 140, 2,000 and 20,000 characters, against 56, 246 and 478 µs, and a
+  `DecisionCache` hit over an instant model 73, 76 and 167 µs against 121, 314 and 614 µs.
+
+## The CPU fast path
+
+`research/scripts/bench_cpu_fast_path.py` times each backend against PyTorch fp32 on 13 English
+requests (1 to 10 questions, tickets to 3,000-token emails), interleaved over 5 repeats, and
+compares every answer. `python scripts/export_onnx.py --model ID --output english.onnx --int8`
+writes both ONNX models.
+
+| backend | ticket, 3 questions | email, 3 questions | all 13, geometric mean | same decision |
+|---|---|---|---|---|
+| int8 PyTorch (encoder linear layers) | 1.85x | 1.68x | 1.89x | 44 of 56 |
+| ONNX fp32, export before the fix | 1.04x | 0.79x | 1.01x | 56 of 56 |
+| ONNX fp32, NaN guards stripped | 1.11x | 0.90x | 1.06x | 56 of 56 |
+| **ONNX int8** | **1.96x** | **1.76x** | **2.07x** | 28 of 56 |
+
+- **Why ONNX fp32 loses on long inputs.** The exporter breaks PyTorch's fused attention into
+  separate operations that build a full [heads, length, length] tensor in every layer, so its
+  cost grows with length squared, and it adds a NaN check after each softmax that cannot fire:
+  masked positions hold finfo.min, not -inf. `export_onnx.py` now removes those checks (13% of
+  an email forward pass), which took the email from 0.79x to 0.90x of PyTorch; the rest is the
+  unfused attention. Fusing it into ONNX Runtime's attention operators is the next step.
+- **int8 changes answers.** Every answer that changed had an fp32 margin of at most 0.0006:
+  with random weights nearly every answer sits on its boundary, so these are coin flips, and a
+  trained checkpoint will change far fewer. Run the harness on your own checkpoint and data
+  (`--requests FILE.jsonl`, or `--feishu` for the 64 Chinese cases on `multilingual`) before
+  serving int8, or put a `DecisionCache` in front so each answer is fixed the first time.
+
+## Encoding the state once (research)
+
+Every question row carries the whole state, so k questions put the state through the encoder k
+times. `research/scripts/spike_encode_once.py` sizes the alternative, built from the model's own
+modules: encode the state once and each question separately, then let the two head layers do the
+cross-attention. The answers mean nothing until a model is trained that way; this is compute
+only. Forward pass, median of 3, speedup over today:
+
+| state tokens | English, 1 question | 3 | 10 | multilingual, 1 | 3 | 10 |
+|---|---|---|---|---|---|---|
+| 20 | 0.73x | 0.85x | 1.43x | 0.66x | 0.79x | 1.08x |
+| 100 | 0.60x | 1.45x | 2.32x | 0.56x | 1.19x | 2.06x |
+| 300 | 0.83x | 2.07x | **4.18x** | 0.84x | 1.61x | 3.46x |
+| 476 / 800 | 0.86x | 2.19x | **4.29x** | 0.93x | 2.09x | 3.70x |
+
+It pays from about three questions on a hundred-token state, and loses on one question or a
+very short state, where two encoder calls cost more than they save. The head layers still read
+every question with the full state, which caps the gain at roughly 15x (English) and 9x
+(multilingual). It needs retraining, most likely by distilling from today's model; an
+asymmetric attention mask inside the encoder would keep question-to-state attention in every
+layer at about the same cost, and is described in the script.
 
 ## What the cache costs
 
@@ -111,8 +164,8 @@ Two stages got cheaper in this change, with identical output:
 | BLAKE2b against SHA-256, 2,000-character state | 4.9 against 8.2 µs |
 | store a decision's JSON, zlib-compressed when smaller | 15-19 µs; 263-453 bytes become 179-182 |
 | read it back | 7-9 µs |
-| memory store: hit, and bytes per decision on the Python heap | 0.48 µs, 328 bytes |
-| SQLite store: hit, and bytes per decision on disk | 7.5 µs, 271 bytes |
+| memory store: hit, and bytes per decision on the Python heap | 0.48 µs, 336 bytes |
+| SQLite store: hit, and bytes per decision on disk (with expiry and recency indexes) | 7.5 µs, 319 bytes |
 | SQLite store: store one decision in its own transaction | 115 µs, or 276 µs with `synchronous=FULL` |
 | `Router.predict` over an instant fake model: no cache, memory hit, SQLite hit | 87, 118, 125 µs |
 

@@ -187,12 +187,13 @@ def rotated_vote(router, state, name, question):
 
 ## Cost
 
-A hit skips everything from tokenization to decoding. On a 4-core CPU it took 0.106 ms for a
-short ticket and 0.729 ms for a 1,400-character email, against 503 ms and 2,237 ms through the
-model; most of what is left is routing, which reads the whole state. Hashing the request costs
-16-84 µs depending on its length, a SQLite lookup 7.5 µs, and a stored decision takes about 270
-bytes on disk. Storing happens only on a miss and takes 45 µs, which is why it is not deferred to
-a background thread. [Where a request's time goes](performance.md) has the full measurements.
+A hit skips everything from tokenization to decoding. On a 4-core CPU a hit over an instant
+model took 73, 76 and 167 µs for 140, 2,000 and 20,000-character states, against hundreds of
+milliseconds to seconds through the model; the Router remembers the language detection of states
+it has seen, which was most of a hit's cost before. Hashing the request costs 16-84 µs depending
+on its length, a SQLite lookup 7.5 µs, and a stored decision takes about 320 bytes on disk.
+Storing happens only on a miss and takes 45 µs, which is why it is not deferred to a background
+thread. [Where a request's time goes](performance.md) has the full measurements.
 
 ## Reproduce
 
