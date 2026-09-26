@@ -97,17 +97,65 @@ router.predict(state, questions)   # the stored decision, no forward pass
   way the language reaches an answer. The device is not part of it, so a fleet of mixed hardware
   shares one set of decisions.
 - **The first decision wins.** A request that missed at the same time as another, in another
-  thread or in another process sharing the SQLite file, returns the decision stored first instead
-  of its own, and `cache_info()["conflicts"]` counts it. Every caller of a request gets one
-  answer while its entry lives.
-- **Retention.** `ttl` is the age in seconds after which a decision is answered afresh;
-  `maxsize` (100,000 by default) is the most decisions held. Both drop the oldest first, and
-  `prune()` drops the expired ones on demand.
+  thread, process or machine sharing the store, returns the decision stored first instead of its
+  own, and `cache_info()["conflicts"]` counts it. Every caller of a request gets one answer while
+  its entry lives.
+- **Retention.** Each decision carries its own expiry. `ttl` is the age in seconds after which a
+  decision is answered afresh, `None` for never, or a function of the question set and the answer
+  (below). `maxsize` (100,000 by default) is the most decisions the built-in stores hold; past it
+  the least recently stored or renewed leave first, and `prune()` drops the expired ones on
+  demand.
+- **Retention from last use.** With `renew_on_hit=True` a replay pushes the expiry out again, so
+  a decision lasts as long as its request keeps coming and only one that stops coming expires.
+  The renewal is written once the decision has aged a sixteenth of its lifetime, at most 16 times
+  per lifetime, so a hit still almost never writes.
 - **Upgrades.** A new revision or calibration changes the fingerprint and starts a fresh set of
   decisions. Pass `fingerprint="policy-v1"` to keep replaying the old ones across upgrades until
   they expire, when repeatability matters more than the new model.
 - **What is stored.** Hashes and the answers, as compact JSON, compressed when that is smaller.
   No request text is written.
+
+A `ttl` function sets retention per question set or per answer. It receives the questions and the
+answer payload, and returns seconds, `None` to keep the decision for ever, or 0 not to keep it:
+
+```python
+from laya import DecisionCache, decision_margins
+
+DAY = 24 * 3600
+
+def retention(questions, result):
+    if "fraud" in questions:
+        return 7 * DAY                        # re-check fraud decisions weekly
+    if min(decision_margins(result).values(), default=1.0) < 0.1:
+        return 90 * DAY                       # close calls are the ones a recompute could flip
+    return 30 * DAY
+
+cache = DecisionCache("decisions.sqlite", ttl=retention, renew_on_hit=True)
+```
+
+### Sharing decisions between machines
+
+The SQLite file is shared by the processes of one machine. To share one set of decisions across
+machines, pass `store=` any object that follows `laya.DecisionStore`: `get`, `add`, `renew`,
+`prune`, `__len__`, `clear` and `close`, over bytes keys and values with an expiry in Unix
+seconds. The one rule a store must keep is in `add`: when a key already holds an unexpired
+value, keep it and return it; that is what makes the first decision stored the one every machine
+replays. Laya ships no network store itself, so it keeps depending on nothing hosted.
+[`examples/hooks/decision_store_redis.py`](https://github.com/NandhaKishorM/laya/blob/main/examples/hooks/decision_store_redis.py)
+is one over Redis, using `SET ... NX` for that rule and Redis's own expiry:
+
+```python
+import redis
+from laya import DecisionCache, Router
+from decision_store_redis import RedisDecisionStore
+
+store = RedisDecisionStore(redis.Redis(host="cache.internal"))
+router = Router(hooks=[DecisionCache(store=store, ttl=30 * 24 * 3600, renew_on_hit=True)])
+```
+
+Run the example file to check it against a Redis server (`REDIS_URL`) or fakeredis: two Routers,
+standing for two machines, answer one request, and the second replays the first one's decision
+without running its model.
 
 A cache makes repeats identical; it does not make a borderline answer right, and it keeps a wrong
 one until it expires. It matches exact requests only, so a state that differs by one character is

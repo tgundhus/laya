@@ -30,8 +30,10 @@ sys.path.insert(0, ROOT)
 import laya  # noqa: E402
 from laya import DecisionCache, Router  # noqa: E402
 from laya import consistency  # noqa: E402
+from laya import router as router_mod  # noqa: E402
 from laya.hooks import PredictContext  # noqa: E402
 
+INF = float("inf")
 ARCHIVE = os.path.join(ROOT, "research", "benchmarks", "feishu_zh", "results", "v1", "laya", "raw.jsonl")
 
 
@@ -150,16 +152,16 @@ def bench_stores(blob, tmp, n=100_000):
     before = tracemalloc.get_traced_memory()[0]
     mem = consistency._MemoryStore(maxsize=None)
     for key in keys:
-        mem.put_many([(key, blob)], 1.0, None)
+        mem.add([(key, blob, INF)], 1.0)
     mem_bytes = tracemalloc.get_traced_memory()[0] - before
     tracemalloc.stop()
     it = iter(range(10 ** 9))
     out["memory"] = {
         "entries": n,
         "bytes_per_entry_python_heap": round(mem_bytes / n, 1),
-        "get hit": per_call_us(lambda: mem.get(keys[next(it) % n], None), 20000),
-        "get miss": per_call_us(lambda: mem.get(missing[next(it) % 1000], None), 20000),
-        "put one": per_call_us(lambda: mem.put_many([(missing[next(it) % 1000], blob)], 2.0, None), 20000),
+        "get hit": per_call_us(lambda: mem.get(keys[next(it) % n], 2.0), 20000),
+        "get miss": per_call_us(lambda: mem.get(missing[next(it) % 1000], 2.0), 20000),
+        "put one": per_call_us(lambda: mem.add([(missing[next(it) % 1000], blob, INF)], 2.0), 20000),
     }
 
     for sync in ("NORMAL", "FULL"):
@@ -167,20 +169,20 @@ def bench_stores(blob, tmp, n=100_000):
         store = consistency._SQLiteStore(path, maxsize=None)
         store._db.execute("PRAGMA synchronous=%s" % sync)
         for start in range(0, n, 1000):
-            store.put_many([(k, blob) for k in keys[start:start + 1000]], 1.0, None)
+            store.add([(k, blob, INF) for k in keys[start:start + 1000]], 1.0)
         store._db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         size = os.path.getsize(path)
         fresh = iter(keys_for(200_000, b"fresh-%s" % sync.encode()))
         out["sqlite synchronous=%s" % sync] = {
             "entries": n,
             "file_bytes_per_entry": round(size / n, 1),
-            "get hit": per_call_us(lambda: store.get(keys[next(it) % n], None), 5000),
-            "get miss": per_call_us(lambda: store.get(missing[next(it) % 1000], None), 5000),
-            "put one (own transaction)": per_call_us(lambda: store.put_many([(next(fresh), blob)], 2.0, None),
+            "get hit": per_call_us(lambda: store.get(keys[next(it) % n], 2.0), 5000),
+            "get miss": per_call_us(lambda: store.get(missing[next(it) % 1000], 2.0), 5000),
+            "put one (own transaction)": per_call_us(lambda: store.add([(next(fresh), blob, INF)], 2.0),
                                                      200, repeat=5),
             "put 100 in one transaction, per decision": {
                 k: round(v / 100, 3) for k, v in per_call_us(
-                    lambda: store.put_many([(next(fresh), blob) for _ in range(100)], 2.0, None),
+                    lambda: store.add([(next(fresh), blob, INF) for _ in range(100)], 2.0),
                     20, repeat=5).items()},
         }
         store.close()
@@ -215,24 +217,24 @@ class WriteBehindStore:
             if None in batch:
                 return
             with self.lock:
-                items = [(k, self.pending[k]) for k in batch if k in self.pending]
-            self.inner.put_many(items, 3.0, None)
+                items = [(k,) + self.pending[k] for k in batch if k in self.pending]
+            self.inner.add(items, 3.0)
             with self.lock:
                 for k, _ in items:
                     self.pending.pop(k, None)
 
-    def get(self, key, cutoff):
+    def get(self, key, now):
         with self.lock:
             blob = self.pending.get(key)
-        return blob if blob is not None else self.inner.get(key, cutoff)
+        return (blob[0], blob[1]) if blob is not None else self.inner.get(key, now)
 
-    def put_many(self, items, now, cutoff):
+    def add(self, items, now):
         with self.lock:
-            for key, blob in items:
-                self.pending.setdefault(key, blob)
-        for key, _ in items:
+            for key, value, expires_at in items:
+                self.pending.setdefault(key, (value, expires_at))
+        for key, _, _ in items:
             self.q.put(key)
-        return [blob for _, blob in items]
+        return [value for _, value, _ in items]
 
     def close(self):
         self.q.put(None)
@@ -247,7 +249,7 @@ def bench_write_behind(blob, tmp):
     for label, store in (("synchronous (shipped)", sync_store), ("write-behind thread", async_store)):
         fresh = iter(keys_for(100_000, label.encode()))
         out[label] = {"store one decision on the request path": per_call_us(
-            lambda: store.put_many([(next(fresh), blob)], 2.0, None), 500, repeat=5)}
+            lambda: store.add([(next(fresh), blob, INF)], 2.0), 500, repeat=5)}
     async_store.close()
     sync_store.close()
     return out
@@ -270,8 +272,23 @@ def bench_request(payload, tmp):
         out["Router.predict, %s cache miss" % label] = per_call_us(
             lambda: router.predict("%s %d" % (state, next(n)), QUESTIONS), 300, repeat=5)
         cache.close()
+    def fresh(fn):
+        """Forget the Router's recent language detections first: a state it has not seen."""
+        def call():
+            router_mod._DETECTIONS.clear()
+            return fn()
+        return call
+
     for label, s in STATES.items():
-        out["routing only: Router.route, %s" % label] = per_call_us(lambda: plain.route(s, QUESTIONS), 500)
+        out["routing only, new state: %s" % label] = per_call_us(fresh(lambda: plain.route(s, QUESTIONS)), 500)
+        out["routing only, repeated state: %s" % label] = per_call_us(lambda: plain.route(s, QUESTIONS), 500)
+        cache = DecisionCache()
+        router = Router(hooks=[cache])
+        router.attach("english", FakeAgent(payload))
+        router.predict(s, QUESTIONS)
+        out["cache hit, detection remembered: %s" % label] = per_call_us(lambda: router.predict(s, QUESTIONS), 500)
+        out["cache hit, detection afresh: %s" % label] = per_call_us(
+            fresh(lambda: router.predict(s, QUESTIONS)), 500)
     return out
 
 

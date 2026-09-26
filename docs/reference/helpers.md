@@ -36,6 +36,8 @@ See the [Decision consistency](../consistency.md) guide.
 
 ::: laya.consistency.DecisionCache
 
+::: laya.consistency.DecisionStore
+
 ## Shortlisting
 
 ::: laya.shortlist.shortlist_choice

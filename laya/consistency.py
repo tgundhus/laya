@@ -8,14 +8,17 @@ detail. Two tools cover that:
 * `decision_margins` reads a result and says how far each answer sits from its decision boundary.
   It needs only the payload, so it reads the same schema from a Jev-compatible API as well.
 * `DecisionCache` is a prediction hook that stores each decision under a hash of the request and
-  the model that answered it, and replays it when the same request comes again.
+  the model that answered it, and replays it when the same request comes again. It keeps them in
+  memory or in a SQLite file, or in any `DecisionStore`, which is how several machines can share
+  one set of decisions.
 
-Both are plain Python: importing this module must not pull in torch.
+All of it is plain Python: importing this module must not pull in torch.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import struct
 import threading
 import time
@@ -23,7 +26,7 @@ import warnings
 import weakref
 import zlib
 from collections import OrderedDict
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple, Union
 
 from .hooks import PredictContext, aggregate_usage
 
@@ -34,7 +37,11 @@ _KEY_VERSION = 1
 _COMPRESS_MIN = 256
 # Wall clock rather than a monotonic one, because a persisted decision has to age across restarts.
 _now = time.time
-_STAMP = struct.Struct("<d")
+# Held decisions are bounded to this many unless a `maxsize` says otherwise.
+DEFAULT_MAXSIZE = 100_000
+# A renewal is written only once a decision has aged this share of its lifetime, so a request that
+# keeps coming costs at most 16 renewal writes per lifetime rather than one per hit.
+_RENEW_FRACTION = 1 / 16
 
 
 def _number(value: Any) -> Optional[float]:
@@ -138,57 +145,127 @@ def _fingerprint(agent: Any) -> List[Any]:
             getattr(agent, "lang_temperatures", None)]
 
 
+class DecisionStore(Protocol):
+    """Where a `DecisionCache` keeps its decisions: bytes values under 16-byte keys, each with an expiry.
+
+    The cache does the hashing, encoding and retention policy; a store only keeps bytes. Implement
+    one to share decisions between machines -- over Redis or Postgres, say -- and pass it as
+    `DecisionCache(store=...)`. Times are Unix seconds, and `math.inf` means never. A store is
+    called from several threads at once and must be safe for that.
+
+    The rule that matters is in `add`: when a key already holds a value that has not expired,
+    the store keeps that value and returns it. That is what makes the first decision stored for a
+    request the one every caller gets, across threads, processes and machines.
+    """
+
+    def get(self, key: bytes, now: float) -> Optional[Tuple[bytes, float]]:
+        """The value under `key` and when it expires, or None when it holds none unexpired at `now`."""
+        ...
+
+    def add(self, items: Sequence[Tuple[bytes, bytes, float]], now: float) -> List[bytes]:
+        """Store each `(key, value, expires_at)` unless `key` already holds an unexpired value.
+
+        Returns:
+            For each item, in order, the value its key holds afterwards: the one just stored, or
+            the one that was there first.
+        """
+        ...
+
+    def renew(self, key: bytes, expires_at: float, now: float) -> None:
+        """Move the expiry of the value under `key`, if it holds one, to `expires_at`."""
+        ...
+
+    def prune(self, now: float) -> int:
+        """Drop what has expired at `now`, and anything over the store's own bound; return how many."""
+        ...
+
+    def __len__(self) -> int:
+        """How many values are held, counting expired ones not yet dropped."""
+        ...
+
+    def clear(self) -> None:
+        """Drop every value."""
+        ...
+
+    def close(self) -> None:
+        """Release what the store holds open."""
+        ...
+
+
+_STORE_METHODS = ("get", "add", "renew", "prune", "__len__", "clear", "close")
+_ENTRY = struct.Struct("<dd")  # touched at, expires at
+
+
 class _MemoryStore:
-    """Decisions in this process: key -> 8-byte stored-at stamp + value, oldest first."""
+    """Decisions in this process, least recently stored or renewed first."""
 
     def __init__(self, maxsize: Optional[int]):
         self.maxsize = maxsize
         self._data: "OrderedDict[bytes, bytes]" = OrderedDict()
+        self._lock = threading.Lock()
+        self._adds_until_sweep = 4096
 
-    def get(self, key: bytes, cutoff: Optional[float]) -> Optional[bytes]:
+    def _get(self, key: bytes, now: float) -> Optional[Tuple[bytes, float]]:
         entry = self._data.get(key)
         if entry is None:
             return None
-        if cutoff is not None and _STAMP.unpack_from(entry)[0] <= cutoff:
+        expires_at = _ENTRY.unpack_from(entry)[1]
+        if expires_at <= now:
             del self._data[key]
             return None
-        return entry[_STAMP.size:]
+        return entry[_ENTRY.size:], expires_at
 
-    def put_many(self, items: Sequence[Tuple[bytes, bytes]], now: float,
-                 cutoff: Optional[float]) -> List[bytes]:
-        stamp = _STAMP.pack(now)
-        stored = []
-        for key, blob in items:
-            first = self.get(key, cutoff)
-            if first is None:
-                # get() dropped an expired entry, so this appends: the dict stays oldest first.
-                self._data[key] = stamp + blob
-                first = blob
-            stored.append(first)
-        # Oldest first means the expired entries are at the front, so trimming them is cheap.
-        data = self._data
-        while data and cutoff is not None and _STAMP.unpack_from(next(iter(data.values())))[0] <= cutoff:
-            data.popitem(last=False)
-        while self.maxsize is not None and len(data) > self.maxsize:
-            data.popitem(last=False)
-        return stored
-
-    def prune(self, cutoff: Optional[float]) -> int:
-        expired = [] if cutoff is None else [
-            key for key, entry in self._data.items() if _STAMP.unpack_from(entry)[0] <= cutoff]
+    def _sweep(self, now: float) -> int:
+        expired = [key for key, entry in self._data.items() if _ENTRY.unpack_from(entry)[1] <= now]
         for key in expired:
             del self._data[key]
-        dropped = len(expired)
-        while self.maxsize is not None and len(self._data) > self.maxsize:
-            self._data.popitem(last=False)
-            dropped += 1
-        return dropped
+        # Lifetimes differ per decision, so expired ones are anywhere in the order: sweep them all,
+        # but only after as many stores as would make the sweep cheap on average.
+        self._adds_until_sweep = max(4096, len(self._data) // 4)
+        return len(expired)
+
+    def get(self, key: bytes, now: float) -> Optional[Tuple[bytes, float]]:
+        with self._lock:
+            return self._get(key, now)
+
+    def add(self, items: Sequence[Tuple[bytes, bytes, float]], now: float) -> List[bytes]:
+        held = []
+        with self._lock:
+            for key, value, expires_at in items:
+                first = self._get(key, now)
+                if first is None:
+                    self._data[key] = _ENTRY.pack(now, expires_at) + value
+                    self._adds_until_sweep -= 1
+                    first = (value, expires_at)
+                held.append(first[0])
+            while self.maxsize is not None and len(self._data) > self.maxsize:
+                self._data.popitem(last=False)
+            if self._adds_until_sweep <= 0:
+                self._sweep(now)
+        return held
+
+    def renew(self, key: bytes, expires_at: float, now: float) -> None:
+        with self._lock:
+            entry = self._data.get(key)
+            if entry is not None:
+                self._data[key] = _ENTRY.pack(now, expires_at) + entry[_ENTRY.size:]
+                self._data.move_to_end(key)
+
+    def prune(self, now: float) -> int:
+        with self._lock:
+            dropped = self._sweep(now)
+            while self.maxsize is not None and len(self._data) > self.maxsize:
+                self._data.popitem(last=False)
+                dropped += 1
+            return dropped
 
     def __len__(self) -> int:
-        return len(self._data)
+        with self._lock:
+            return len(self._data)
 
     def clear(self) -> None:
-        self._data.clear()
+        with self._lock:
+            self._data.clear()
 
     def close(self) -> None:
         pass
@@ -201,77 +278,100 @@ class _SQLiteStore:
         import sqlite3  # here rather than at import time: some Python builds ship without it
 
         self.maxsize = maxsize
-        # COUNT(*) walks the table, so the size bound is checked every so many stores.
+        # COUNT(*) walks the table, so the size bound and expiry are enforced every so many stores.
         self._every = 1000 if maxsize is None else max(1, min(1000, maxsize // 10))
-        self._stores = 0
+        self._adds = 0
+        self._lock = threading.Lock()
         self._db = sqlite3.connect(path, timeout=30.0, isolation_level=None, check_same_thread=False)
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA synchronous=NORMAL")
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(laya_decisions)")}
+        if columns and "expires_at" not in columns:
+            self._db.close()
+            raise ValueError("%r holds decisions in an older layout; delete it or pass another path" % (path,))
         self._db.execute("CREATE TABLE IF NOT EXISTS laya_decisions (key BLOB PRIMARY KEY, "
-                         "stored_at REAL NOT NULL, value BLOB NOT NULL) WITHOUT ROWID")
-        self._db.execute("CREATE INDEX IF NOT EXISTS laya_decisions_stored_at ON laya_decisions (stored_at)")
+                         "touched_at REAL NOT NULL, expires_at REAL NOT NULL, value BLOB NOT NULL) WITHOUT ROWID")
+        self._db.execute("CREATE INDEX IF NOT EXISTS laya_decisions_expires_at ON laya_decisions (expires_at)")
+        self._db.execute("CREATE INDEX IF NOT EXISTS laya_decisions_touched_at ON laya_decisions (touched_at)")
 
-    def get(self, key: bytes, cutoff: Optional[float]) -> Optional[bytes]:
-        row = self._db.execute("SELECT stored_at, value FROM laya_decisions WHERE key = ?", (key,)).fetchone()
-        if row is None or (cutoff is not None and row[0] <= cutoff):
+    def _get(self, key: bytes, now: float) -> Optional[Tuple[bytes, float]]:
+        row = self._db.execute("SELECT value, expires_at FROM laya_decisions WHERE key = ?", (key,)).fetchone()
+        if row is None or row[1] <= now:
             return None
-        return bytes(row[1])
+        return bytes(row[0]), row[1]
 
-    def put_many(self, items: Sequence[Tuple[bytes, bytes]], now: float,
-                 cutoff: Optional[float]) -> List[bytes]:
-        stored = []
-        # IMMEDIATE takes the write lock up front, so two processes cannot both see a key as
-        # missing and both store it: the second one reads the first one's decision.
-        self._db.execute("BEGIN IMMEDIATE")
-        try:
-            for key, blob in items:
-                first = self.get(key, cutoff)
-                if first is None:
-                    self._db.execute("INSERT OR REPLACE INTO laya_decisions (key, stored_at, value) "
-                                     "VALUES (?, ?, ?)", (key, now, blob))
-                    self._stores += 1
-                    first = blob
-                stored.append(first)
-            if self._stores >= self._every and (cutoff is not None or self.maxsize is not None):
-                self._stores = 0
-                self._prune(cutoff)
-            self._db.execute("COMMIT")
-        except BaseException:
-            self._db.execute("ROLLBACK")
-            raise
-        return stored
-
-    def _prune(self, cutoff: Optional[float]) -> int:
-        dropped = 0
-        if cutoff is not None:
-            dropped += self._db.execute("DELETE FROM laya_decisions WHERE stored_at <= ?", (cutoff,)).rowcount
+    def _prune(self, now: float) -> int:
+        dropped = self._db.execute("DELETE FROM laya_decisions WHERE expires_at <= ?", (now,)).rowcount
         if self.maxsize is not None:
             (count,) = self._db.execute("SELECT COUNT(*) FROM laya_decisions").fetchone()
             if count > self.maxsize:
                 dropped += self._db.execute(
                     "DELETE FROM laya_decisions WHERE key IN "
-                    "(SELECT key FROM laya_decisions ORDER BY stored_at LIMIT ?)",
+                    "(SELECT key FROM laya_decisions ORDER BY touched_at LIMIT ?)",
                     (count - self.maxsize,)).rowcount
         return dropped
 
-    def prune(self, cutoff: Optional[float]) -> int:
-        self._db.execute("BEGIN IMMEDIATE")
-        try:
-            dropped = self._prune(cutoff)
-            self._db.execute("COMMIT")
-        except BaseException:
-            self._db.execute("ROLLBACK")
-            raise
-        return dropped
+    def _transaction(self, work: Callable[[], Any]) -> Any:
+        with self._lock:
+            # IMMEDIATE takes the write lock up front, so two processes cannot both see a key as
+            # missing and both store it: the second one reads the first one's decision.
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                result = work()
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+            return result
+
+    def get(self, key: bytes, now: float) -> Optional[Tuple[bytes, float]]:
+        with self._lock:
+            return self._get(key, now)
+
+    def add(self, items: Sequence[Tuple[bytes, bytes, float]], now: float) -> List[bytes]:
+        def work():
+            held = []
+            for key, value, expires_at in items:
+                first = self._get(key, now)
+                if first is None:
+                    self._db.execute("INSERT OR REPLACE INTO laya_decisions (key, touched_at, expires_at, value) "
+                                     "VALUES (?, ?, ?, ?)", (key, now, expires_at, value))
+                    self._adds += 1
+                    first = (value, expires_at)
+                held.append(first[0])
+            if self._adds >= self._every:
+                self._adds = 0
+                self._prune(now)
+            return held
+        return self._transaction(work)
+
+    def renew(self, key: bytes, expires_at: float, now: float) -> None:
+        with self._lock:
+            self._db.execute("UPDATE laya_decisions SET touched_at = ?, expires_at = ? WHERE key = ? "
+                             "AND expires_at > ?", (now, expires_at, key, now))
+
+    def prune(self, now: float) -> int:
+        return self._transaction(lambda: self._prune(now))
 
     def __len__(self) -> int:
-        return self._db.execute("SELECT COUNT(*) FROM laya_decisions").fetchone()[0]
+        with self._lock:
+            return self._db.execute("SELECT COUNT(*) FROM laya_decisions").fetchone()[0]
 
     def clear(self) -> None:
-        self._db.execute("DELETE FROM laya_decisions")
+        with self._lock:
+            self._db.execute("DELETE FROM laya_decisions")
 
     def close(self) -> None:
-        self._db.close()
+        with self._lock:
+            self._db.close()
+
+
+def _check_ttl(ttl: Any, where: str) -> Optional[float]:
+    if ttl is None:
+        return None
+    if isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or ttl != ttl:
+        raise TypeError("%s must be a number of seconds or None, got %r" % (where, ttl))
+    return float(ttl)
 
 
 class DecisionCache:
@@ -282,13 +382,13 @@ class DecisionCache:
 
         from laya import DecisionCache, Router
 
-        cache = DecisionCache("decisions.sqlite", ttl=30 * 24 * 3600)
+        cache = DecisionCache("decisions.sqlite", ttl=30 * 24 * 3600, renew_on_hit=True)
         router = Router(hooks=[cache])
 
     Before inference it looks every state up. A state that hits skips the forward pass; the rest
     run as usual. After inference it stores what the model returned. The first decision stored
-    for a request wins: a request that missed at the same time, in another thread or in another
-    process sharing the file, returns the stored decision instead of its own, so every caller
+    for a request wins: a request that missed at the same time, in another thread, process or
+    machine sharing the store, returns the stored decision instead of its own, so every caller
     gets one answer per request while the entry lives. A replay is the stored payload exactly,
     `usage` included; a `Router` adds the current `routing` to it.
 
@@ -296,8 +396,15 @@ class DecisionCache:
     order is positional), the per-call token budget, the checkpoint and the model's fingerprint,
     plus the routing decision when the checkpoint has per-language temperatures, the one way
     the language reaches an answer. Values are compact JSON, compressed when that is smaller;
-    nothing of the request text is stored. Decisions leave oldest first: once they are `ttl`
-    seconds old, and when more than `maxsize` are held. A hit writes nothing; only a miss stores.
+    nothing of the request text is stored.
+
+    Each decision carries its own expiry. `ttl` sets it: a number of seconds, None for never, or
+    a function `ttl(questions, result)` that returns either -- or 0 to keep that decision not at
+    all -- so a question set or an answer can have its own retention. With `renew_on_hit`, a
+    replay pushes the expiry out again, so a decision lasts as long as its request keeps coming;
+    the renewal is written at most 16 times per lifetime. Otherwise a hit writes nothing. The
+    built-in stores drop expired decisions and, past `maxsize`, the least recently stored or
+    renewed ones.
 
     An `Agent` call may pass `lang`, which a hook cannot see. On an `Agent` with per-language
     temperatures the cache therefore stands aside rather than risk replaying an answer scored for
@@ -305,40 +412,65 @@ class DecisionCache:
 
     Args:
         path: SQLite file that keeps decisions across restarts and shares them between processes.
-            `None` keeps them in this process's memory.
-        ttl: Seconds a decision is replayed; after that the next identical request is answered
-            afresh. `None` never expires a decision.
-        maxsize: Most decisions held, the oldest leaving first; `None` for no bound. With a
-            `path`, the bound is enforced every `min(1000, maxsize // 10)` stores.
+            `None` keeps them in this process's memory, unless `store` is given.
+        ttl: Seconds a decision is replayed, None for no expiry, or a function of
+            `(questions, result)` returning seconds, None, or 0 to not keep that decision. It must
+            not change `result`.
+        maxsize: Most decisions the built-in stores hold; `None` for no bound. With a `path`, the
+            bound is enforced every `min(1000, maxsize // 10)` stores. A custom `store` bounds
+            itself.
         fingerprint: The model's part of the key. `None` derives it from the checkpoint id,
             revision, calibration temperatures, token budget and Laya version, so a change to any
             of them starts a fresh set of decisions. A fixed string keeps replaying decisions
             across such changes until they expire.
+        renew_on_hit: Count a decision's lifetime from its last replay instead of from when it
+            was stored.
+        store: A `DecisionStore` to keep decisions in instead of memory or `path`, for instance
+            one shared by several machines.
     """
 
-    def __init__(self, path: Optional[str] = None, *, ttl: Optional[float] = None,
-                 maxsize: Optional[int] = 100_000, fingerprint: Optional[str] = None):
-        if ttl is not None and (isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or not ttl > 0):
-            raise ValueError("ttl must be a positive number of seconds or None, got %r" % (ttl,))
+    def __init__(self, path: Optional[str] = None, *, ttl: Union[None, float, Callable[..., Any]] = None,
+                 maxsize: Optional[int] = DEFAULT_MAXSIZE, fingerprint: Optional[str] = None,
+                 renew_on_hit: bool = False, store: Optional[DecisionStore] = None):
+        if ttl is not None and not callable(ttl):
+            if isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or not ttl > 0:
+                raise ValueError("ttl must be a positive number of seconds, a function or None, got %r" % (ttl,))
+            ttl = float(ttl)
         if maxsize is not None and (isinstance(maxsize, bool) or not isinstance(maxsize, int) or maxsize < 1):
             raise ValueError("maxsize must be a positive integer or None, got %r" % (maxsize,))
         if fingerprint is not None and not isinstance(fingerprint, str):
             raise TypeError("fingerprint must be a string or None, got %s" % type(fingerprint).__name__)
+        if store is not None:
+            if path is not None:
+                raise ValueError("pass a path or a store, not both")
+            if maxsize != DEFAULT_MAXSIZE:
+                raise ValueError("maxsize bounds the built-in stores; bound a custom store yourself")
+            missing = [name for name in _STORE_METHODS if not callable(getattr(store, name, None))]
+            if missing:
+                raise TypeError("store is missing %s; see laya.consistency.DecisionStore" % ", ".join(missing))
+            self._store = store
+            self.maxsize = None
+        else:
+            self._store = _MemoryStore(maxsize) if path is None else _SQLiteStore(path, maxsize)
+            self.maxsize = maxsize
         self.path = path
-        self.ttl = None if ttl is None else float(ttl)
-        self.maxsize = maxsize
+        self.ttl = ttl
         self.fingerprint = fingerprint
-        self._store = _MemoryStore(maxsize) if path is None else _SQLiteStore(path, maxsize)
+        self.renew_on_hit = bool(renew_on_hit)
         self._lock = threading.Lock()
         self._pending: "weakref.WeakKeyDictionary[PredictContext, tuple]" = weakref.WeakKeyDictionary()
         self._counts = {"hits": 0, "misses": 0, "conflicts": 0}
         self._warned = False
 
     def __repr__(self) -> str:
-        return "DecisionCache(path=%r, ttl=%r, maxsize=%r)" % (self.path, self.ttl, self.maxsize)
+        where = self.path if self.path is not None else type(self._store).__name__
+        return "DecisionCache(%r, ttl=%r, maxsize=%r)" % (where, self.ttl, self.maxsize)
 
-    def _cutoff(self, now: float) -> Optional[float]:
-        return None if self.ttl is None else now - self.ttl
+    def _lifetime(self, questions: Any, result: Dict[str, Any]) -> Optional[float]:
+        """Seconds this decision is kept: None for ever, 0 or less for not at all."""
+        if callable(self.ttl):
+            return _check_ttl(self.ttl(questions, result), "ttl(questions, result)")
+        return self.ttl
 
     def _keys(self, ctx: PredictContext, states: Sequence[Any], lang_sensitive: bool) -> List[bytes]:
         model = self.fingerprint if self.fingerprint is not None else _fingerprint(ctx.agent)
@@ -357,11 +489,7 @@ class DecisionCache:
             keys.append(key.digest())
         return keys
 
-    def _encode(self, result: Any) -> Optional[bytes]:
-        if not isinstance(result, dict):
-            return None
-        # The Router re-adds the current `routing` to a replay, so it is not stored.
-        payload = {k: v for k, v in result.items() if k != "routing"}
+    def _encode(self, payload: Dict[str, Any]) -> Optional[bytes]:
         try:
             raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         except (TypeError, ValueError) as exc:
@@ -372,6 +500,18 @@ class DecisionCache:
             return None
         return _pack(raw.encode("utf-8", "surrogatepass"))
 
+    def _renew(self, ctx: PredictContext, keys: List[bytes], held: List[Any], replays: List[Any],
+               now: float) -> None:
+        for key, entry, replay in zip(keys, held, replays):
+            if entry is None:
+                continue
+            lifetime = self._lifetime(ctx.questions, replay)
+            if lifetime is None or lifetime <= 0:
+                continue
+            expires_at = now + lifetime
+            if expires_at - entry[1] > lifetime * _RENEW_FRACTION:
+                self._store.renew(key, expires_at, now)
+
     def on_predict_start(self, ctx: PredictContext) -> None:
         states = ctx.states
         if ctx.results is not None or not ctx.questions or not isinstance(states, (list, tuple)) or not states:
@@ -380,13 +520,15 @@ class DecisionCache:
         if lang_sensitive and ctx.router is None:
             return
         keys = self._keys(ctx, states, lang_sensitive)
+        now = _now()
+        held = [self._store.get(key, now) for key in keys]
+        hits = sum(entry is not None for entry in held)
         with self._lock:
-            cutoff = self._cutoff(_now())
-            blobs = [self._store.get(key, cutoff) for key in keys]
-            hits = sum(blob is not None for blob in blobs)
             self._counts["hits"] += hits
             self._counts["misses"] += len(keys) - hits
-        replays = [None if blob is None else _unpack(blob) for blob in blobs]
+        replays = [None if entry is None else _unpack(entry[0]) for entry in held]
+        if hits and self.renew_on_hit:
+            self._renew(ctx, keys, held, replays, now)
         if hits == len(keys):
             ctx.skip(replays)
             return
@@ -409,25 +551,36 @@ class DecisionCache:
         results = ctx.results
         if ctx.error is not None or not isinstance(results, list) or len(results) != len(misses):
             return
-        blobs = [self._encode(result) for result in results]
-        items = [(keys[i], blob) for i, blob in zip(misses, blobs) if blob is not None]
-        with self._lock:
-            now = _now()
-            stored = iter(self._store.put_many(items, now, self._cutoff(now)) if items else ())
+        now = _now()
+        items, positions = [], []
+        for n, (i, result) in enumerate(zip(misses, results)):
+            if not isinstance(result, dict):
+                continue
+            # The Router re-adds the current `routing` to a replay, so it is not stored.
+            payload = {k: v for k, v in result.items() if k != "routing"}
+            lifetime = self._lifetime(ctx.questions, payload)
+            if lifetime is not None and lifetime <= 0:
+                continue
+            value = self._encode(payload)
+            if value is None:
+                continue
+            items.append((keys[i], value, math.inf if lifetime is None else now + lifetime))
+            positions.append(n)
+        held = self._store.add(items, now) if items else []
         merged = list(replays)
-        conflicts = 0
-        for i, result, blob in zip(misses, results, blobs):
-            if blob is not None:
-                first = next(stored)
-                if first != blob:
-                    # Another run stored this request first, possibly on other hardware: replay
-                    # its decision, so every caller of this request gets the same one.
-                    replay = _unpack(first)
-                    if isinstance(result, dict) and "routing" in result:
-                        replay["routing"] = result["routing"]
-                    result = replay
-                    conflicts += 1
+        for i, result in zip(misses, results):
             merged[i] = result
+        conflicts = 0
+        for n, (_, value, _), first in zip(positions, items, held):
+            if first != value:
+                # Another run stored this request first, possibly on other hardware: replay its
+                # decision, so every caller of this request gets the same one.
+                i = misses[n]
+                replay = _unpack(first)
+                if isinstance(results[n], dict) and "routing" in results[n]:
+                    replay["routing"] = results[n]["routing"]
+                merged[i] = replay
+                conflicts += 1
         if conflicts:
             with self._lock:
                 self._counts["conflicts"] += conflicts
@@ -436,33 +589,32 @@ class DecisionCache:
             ctx.usage = aggregate_usage(merged)
 
     def prune(self) -> int:
-        """Drop every expired decision now, and the oldest beyond `maxsize`.
+        """Drop every expired decision now, and those over `maxsize`.
 
         Returns:
             How many decisions were dropped.
         """
-        with self._lock:
-            return self._store.prune(self._cutoff(_now()))
+        return self._store.prune(_now())
 
     def cache_info(self) -> Dict[str, Any]:
         """Counters since construction or the last `cache_clear()`.
 
         Returns:
-            A dict with `size` (decisions held), `maxsize`, `hits` and `misses` (per state
-            looked up), and `conflicts`: decisions computed for a request that another run had
-            already stored differently, which were replaced by the stored one.
+            A dict with `size` (decisions held), `maxsize` (None with a custom store), `hits` and
+            `misses` (per state looked up), and `conflicts`: decisions computed for a request that
+            another run had already stored differently, which were replaced by the stored one.
         """
+        size = len(self._store)
         with self._lock:
-            return {"size": len(self._store), "maxsize": self.maxsize, **self._counts}
+            return {"size": size, "maxsize": self.maxsize, **self._counts}
 
     def cache_clear(self) -> None:
         """Forget every stored decision and reset the counters."""
+        self._store.clear()
         with self._lock:
-            self._store.clear()
             for name in self._counts:
                 self._counts[name] = 0
 
     def close(self) -> None:
-        """Close the SQLite file, if there is one. Do not use the cache afterwards."""
-        with self._lock:
-            self._store.close()
+        """Close the store, if it holds anything open. Do not use the cache afterwards."""
+        self._store.close()

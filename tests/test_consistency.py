@@ -394,8 +394,182 @@ per_lang.predict_batch(["s0"], Q, lang="de")
 per_lang.predict_batch(["s0"], Q, lang="fr")
 check("agent/with per-language temperatures the cache stands aside", per_lang.encoded, ["s0", "s0"])
 
+# --------------------------------------------------------------- retention policy
+DAY = 24 * 3600
+FRAUD = {"fraud": {"type": "noul", "instructions": "Is this fraud?"}}
+
+
+def by_question_set(questions, result):
+    return 7 * DAY if "fraud" in questions else 30 * DAY
+
+
+cache = DecisionCache(ttl=by_question_set)
+r, en, _ = router_with(cache)
+r.predict(STATE, Q)
+r.predict(STATE, FRAUD)
+clock.t += 8 * DAY
+r.predict(STATE, Q)
+r.predict(STATE, FRAUD)
+check("policy/ttl per question set: the 30-day set replays, the 7-day one expired",
+      [c[0] for c in en.calls], [[STATE], [STATE], [STATE]])
+
+
+def keep_close_calls_longer(questions, result):
+    margins = decision_margins(result)
+    return 90 * DAY if min(margins.values(), default=1.0) < 0.1 else DAY
+
+
+cache = DecisionCache(ttl=keep_close_calls_longer)
+close = CountingAgent(0.52)
+r, _, _ = router_with(cache, english=close)
+r.predict(STATE, Q)
+clock.t += 2 * DAY
+r.predict(STATE, Q)
+check("policy/ttl by margin: a close call is kept longer", len(close.calls), 1)
+clear = CountingAgent(0.95)
+r, _, _ = router_with(DecisionCache(ttl=keep_close_calls_longer), english=clear)
+r.predict(STATE, Q)
+clock.t += 2 * DAY
+r.predict(STATE, Q)
+check("policy/ttl by margin: a clear answer expires after a day", len(clear.calls), 2)
+
+seen = []
+cache = DecisionCache(ttl=lambda questions, result: seen.append(sorted(result)) or 0)
+r, en, _ = router_with(cache)
+r.predict(STATE, Q)
+r.predict(STATE, Q)
+check("policy/a lifetime of 0 keeps nothing", (len(en.calls), cache.cache_info()["size"]), (2, 0))
+check("policy/the function sees the payload without routing", seen[0], ["answers", "model", "usage"])
+
+forever = DecisionCache(ttl=lambda questions, result: None)
+r, en, _ = router_with(forever)
+r.predict(STATE, Q)
+clock.t += 10 ** 6
+r.predict(STATE, Q)
+check("policy/None keeps a decision for ever", len(en.calls), 1)
+
+broken = DecisionCache(ttl=lambda questions, result: "a week")
+r, _, _ = router_with(broken)
+check_raises("policy/a lifetime that is not a number raises", TypeError, lambda: r.predict(STATE, Q))
+check_raises("args/ttl is a positive number or a function", ValueError, lambda: DecisionCache(ttl="1d"))
+
+# --------------------------------------------------------------- retention from last use
+for label, make in (("memory", lambda tmp: DecisionCache(ttl=100, renew_on_hit=True)),
+                    ("sqlite", lambda tmp: DecisionCache(os.path.join(tmp, "renew.sqlite"), ttl=100,
+                                                         renew_on_hit=True))):
+    with tempfile.TemporaryDirectory() as tmp:
+        cache = make(tmp)
+        r, en, _ = router_with(cache)
+        r.predict(STATE, Q)
+        for _ in range(5):
+            clock.t += 90
+            r.predict(STATE, Q)
+        check("renew/%s: a decision in use outlives its ttl" % label, len(en.calls), 1)
+        clock.t += 101
+        r.predict(STATE, Q)
+        check("renew/%s: it expires ttl after its last use" % label, len(en.calls), 2)
+        cache.close()
+
+
+class SpyStore:
+    """A dict-backed DecisionStore that records calls: the protocol is all a store needs."""
+
+    def __init__(self):
+        self.data, self.calls = {}, []
+
+    def get(self, key, now):
+        self.calls.append("get")
+        entry = self.data.get(key)
+        return entry if entry is not None and entry[1] > now else None
+
+    def add(self, items, now):
+        self.calls.append("add")
+        held = []
+        for key, value, expires_at in items:
+            if self.get(key, now) is None:
+                self.data[key] = (value, expires_at)
+            held.append(self.data[key][0])
+        return held
+
+    def renew(self, key, expires_at, now):
+        self.calls.append("renew")
+        if key in self.data:
+            self.data[key] = (self.data[key][0], expires_at)
+
+    def prune(self, now):
+        expired = [k for k, (_, e) in self.data.items() if e <= now]
+        for k in expired:
+            del self.data[k]
+        return len(expired)
+
+    def __len__(self):
+        return len(self.data)
+
+    def clear(self):
+        self.data.clear()
+
+    def close(self):
+        self.calls.append("close")
+
+
+spy = SpyStore()
+cache = DecisionCache(store=spy, ttl=160, renew_on_hit=True)
+r, en, _ = router_with(cache)
+r.predict(STATE, Q)
+for _ in range(40):
+    clock.t += 1
+    r.predict(STATE, Q)
+check("store/a custom store serves hits", len(en.calls), 1)
+# ttl 160: renewed once more than 10 s (a 16th) of it has passed -- at 11, 22 and 33 s of 40 hits
+check("store/renewals are written once a decision has aged a 16th of its ttl", spy.calls.count("renew"), 3)
+check("store/cache_info reports no maxsize for a custom store", cache.cache_info()["maxsize"], None)
+check("store/size comes from the store", cache.cache_info()["size"], 1)
+clock.t += 200
+check("store/prune goes to the store", cache.prune(), 1)
+cache.close()
+check("store/close goes to the store", spy.calls[-1], "close")
+
+first = SpyStore()
+cache_a, cache_b = DecisionCache(store=first), DecisionCache(store=first)
+r_a, _, _ = router_with(cache_a, english=CountingAgent(0.51))
+r_b, _, _ = router_with(cache_b, english=Racing(0.49, r_a))
+check("store/first decision wins through a shared custom store",
+      r_b.predict(STATE, Q)["answers"]["billing"]["noul"], 0.51)
+check_raises("store/path and store together", ValueError, lambda: DecisionCache("x.sqlite", store=SpyStore()))
+check_raises("store/maxsize with a custom store", ValueError, lambda: DecisionCache(store=SpyStore(), maxsize=5))
+check_raises("store/an object without the protocol", TypeError, lambda: DecisionCache(store=object()))
+
+# --------------------------------------------------------------- SQLite layout
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "forever.sqlite")
+    cache = DecisionCache(path)
+    r, en, _ = router_with(cache)
+    r.predict(STATE, Q)
+    cache.close()
+    clock.t += 10 ** 7
+    cache = DecisionCache(path)
+    r, en, _ = router_with(cache)
+    r.predict(STATE, Q)
+    check("sqlite/a decision without expiry survives a reopen", len(en.calls), 0)
+    cache.close()
+
+    import sqlite3
+    old = os.path.join(tmp, "old.sqlite")
+    db = sqlite3.connect(old)
+    db.execute("CREATE TABLE laya_decisions (key BLOB PRIMARY KEY, stored_at REAL NOT NULL, value BLOB NOT NULL)")
+    db.close()
+    check_raises("sqlite/a file in an older layout is refused, not misread", ValueError, lambda: DecisionCache(old))
+
+# --------------------------------------------------------------- memory store sweeps mixed lifetimes
+store = consistency._MemoryStore(maxsize=None)
+now = 1000.0
+store.add([(b"%d" % i, b"v", now + (5 if i % 2 else 10 ** 6)) for i in range(10)], now)
+check("memory/prune drops only the expired among mixed lifetimes", store.prune(now + 6), 5)
+check("memory/the rest stay", len(store), 5)
+
+
 # --------------------------------------------------------------- exports
-for name in ("DecisionCache", "decision_margins"):
+for name in ("DecisionCache", "DecisionStore", "decision_margins"):
     check_true("export/%s is in __all__" % name, name in laya.__all__)
 
 # --------------------------------------------------------------- the archived Feishu runs
