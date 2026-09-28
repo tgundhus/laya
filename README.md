@@ -1,3 +1,11 @@
+# Laya-Pro
+
+**Laya-Pro is [Laya](https://github.com/NandhaKishorM/laya) with a memory for its decisions.** A repeated
+request gets the answer it got the first time, on any machine and any backend, for as long as you choose
+to keep it, and a repeat costs microseconds instead of a forward pass.
+
+## About Laya
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NandhaKishorM/laya/main/assets/logo-lockup-dark.png" />
@@ -5,7 +13,14 @@
   </picture>
 </p>
 
-**Multilingual, non-autoregressive System 1 decision engine.** Typed decisions over 100+ languages in a single forward pass — 33 ms — trained with reinforcement learning against strictly proper scoring rules (RLCD), with a router that picks the right checkpoint per request.
+[Laya](https://github.com/NandhaKishorM/laya) was created by [Nandakishor M](https://github.com/NandhaKishorM)
+and is developed by Convai Innovations. It is a **multilingual, non-autoregressive System 1 decision
+engine**: typed decisions over 100+ languages in a single forward pass, 33 ms on a T4, trained with
+reinforcement learning against strictly proper scoring rules (RLCD), with a router that picks the right
+checkpoint per request. The models, the training method, the checkpoints and the engine are theirs,
+published under Apache 2.0. Laya-Pro builds on them under the same license. It is an independent fork,
+not affiliated with or endorsed by Convai Innovations. If Laya is useful to you, consider
+[supporting its author](https://www.buymeacoffee.com/nandakishorm).
 
 <div align="center">
 
@@ -20,6 +35,110 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 
 </div>
+
+### Laya and Jev
+
+Laya answers the same kind of typed questions as TypeSafe's Jev, a closed, hosted decision API, and
+serves the same `/v1/systemone` protocol ([Self-Hosting](#self-hosting-http-server-jev-compatible)).
+What goes wrong with Jev:
+
+- **The same request does not get the same response.** Sent the same 64 requests three times, Jev 1.13.0
+  returned identical responses for 29 of 128 (23%; an article on Jev reported 24%), and none of its 64
+  four-question yes/no answer sets repeated exactly. One label changed between runs: `todo`, `todo`,
+  then `noise`. Laya returned 128 of 128 identical responses
+  ([details](docs/reports/consistency-jev-vs-laya.md)).
+- **Confident misses.** On DAIR Emotion, Jev gave the true label zero probability on 16% of examples.
+- **Calibration.** ECE 0.246, against Laya's 0.081 after temperature fitting.
+- **Latency, cost and privacy.** 236-276 ms p50 for one question and $0.042 per million tokens, against
+  Laya's 32.8 ms on a T4 and nothing self-hosted, and every request leaves your machine.
+
+Jev leads on large label sets (Banking77: 0.870 against 0.425), soft accuracy and raw calibration; see
+[Where Jev leads](#where-jev-leads). The Jev figures are third-party published, except the repeat test,
+which reads archived raw responses in this repository.
+
+## What Laya-Pro changes
+
+Four things, at a high level. Without `DecisionCache` installed, answers are byte-identical to Laya's.
+
+- **A memory for decisions.** `DecisionCache` stores each decision under a hash of the request and the
+  model, and replays it when the request comes again: across threads, processes and machines, and across
+  fp32, int8 and ONNX backends. You choose how long each decision is kept (a `ttl`, renewal on use, a size
+  bound) and where: in memory, in a SQLite file, or in your own store (a Redis example is included).
+- **How shaky an answer is.** `decision_margins(result)` says how close each answer is to flipping, so
+  borderline answers can go to review.
+- **Faster code around the model.** Language detection, question tokenization and repeated routing do
+  less work, with identical output.
+- **A leaner ONNX export**, with an optional int8 copy.
+
+```python
+from laya import DecisionCache, Router
+
+router = Router(hooks=[DecisionCache("decisions.sqlite", ttl=7 * 86400, renew_on_hit=True)])
+```
+
+Install Laya-Pro from this repository; `pip install laya` from PyPI installs the original Laya, without
+these changes:
+
+```bash
+python -m pip install "laya @ git+https://github.com/tgundhus/laya.git"
+```
+
+Guides: [Decision consistency](docs/consistency.md) and [Where a request's time goes](docs/performance.md).
+Reports: [consistency and speed work](docs/reports/index.md).
+
+## Benchmarks: Laya-Pro against Laya
+
+Measured on an Apple M4 Max with the published checkpoints, the original Laya against Laya-Pro, over 841
+requests in 11 languages. Rows marked *cache* need `DecisionCache` installed; the rest are the default
+path. Method and raw results: [Real checkpoints on an Apple M4 Max](docs/reports/real-checkpoints-m4-max.md).
+
+**Consistency**
+
+| benchmark | Laya | Laya-Pro |
+|---|---|---|
+| Answers on 841 requests, CPU and Apple GPU (MPS) | reference | byte-identical to Laya |
+| The same request alone and in a batch on MPS | 78% of payloads differ; 4 of 1,076 decisions flip | none differ (*cache*) |
+| fp32 against fp16 or int8, on another device or backend | 0.4% (fp16) to 28% (int8) of decisions flip | none flip: 841 of 841 replayed (*cache*) |
+| Spotting borderline answers | — | a margin under 0.05 flags 2.5% of answers and catches every fp16 flip |
+
+**Memory of decisions** (*cache*)
+
+| benchmark | Laya | Laya-Pro |
+|---|---|---|
+| Repeats given their earlier decision, a simulated month, 7-day retention | 0% | 89% (94% renewing on use) |
+| The same with 30-day retention | 0% | 98% (99.8% renewing on use) |
+| Decisions replayed by a fresh process after a restart (SQLite) | 0 | 20,000 of 20,000 |
+| Retention rules kept exactly, over 348,004 checked requests | — | 0 disagreements |
+
+**Speed**
+
+| benchmark | Laya | Laya-Pro | change |
+|---|---|---|---|
+| Repeated request on MPS (3-question ticket / email) | 34.1 / 182 ms | 0.058 / 0.063 ms (*cache*) | 590-2,900x |
+| Repeated request on CPU (the same requests) | 143.9 / 491 ms | 0.037 / 0.043 ms (*cache*) | 3,900-11,400x |
+| New request, both versions around one model (3-question ticket) | 152.7 ms CPU, 49.0 ms MPS | 151.8 ms CPU, 48.2 ms MPS | level on CPU, up to 4% faster on MPS |
+| Work around the model (3-question ticket / batch of 32) | 0.37 / 11.4 ms | 0.08 / 2.9 ms | 4.4x / 3.9x |
+| Language detection, 2,000 characters (English / other languages) | 679 / 2,267 µs | 214 / 2,054 µs | 3.2x / 1.1x |
+| A stream with 70% repeats on MPS | 16.8 requests/s, p99 144 ms | 61.0 requests/s, p99 93 ms (*cache*) | 3.6x |
+| 16 identical new requests at once on CPU | 16 forward passes, 1.26 s | 1 forward pass, 0.22 s (*cache*) | 5.7x |
+
+**Costs and limits**
+
+| | measured |
+|---|---|
+| Memory held by the cache | 28-37 MB per 100,000 decisions, the default bound |
+| SQLite hit and store | 4-7 µs and 21-29 µs median, with occasional 20-100 ms pauses for maintenance |
+| int8 on Apple silicon | no faster than fp32 (ONNX) or 2.8x slower (PyTorch), and it changes 10-36% of decisions; PyTorch int8 lost 10.5 points of accuracy on MASSIVE English |
+| Requests that differ only in format | reversed option order changed 19-36% of decisions, one trailing space up to 6.6%; the cache replays exact repeats only |
+
+Other work shared the machine while these ran. The counts do not depend on timing, and the new-request
+row runs both versions around one model in one process, in alternating pairs.
+
+---
+
+*Everything below is Laya's own README, written by its original authors. It applies to Laya-Pro too,
+except that `pip install laya` installs the original release: install Laya-Pro from this repository as
+shown above.*
 
 ## Installation
 
@@ -1127,4 +1246,6 @@ If Laya helps your research or products, consider supporting independent researc
 
 ## License
 
-Apache 2.0. Developed by Convai Innovations.
+Apache 2.0. Laya is created by [Nandakishor M](https://github.com/NandhaKishorM) and developed by
+Convai Innovations. Laya-Pro's additions are by Tobias Gundhus ([tgundhus](https://github.com/tgundhus)),
+under the same license.
