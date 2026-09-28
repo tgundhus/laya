@@ -1,0 +1,85 @@
+---
+title: Consistency and speed work, September 2026
+description: What was measured and changed to make Laya's decisions repeatable and its requests faster, how it compares with Jev, and what is still open.
+type: report
+specificity: "Laya 0.3.20, branch claude/blissful-keller-kuw2r7 (commits 52ec7bb to 689f1e5, on top of 4066d5d). Consistency figures come from the archived Feishu run (64 cases x 3 repeats, Jev 1.13.0 against laya-multilingual on an Apple M4). Timings come from a 4-core Intel Xeon at 2.8 GHz, on CPU with 4 threads."
+credibility: "Every number links to a script and a raw result in research/, or to a test that recomputes it. The CPU timings used checkpoints with the published architectures and random weights, because the machine could not reach Hugging Face: they are right about where time goes, and say nothing about accuracy. No GPU or Apple-silicon timings were taken."
+---
+
+# Consistency and speed work, September 2026
+
+This work set out to answer three questions about Laya's decisions:
+
+1. Are they more repeatable than Jev's?
+2. Can a repeated request be guaranteed the answer it got the first time?
+3. Where does a request's time go, and how much of it can be removed?
+
+The detailed reports:
+
+- [Consistency: Jev against Laya](consistency-jev-vs-laya.md): what varies between runs, and
+  how voting compares with replaying decisions.
+- [Where a request's time goes](request-performance.md): the stage profile, the speed-ups made,
+  the CPU fast path and the encode-once spike.
+- [Decision cache engineering](decision-cache-engineering.md): how the cache works, what it
+  costs, retention, shared stores, concurrent requests and sharing across backends.
+
+The user guides these reports feed are [Decision consistency](../consistency.md) and
+[Where a request's time goes](../performance.md).
+
+## Findings
+
+| question | answer |
+|---|---|
+| Is Laya more repeatable than Jev? | Yes. Over three runs of the same 64 requests, 128 of 128 Laya responses were byte-identical, against 29 of 128 (23%) for Jev 1.13.0. |
+| Did Laya need the cache for that? | No. 128 of 128 is Laya's default behaviour: its forward pass samples nothing. The cache covers what can still move an answer, such as other hardware, precision, batch shape or a model upgrade. |
+| Can a repeat be guaranteed its first answer? | Yes, with `DecisionCache`. The first decision stored for a request is replayed to every caller while it lives, across threads, processes, machines with a shared store, and fp32, int8 and ONNX backends. |
+| Does voting fix run-to-run variation? | Only partly. With a per-run flip rate q, a three-run majority still flips with probability 3q² − 2q³, which is 26% at q = 1/3. Replaying removes it. |
+| Where does a request's time go? | To the encoder: 89-95% of it on CPU. Everything else adds up to about 2.5 ms for three questions on a ticket. |
+| How much faster is a repeated request? | About 7,000 times faster: a hit takes 73 µs against 503 ms computed, for three questions on a ticket. |
+| How much faster is a new request? | ONNX int8 is 2.07x faster (geometric mean over 13 requests) and int8 PyTorch 1.89x, at a cost in arithmetic. Behind the cache, each answer is fixed the first time it is computed. |
+| What would make new requests much faster? | Encoding the state once instead of once per question: up to 4.29x at 10 questions, but it needs a retrained model. |
+
+## Is this version better than the original?
+
+It is better on consistency, and no worse on anything else measured:
+
+- **Consistency.** It can give every repeat the answer it got first, which the original could
+  not do across hardware, precision or model upgrades. It also reports how close each answer is
+  to flipping (`decision_margins`), so borderline answers can go to review.
+- **Speed on repeats.** Hits skip the model entirely.
+- **Speed on new requests.** Fp32 output is unchanged, byte for byte. The profile-driven fixes
+  took some milliseconds off the stages around the encoder, and an opt-in int8 path roughly
+  halves CPU time. The int8 path is the one change that moves answers, and a cache in front of
+  it fixes each one on first compute.
+- **Dependencies.** None hosted. Every feature runs in the user's own process. A Redis store is
+  an example, not a dependency.
+
+## What changed
+
+| commit | change |
+|---|---|
+| 52ec7bb | `decision_margins`, and `DecisionCache` replaying decisions per request |
+| fac34cb | faster language detection, with identical output over 267,449 comparisons |
+| 73d4884 | tokenize each question's head once per tokenizer: 0.71 → 0.13 ms for three questions |
+| 97adef3 | cache docs: what a hit and a miss store |
+| ea30082, 4a81761 | stage profiler, cache benchmark and question-head timings, with results |
+| 5f752fb | docs: decision consistency, and where a request's time goes |
+| dff9f08 | the Router remembers recent language detections: a hit went from 121 to 73 µs |
+| 17b1229 | per-decision retention, renewal on use, and a pluggable `DecisionStore` |
+| d237a9e | ONNX export strips redundant attention NaN guards, and gains `--int8` |
+| ad3a5c0, de5732b | CPU fast-path harness and encode-once spike, with results and docs |
+| 5f014de | concurrent identical requests share one forward pass |
+| 689f1e5 | docs: coalescing, one cache across backends, pre-warming, trimming |
+
+## Open items
+
+- **Real checkpoints and other hardware.** Every timing here used random weights on a Xeon.
+  Run `research/scripts/bench_stages.py --device mps` and `bench_cpu_fast_path.py` on an Apple
+  M4 and on a GPU. Check int8's decision agreement on trained checkpoints before serving it.
+- **Fused ONNX attention.** ONNX fp32 is 0.90x of PyTorch on a 1,125-character email, because
+  the export unfuses attention. Fusing it into ONNX Runtime's attention operators is the next
+  step.
+- **Encode-once model.** Worth training, by distilling from today's model, if requests
+  typically ask three or more questions.
+- **A flaky pre-existing test.** A concurrency test in `tests/test_hooks.py` (id reuse) fails
+  about 10 in 300 runs, on the base commit too. It is flagged and not fixed here.

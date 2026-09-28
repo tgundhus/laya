@@ -13,4 +13,9 @@ nav:
       - docker-platforms.md
   - Fine-tuning:
       - finetune_browser_agent.md
+  - Reports:
+      - reports/index.md
+      - reports/consistency-jev-vs-laya.md
+      - reports/request-performance.md
+      - reports/decision-cache-engineering.md
   - reference
