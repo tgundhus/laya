@@ -11,6 +11,8 @@ import json
 import os
 import sys
 import tempfile
+import threading
+import time
 import warnings
 
 import numpy as np
@@ -142,7 +144,7 @@ check("cache/the replay is the stored answer", second["answers"], first["answers
 check("cache/the replay keeps usage", second["usage"], first["usage"])
 check("cache/the Router adds routing to a replay", second["routing"]["model"], "english")
 check("cache/counters", cache.cache_info(),
-      {"size": 1, "maxsize": 100_000, "hits": 1, "misses": 1, "conflicts": 0})
+      {"size": 1, "maxsize": 100_000, "hits": 1, "misses": 1, "conflicts": 0, "coalesced": 0})
 
 first["answers"]["billing"]["noul"] = -1.0
 second["answers"]["billing"]["noul"] = -2.0
@@ -235,7 +237,7 @@ check("prune/drops what is expired", cache.prune(), 1)
 check("prune/keeps the rest", cache.cache_info()["size"], 1)
 cache.cache_clear()
 check("clear/empties and resets", cache.cache_info(),
-      {"size": 0, "maxsize": 100_000, "hits": 0, "misses": 0, "conflicts": 0})
+      {"size": 0, "maxsize": 100_000, "hits": 0, "misses": 0, "conflicts": 0, "coalesced": 0})
 
 check_raises("args/ttl must be positive", ValueError, lambda: DecisionCache(ttl=0))
 check_raises("args/ttl is not a bool", ValueError, lambda: DecisionCache(ttl=True))
@@ -307,6 +309,155 @@ with tempfile.TemporaryDirectory() as tmp:
     check("race/without another pass", len(en_b.calls), 1)
     cache_a.close()
     cache_b.close()
+
+# --------------------------------------------------------------- concurrent identical requests
+class Slow(CountingAgent):
+    """Takes `delay` seconds per forward pass, so concurrent callers overlap it."""
+
+    def __init__(self, answer=0.7, delay=0.3):
+        super().__init__(answer)
+        self.delay = delay
+        self.mutex = threading.Lock()
+
+    def predict_batch(self, states, questions, batch_size=None, **overrides):
+        time.sleep(self.delay)
+        with self.mutex:
+            return super().predict_batch(states, questions, batch_size, **overrides)
+
+
+def concurrently(n, call):
+    """Run `call()` on n threads released together; return their results in thread order."""
+    barrier, out = threading.Barrier(n), [None] * n
+
+    def run(i):
+        barrier.wait()
+        out[i] = call()
+
+    threads = [threading.Thread(target=run, args=(i,)) for i in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    return out
+
+
+cache = DecisionCache()
+r, slow, _ = router_with(cache, english=Slow())
+outs = concurrently(8, lambda: r.predict(STATE, Q))
+info = cache.cache_info()
+check("coalesce/eight concurrent identical requests run one forward pass", len(slow.calls), 1)
+check("coalesce/every caller gets the one decision", len({json.dumps(o["answers"]) for o in outs}), 1)
+check("coalesce/every caller gets its routing", [o["routing"]["model"] for o in outs], ["english"] * 8)
+check("coalesce/the others are hits", (info["hits"], info["misses"]), (7, 1))
+check_true("coalesce/the waits are counted", info["coalesced"] >= 1, str(info))
+check("coalesce/no claim outlives its request", cache._inflight, {})
+check("coalesce/nothing conflicts", info["conflicts"], 0)
+
+cache = DecisionCache(coalesce=False)
+r, slow, _ = router_with(cache, english=Slow())
+outs = concurrently(4, lambda: r.predict(STATE, Q))
+check_true("coalesce/off: each request computes", len(slow.calls) > 1, str(len(slow.calls)))
+check("coalesce/off: the first decision still wins", len({json.dumps(o["answers"]) for o in outs}), 1)
+
+# different requests never wait for each other
+cache = DecisionCache()
+r, slow, _ = router_with(cache, english=Slow(delay=0.2))
+t0 = time.perf_counter()
+concurrently(4, lambda: r.predict("state %s" % threading.get_ident(), Q))
+check("coalesce/distinct requests all compute", len(slow.calls), 4)
+check_true("coalesce/distinct requests are not serialised", time.perf_counter() - t0 < 0.7,
+           "%.2fs" % (time.perf_counter() - t0))
+
+# a batch holding the same request twice runs it once and does not wait on itself
+cache = DecisionCache()
+r, en, _ = router_with(cache)
+out = r.predict_batch([{"state": "dup", "questions": Q, "model": "english"}] * 3)
+check("coalesce/a batch never waits on its own requests", len(out), 3)
+check("coalesce/nothing claimed after the batch", cache._inflight, {})
+
+# a failed forward pass releases its waiters, which then compute for themselves
+class Failing(Slow):
+    def __init__(self):
+        super().__init__(delay=0.2)
+        self.failed = False
+
+    def predict_batch(self, states, questions, batch_size=None, **overrides):
+        with self.mutex:
+            first, self.failed = not self.failed, True
+        if first:
+            time.sleep(self.delay)
+            raise RuntimeError("out of memory")
+        return super().predict_batch(states, questions, batch_size, **overrides)
+
+
+def attempt():
+    try:
+        return r.predict(STATE, Q)
+    except RuntimeError as exc:
+        return exc
+
+
+cache = DecisionCache()
+r, failing, _ = router_with(cache, english=Failing())
+t0 = time.perf_counter()
+outs = concurrently(4, attempt)
+check("coalesce/one caller sees the failure", sum(isinstance(o, RuntimeError) for o in outs), 1)
+check("coalesce/the rest still get a decision", sum(isinstance(o, dict) for o in outs), 3)
+check_true("coalesce/waiters are released at once, not at the wait bound", time.perf_counter() - t0 < 5,
+           "%.2fs" % (time.perf_counter() - t0))
+check("coalesce/the failure leaves no claim", cache._inflight, {})
+
+# hooks that could be waited on in return never wait
+serial = DecisionCache()
+r, slow, _ = router_with(serial, english=Slow(delay=0.2))
+r.hooks_concurrent = False
+r._hooks_lock = threading.Lock()
+outs = concurrently(3, lambda: r.predict(STATE, Q))
+check("coalesce/under a hooks lock nothing is claimed", serial._inflight, {})
+check("coalesce/under a hooks lock every caller answers", sum(isinstance(o, dict) for o in outs), 3)
+timed = DecisionCache()
+r, slow, _ = router_with(timed, english=Slow(delay=0.2))
+r.hooks_timeout = 10
+outs = concurrently(3, lambda: r.predict(STATE, Q))
+check("coalesce/under hooks_timeout nothing waits", timed.cache_info()["coalesced"], 0)
+check("coalesce/under hooks_timeout every caller answers", sum(isinstance(o, dict) for o in outs), 3)
+
+# a stuck owner holds its waiters only until the wait bound, then its claim is dropped
+cache = DecisionCache()
+stuck = threading.Event()
+cache._inflight[b"k" * 16] = (-1, stuck)
+saved, consistency._COALESCE_WAIT = consistency._COALESCE_WAIT, 0.05
+try:
+    filled, owned = cache._claim([b"k" * 16], [None])
+finally:
+    consistency._COALESCE_WAIT = saved
+check("coalesce/a stuck owner's claim is taken over", [key for key, _ in owned], [b"k" * 16])
+check("coalesce/and nothing was filled", filled, 0)
+cache._release(owned)
+check("coalesce/the take-over releases too", cache._inflight, {})
+
+# --------------------------------------------------------------- one cache for fp32, int8 and ONNX
+class Int8(CountingAgent):
+    """The same checkpoint quantized: another class, another dtype, the same fingerprint inputs."""
+    dtype = "qint8"
+    amp_enabled = False
+
+
+class OnnxLike(CountingAgent):
+    backend = "onnxruntime"
+    precision = "int8"
+
+
+cache = DecisionCache()
+keys = [cache._keys(laya.PredictContext(states=[STATE], questions=Q, model="english", agent=agent_cls()),
+                    [STATE], False)[0] for agent_cls in (CountingAgent, Int8, OnnxLike)]
+check("backends/fp32, int8 and ONNX of one checkpoint share a key", len(set(keys)), 1)
+r_fp32, fp32, _ = router_with(cache, english=CountingAgent(0.7))
+r_int8, int8, _ = router_with(cache, english=Int8(0.69))
+r_onnx, onnx, _ = router_with(cache, english=OnnxLike(0.71))
+answers = [rt.predict(STATE, Q)["answers"]["billing"]["noul"] for rt in (r_fp32, r_int8, r_onnx)]
+check("backends/int8 and ONNX replay the fp32 decision", answers, [0.7, 0.7, 0.7])
+check("backends/only the first backend ran", (len(fp32.calls), len(int8.calls), len(onnx.calls)), (1, 0, 0))
 
 # --------------------------------------------------------------- SQLite store
 with tempfile.TemporaryDirectory() as tmp:

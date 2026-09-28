@@ -16,6 +16,7 @@ All of it is plain Python: importing this module must not pull in torch.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -42,6 +43,9 @@ DEFAULT_MAXSIZE = 100_000
 # A renewal is written only once a decision has aged this share of its lifetime, so a request that
 # keeps coming costs at most 16 renewal writes per lifetime rather than one per hit.
 _RENEW_FRACTION = 1 / 16
+# Longest a request waits for another thread already computing the same one before computing it
+# itself. It only bounds a stuck owner: a normal owner releases its waiters as soon as it stores.
+_COALESCE_WAIT = 300.0
 
 
 def _number(value: Any) -> Optional[float]:
@@ -389,8 +393,15 @@ class DecisionCache:
     run as usual. After inference it stores what the model returned. The first decision stored
     for a request wins: a request that missed at the same time, in another thread, process or
     machine sharing the store, returns the stored decision instead of its own, so every caller
-    gets one answer per request while the entry lives. A replay is the stored payload exactly,
-    `usage` included; a `Router` adds the current `routing` to it.
+    gets one answer per request while the entry lives.
+
+    Within one process, a request that misses while another thread is already computing it waits
+    for that decision instead of running the model again (`coalesce`), and a state repeated
+    within one call is computed once. A request never waits on itself: not for the other states
+    of its own batch, not under `hooks_concurrent=False` and not under `hooks_timeout`.
+
+    A replay is the stored payload exactly, `usage` included; a `Router` adds the current
+    `routing` to it.
 
     The key is a 16-byte BLAKE2b hash of the state, the questions in their given order (option
     order is positional), the per-call token budget, the checkpoint and the model's fingerprint,
@@ -427,11 +438,14 @@ class DecisionCache:
             was stored.
         store: A `DecisionStore` to keep decisions in instead of memory or `path`, for instance
             one shared by several machines.
+        coalesce: Let a request that misses wait for another thread of this process already
+            computing it, so concurrent identical requests share one forward pass. False computes
+            each one and lets the first decision stored win.
     """
 
     def __init__(self, path: Optional[str] = None, *, ttl: Union[None, float, Callable[..., Any]] = None,
                  maxsize: Optional[int] = DEFAULT_MAXSIZE, fingerprint: Optional[str] = None,
-                 renew_on_hit: bool = False, store: Optional[DecisionStore] = None):
+                 renew_on_hit: bool = False, store: Optional[DecisionStore] = None, coalesce: bool = True):
         if ttl is not None and not callable(ttl):
             if isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or not ttl > 0:
                 raise ValueError("ttl must be a positive number of seconds, a function or None, got %r" % (ttl,))
@@ -457,9 +471,14 @@ class DecisionCache:
         self.ttl = ttl
         self.fingerprint = fingerprint
         self.renew_on_hit = bool(renew_on_hit)
-        self._lock = threading.Lock()
+        self.coalesce = bool(coalesce)
+        # Keys a thread of this process is computing right now: key -> (thread id, event set when
+        # the decision is stored or the attempt is over).
+        self._inflight: Dict[bytes, Tuple[int, threading.Event]] = {}
+        # Reentrant, because a claim's finalizer can run from garbage collection while it is held.
+        self._lock = threading.RLock()
         self._pending: "weakref.WeakKeyDictionary[PredictContext, tuple]" = weakref.WeakKeyDictionary()
-        self._counts = {"hits": 0, "misses": 0, "conflicts": 0}
+        self._counts = {"hits": 0, "misses": 0, "conflicts": 0, "coalesced": 0}
         self._warned = False
 
     def __repr__(self) -> str:
@@ -512,6 +531,60 @@ class DecisionCache:
             if expires_at - entry[1] > lifetime * _RENEW_FRACTION:
                 self._store.renew(key, expires_at, now)
 
+    def _coalesce_safe(self, ctx: PredictContext) -> bool:
+        """Whether this request may wait for another thread computing the same one.
+
+        A hook that waits must never be waited on in return. Hooks serialised under a lock would
+        hold it while waiting for an end hook that needs it, and a hook under `hooks_timeout`
+        runs on a helper thread whose identity says nothing about the request, so neither waits.
+        """
+        if not self.coalesce or threading.current_thread().name == "laya-hook-timeout":
+            return False
+        return all(getattr(owner, "_hooks_lock", None) is None for owner in (ctx.router, ctx.agent))
+
+    def _claim(self, keys: List[bytes], held: List[Any]) -> Tuple[int, list]:
+        """Wait for other threads computing a missing key, then claim the keys still missing.
+
+        Waiting and claiming alternate under the lock: a request claims only once no other
+        thread owns any key it misses, so a request that owns keys never waits and two requests
+        never wait on each other. Returns how many missing states the waits filled, and the
+        claims to release once this request's decisions are stored.
+        """
+        me = threading.get_ident()
+        deadline = time.monotonic() + _COALESCE_WAIT
+        filled = 0
+        while True:
+            with self._lock:
+                waits = [(i, self._inflight[key]) for i, key in enumerate(keys)
+                         if held[i] is None and key in self._inflight and self._inflight[key][0] != me]
+                if waits and time.monotonic() >= deadline:
+                    # An owner is stuck or never finished: drop its claim so no later request
+                    # waits on it either, and compute the state here.
+                    for i, entry in waits:
+                        if self._inflight.get(keys[i]) is entry:
+                            del self._inflight[keys[i]]
+                    waits = []
+                if not waits:
+                    owned = []
+                    for i, key in enumerate(keys):
+                        if held[i] is None and key not in self._inflight:
+                            entry = self._inflight[key] = (me, threading.Event())
+                            owned.append((key, entry))
+                    return filled, owned
+            for _, entry in waits:
+                entry[1].wait(max(0.0, deadline - time.monotonic()))
+            now = _now()
+            for i, _ in waits:
+                held[i] = self._store.get(keys[i], now)
+                filled += held[i] is not None
+
+    def _release(self, owned: Sequence[Tuple[bytes, Tuple[int, threading.Event]]]) -> None:
+        with self._lock:
+            for key, entry in owned:
+                if self._inflight.get(key) is entry:
+                    del self._inflight[key]
+                entry[1].set()
+
     def on_predict_start(self, ctx: PredictContext) -> None:
         states = ctx.states
         if ctx.results is not None or not ctx.questions or not isinstance(states, (list, tuple)) or not states:
@@ -522,38 +595,67 @@ class DecisionCache:
         keys = self._keys(ctx, states, lang_sensitive)
         now = _now()
         held = [self._store.get(key, now) for key in keys]
-        hits = sum(entry is not None for entry in held)
+        coalesced, owned = 0, []
+        if self._coalesce_safe(ctx) and any(entry is None for entry in held):
+            coalesced, owned = self._claim(keys, held)
+        # Released by the end hook, or when the context is dropped without one, so a claim never
+        # outlives its request.
+        release = weakref.finalize(ctx, self._release, owned) if owned else None
+        try:
+            hits = sum(entry is not None for entry in held)
+            replays = [None if entry is None else _unpack(entry[0]) for entry in held]
+            if hits and self.renew_on_hit:
+                self._renew(ctx, keys, held, replays, now)
+        except BaseException:
+            if release is not None:
+                release()
+            raise
+        # A state repeated within this call is computed once and copied to its repeats.
+        computed, dupes, first_of = [], {}, {}
+        for i, replay in enumerate(replays):
+            if replay is not None:
+                continue
+            if keys[i] in first_of:
+                dupes[i] = first_of[keys[i]]
+            else:
+                first_of[keys[i]] = i
+                computed.append(i)
         with self._lock:
             self._counts["hits"] += hits
             self._counts["misses"] += len(keys) - hits
-        replays = [None if entry is None else _unpack(entry[0]) for entry in held]
-        if hits and self.renew_on_hit:
-            self._renew(ctx, keys, held, replays, now)
-        if hits == len(keys):
+            self._counts["coalesced"] += coalesced
+            if computed:
+                self._pending[ctx] = (states, keys, replays, computed, dupes, release)
+        if not computed:
             ctx.skip(replays)
             return
-        misses = [i for i, replay in enumerate(replays) if replay is None]
-        with self._lock:
-            self._pending[ctx] = (states, keys, replays, misses)
-        if hits:
-            # Only the states that missed reach the model; the end hook puts the rest back.
-            ctx.states = [states[i] for i in misses]
+        if len(computed) < len(keys):
+            # Only the states still to compute reach the model; the end hook puts the rest back.
+            ctx.states = [states[i] for i in computed]
 
     def on_predict_end(self, ctx: PredictContext) -> None:
         with self._lock:
             pending = self._pending.pop(ctx, None)
         if pending is None:
             return
-        states, keys, replays, misses = pending
-        partial = len(misses) < len(keys)
+        states, keys, replays, computed, dupes, release = pending
+        try:
+            self._finish(ctx, states, keys, replays, computed, dupes)
+        finally:
+            if release is not None:
+                release()
+
+    def _finish(self, ctx: PredictContext, states: Sequence[Any], keys: List[bytes], replays: List[Any],
+                computed: List[int], dupes: Dict[int, int]) -> None:
+        partial = len(computed) < len(keys)
         if partial:
             ctx.states = states
         results = ctx.results
-        if ctx.error is not None or not isinstance(results, list) or len(results) != len(misses):
+        if ctx.error is not None or not isinstance(results, list) or len(results) != len(computed):
             return
         now = _now()
         items, positions = [], []
-        for n, (i, result) in enumerate(zip(misses, results)):
+        for n, (i, result) in enumerate(zip(computed, results)):
             if not isinstance(result, dict):
                 continue
             # The Router re-adds the current `routing` to a replay, so it is not stored.
@@ -568,19 +670,21 @@ class DecisionCache:
             positions.append(n)
         held = self._store.add(items, now) if items else []
         merged = list(replays)
-        for i, result in zip(misses, results):
+        for i, result in zip(computed, results):
             merged[i] = result
         conflicts = 0
         for n, (_, value, _), first in zip(positions, items, held):
             if first != value:
                 # Another run stored this request first, possibly on other hardware: replay its
                 # decision, so every caller of this request gets the same one.
-                i = misses[n]
+                i = computed[n]
                 replay = _unpack(first)
                 if isinstance(results[n], dict) and "routing" in results[n]:
                     replay["routing"] = results[n]["routing"]
                 merged[i] = replay
                 conflicts += 1
+        for i, source in dupes.items():
+            merged[i] = copy.deepcopy(merged[source])
         if conflicts:
             with self._lock:
                 self._counts["conflicts"] += conflicts
@@ -601,8 +705,10 @@ class DecisionCache:
 
         Returns:
             A dict with `size` (decisions held), `maxsize` (None with a custom store), `hits` and
-            `misses` (per state looked up), and `conflicts`: decisions computed for a request that
-            another run had already stored differently, which were replaced by the stored one.
+            `misses` (per state looked up), `conflicts`: decisions computed for a request that
+            another run had already stored differently, which were replaced by the stored one,
+            and `coalesced`: hits that waited for another thread of this process computing the
+            same request instead of running the model again.
         """
         size = len(self._store)
         with self._lock:
