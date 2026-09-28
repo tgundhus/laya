@@ -48,7 +48,7 @@ GB10 and could not place.
 
 Time grows with the number of rows, one per question and state, and with each row's length.
 One question on the short ticket took 311 ms, three took 503 ms and ten took 1,542 ms; the same
-three questions on a 1,400-character email took 2,237 ms. Every question row carries the whole
+three questions on a 1,125-character email took 2,237 ms. Every question row carries the whole
 state, so trimming a state to what the questions need is the largest lever there is.
 
 ## What makes a request faster
@@ -74,6 +74,15 @@ bf16 do change the arithmetic: check them against your own labels before you rel
   decoding: 0.106 ms for the ticket and 0.729 ms for the email in this run, against 503 ms and
   2,237 ms. Most of what was left was language detection, which the Router now remembers for
   recently seen states (below).
+- **Trimming the state.** Every question row carries the whole state, so time follows its
+  length: three questions took 503 ms on a 97-character ticket and 2,237 ms on a
+  1,125-character email. For email, `laya.email.clean_email_body` drops quoted history,
+  signatures and disclaimers and caps the rest at 3,000 characters. A reply quoting the
+  benchmark email went from 1,263 characters to 27, and a two-deep thread from 2,498 to 27. The
+  quoted history is gone too, so keep it when your questions depend on it.
+- **Concurrent repeats.** With a `DecisionCache` installed, identical requests arriving
+  together share one forward pass
+  ([concurrent identical requests](consistency.md#concurrent-identical-requests)).
 - **Batching.** 32 tickets in one `predict_batch` took 12.3 s, 384 ms per ticket against 503 ms
   one at a time. On a GPU batching is worth far more: BENCHMARKS.md has 7.2 ms per question
   batched on a T4 against 33 ms for one.

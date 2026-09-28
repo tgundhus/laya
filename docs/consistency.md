@@ -3,7 +3,7 @@ title: Decision consistency
 description: Why the same request can get a different answer, how close an answer is to flipping, and how to replay decisions so a repeated request gets the answer it got before.
 type: explanation
 specificity: "Laya 0.3.20. Consistency figures come from the archived Feishu run in research/benchmarks/feishu_zh (64 cases x 3 repeats: Jev 1.13.0 over its API, laya-multilingual on an Apple M4 in float32). Timings come from a 4-core Xeon CPU."
-credibility: "Measured. tests/test_consistency.py recomputes every consistency figure from the archived raw responses, and research/scripts/bench_decision_cache.py and bench_stages.py reproduce the timings. The stage timings on this page used random weights with the published architectures, because the machine could not reach Hugging Face; they are right about where time goes and not about accuracy."
+credibility: "Measured. tests/test_consistency.py recomputes every consistency figure from the archived raw responses, and research/scripts/bench_decision_cache.py and bench_stages.py reproduce the timings, and research/scripts/check_backend_sharing.py the fp32/int8/ONNX replay; the coalescing figures come from tests/test_consistency.py. The stage timings on this page used random weights with the published architectures, because the machine could not reach Hugging Face; they are right about where time goes and not about accuracy."
 ---
 
 # Decision consistency
@@ -156,6 +156,58 @@ router = Router(hooks=[DecisionCache(store=store, ttl=30 * 24 * 3600, renew_on_h
 Run the example file to check it against a Redis server (`REDIS_URL`) or fakeredis: two Routers,
 standing for two machines, answer one request, and the second replays the first one's decision
 without running its model.
+
+### Concurrent identical requests
+
+When the same request arrives on several threads at once, the first one to miss runs the model
+and the others wait for its decision instead of computing their own. A burst of retries or a
+fan-out then costs one forward pass. In the test suite, eight threads sending one request
+together over a model that took 0.3 s ran it once; the other seven were hits, and
+`cache_info()["coalesced"]` counts the ones that waited. A state repeated within one
+`predict_batch` is computed once and copied to its repeats.
+
+A request never waits on itself, so this cannot deadlock. It does not wait for the other states
+of its own batch, under `hooks_concurrent=False` (hooks hold a lock there) or under
+`hooks_timeout` (hooks run on a helper thread). An owner whose forward pass fails releases its
+waiters at once, and they compute for themselves. One that hangs holds them for at most five
+minutes, after which its claim is dropped. Different requests never wait for each other. Waiting
+is per process; across processes and machines the first decision stored still wins.
+`DecisionCache(coalesce=False)` turns waiting off. A miss costs about 15 µs more with it on, next
+to hundreds of milliseconds for the forward pass it can save.
+
+### One cache for every backend
+
+The device, the precision and the runtime are not part of the key. A decision stored by the
+PyTorch fp32 `Agent` is therefore replayed by an int8 `Agent` or an `ONNXAgent` of the same
+checkpoint, as long as both are loaded by the same id or path, which is part of the fingerprint.
+You can serve the fast int8 path and still give every repeated request the answer it got first,
+whichever backend computed it. On the synthetic checkpoint, the three backends' own answers
+differed, and over one SQLite file int8 and ONNX replayed the fp32 decision in 0.48 and 0.28 ms,
+against 589 ms to compute it:
+
+```bash
+python research/scripts/check_backend_sharing.py --model NandhaKishorM/laya-english --onnx english.onnx
+```
+
+Loading one backend from a local path and another from the Hub id gives two fingerprints. Pass
+the same `fingerprint="..."` to both caches to share their decisions anyway.
+
+### Pre-warming
+
+Requests you know are coming, such as a backlog, yesterday's traffic or a fixed evaluation set,
+can be answered before anyone asks. Run them through a Router with the cache installed, in
+batches, on the fastest hardware you have; production then only replays:
+
+```python
+cache = DecisionCache("decisions.sqlite", ttl=30 * 24 * 3600, renew_on_hit=True)
+router = Router(hooks=[cache])
+for chunk in (requests[i:i + 64] for i in range(0, len(requests), 64)):
+    router.predict_batch(chunk)   # [{"state": ..., "questions": ...}, ...]
+```
+
+Warm with the same questions, token budget and checkpoint that production will send, or the keys
+will not match. A GPU machine can warm the file that CPU machines then serve from, since the
+device is not part of the key.
 
 A cache makes repeats identical; it does not make a borderline answer right, and it keeps a wrong
 one until it expires. It matches exact requests only, so a state that differs by one character is
