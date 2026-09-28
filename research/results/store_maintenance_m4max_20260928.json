@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "laya": "0.3.20",
+    "python": "3.11.16",
+    "machine": "arm64",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "cpus": 14,
+    "sqlite": "3.53.1",
+    "load_average_at_start": [
+      45.94775390625,
+      45.9208984375,
+      47.57470703125
+    ],
+    "load_average_at_end": [
+      51.56005859375,
+      49.20556640625,
+      47.92041015625
+    ]
+  },
+  "maintenance": {
+    "10000": {
+      "memory sweep ms": 0.77,
+      "memory sweep dropped": 744,
+      "memory sweeps every n stores": 4096,
+      "sqlite COUNT(*) ms": 0.04,
+      "sqlite prune of 1,000 over the bound ms": 2.02,
+      "sqlite pruned": 1000,
+      "sqlite prunes every n stores when bounded": 1000
+    },
+    "100000": {
+      "memory sweep ms": 9.44,
+      "memory sweep dropped": 6795,
+      "memory sweeps every n stores": 25000,
+      "sqlite COUNT(*) ms": 0.67,
+      "sqlite prune of 1,000 over the bound ms": 7.98,
+      "sqlite pruned": 1000,
+      "sqlite prunes every n stores when bounded": 1000
+    },
+    "1000000": {
+      "memory sweep ms": 161.09,
+      "memory sweep dropped": 68965,
+      "memory sweeps every n stores": 250000,
+      "sqlite COUNT(*) ms": 7.17,
+      "sqlite prune of 1,000 over the bound ms": 44.21,
+      "sqlite pruned": 1000,
+      "sqlite prunes every n stores when bounded": 1000
+    },
+    "5000000": {
+      "memory sweep ms": 1448.78,
+      "memory sweep dropped": 345073,
+      "memory sweeps every n stores": 1250000,
+      "sqlite COUNT(*) ms": 41.87,
+      "sqlite prune of 1,000 over the bound ms": 81.57,
+      "sqlite pruned": 1000,
+      "sqlite prunes every n stores when bounded": 1000
+    }
+  }
+}

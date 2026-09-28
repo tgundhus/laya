@@ -1,0 +1,26 @@
+{
+  "ticket, 3 questions": {
+    "rows": 3,
+    "encode_ms_before": 0.714,
+    "encode_ms_after": 0.126,
+    "speedup": 5.67
+  },
+  "ticket, 10 questions": {
+    "rows": 10,
+    "encode_ms_before": 2.074,
+    "encode_ms_after": 0.212,
+    "speedup": 9.8
+  },
+  "email, 3 questions": {
+    "rows": 3,
+    "encode_ms_before": 1.231,
+    "encode_ms_after": 0.603,
+    "speedup": 2.04
+  },
+  "batch of 32 tickets, 3 questions": {
+    "rows": 96,
+    "encode_ms_before": 22.628,
+    "encode_ms_after": 4.014,
+    "speedup": 5.64
+  }
+}

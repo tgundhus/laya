@@ -3,8 +3,10 @@ import json
 import math
 import os
 import threading
+import weakref
+from collections import OrderedDict
 from contextlib import nullcontext
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -106,9 +108,54 @@ def build_sequence(
     `state_ids` lets a caller tokenize the shared state once and reuse it across every question,
     instead of re-serializing and re-tokenizing the same document per question.
     """
+    prefix, markers = _question_head(tok, q, head_max_len, option_order)
+    room = max(0, max_len - len(prefix) - 1)
+    if state_ids is None:
+        state_ids = encode_text(tok, serialize_state(state).replace(tok.mask_token, " "),
+                                add_special_tokens=False)["input_ids"]
+    # not state_ids[-room:]: with no room left, state_ids[-0:] is the whole state rather than none of it
+    st = state_ids[max(0, len(state_ids) - room):] if truncate_left else state_ids[:room]
+    ids = list(prefix) + st + [tok.sep_token_id]
+    return ids[:max_len], [m for m in markers if m < max_len]
+
+
+# Everything before the state depends on the question alone, yet a fixed question set is sent
+# with every request and its instructions and options were tokenized again each time: one
+# tokenizer call per question and per option, each under `_TOKENIZE_LOCK`. They are kept per
+# tokenizer object, weakly, so an entry goes with its tokenizer and two tokenizers never share.
+_QUESTION_HEADS: "weakref.WeakKeyDictionary[object, OrderedDict]" = weakref.WeakKeyDictionary()
+_QUESTION_HEADS_LOCK = threading.Lock()
+_QUESTION_HEADS_MAX = 1024  # per tokenizer; an entry is a few hundred token ids
+
+
+def _question_head(tok, q: Dict, head_max_len: int,
+                   option_order: Optional[List[int]] = None) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
+    """`[CLS] <type> instructions [SEP] [MASK] opt0 ... [SEP]` and its marker positions, cached."""
+    opts = render_options(q)  # validates labels, so a bad question fails before any lookup
+    order = tuple(option_order) if option_order is not None else tuple(range(len(opts)))
+    key = (q["t"], str(q["ins"]), tuple(opts), order, head_max_len,
+           tok.mask_token, tok.mask_token_id, tok.cls_token_id, tok.sep_token_id)
+    try:
+        with _QUESTION_HEADS_LOCK:
+            heads = _QUESTION_HEADS.get(tok)
+            cached = None if heads is None else heads.get(key)
+            if cached is not None:
+                heads.move_to_end(key)
+                return cached
+    except TypeError:  # a tokenizer that cannot be weakly referenced is simply not cached
+        return _build_question_head(tok, q, opts, order, head_max_len)
+    head = _build_question_head(tok, q, opts, order, head_max_len)
+    with _QUESTION_HEADS_LOCK:
+        heads = _QUESTION_HEADS.setdefault(tok, OrderedDict())
+        heads[key] = head
+        while len(heads) > _QUESTION_HEADS_MAX:
+            heads.popitem(last=False)
+    return head
+
+
+def _build_question_head(tok, q: Dict, opts: List[str], order: Tuple[int, ...],
+                         head_max_len: int) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
     mask_tok = tok.mask_token
-    opts = render_options(q)
-    order = option_order if option_order is not None else list(range(len(opts)))
     ins = str(q["ins"]).replace(mask_tok, " ")
     head_ids = encode_text(tok, "%s question: %s" % (q["t"], ins), add_special_tokens=False)["input_ids"]
     opt_ids = []
@@ -136,14 +183,7 @@ def build_sequence(
         markers.append(len(ids))
         ids.extend(o)
     ids.append(tok.sep_token_id)
-    room = max(0, max_len - len(ids) - 1)
-    if state_ids is None:
-        state_ids = encode_text(tok, serialize_state(state).replace(mask_tok, " "),
-                                add_special_tokens=False)["input_ids"]
-    # not state_ids[-room:]: with no room left, state_ids[-0:] is the whole state rather than none of it
-    st = state_ids[max(0, len(state_ids) - room):] if truncate_left else state_ids[:room]
-    ids = ids + st + [tok.sep_token_id]
-    return ids[:max_len], [m for m in markers if m < max_len]
+    return tuple(ids), tuple(markers)
 
 
 class DecisionModel(nn.Module):

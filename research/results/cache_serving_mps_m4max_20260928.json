@@ -1,0 +1,244 @@
+{
+  "meta": {
+    "laya": "0.3.20",
+    "torch": "2.14.0",
+    "device": "mps",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpus": 14,
+    "torch_threads": 10,
+    "load_average_at_start": [
+      53.3916015625,
+      48.13623046875,
+      47.58447265625
+    ],
+    "load_average_at_end": [
+      51.9912109375,
+      48.9873046875,
+      47.9599609375
+    ]
+  },
+  "trace": {
+    "pool": 341,
+    "requests": 600,
+    "zipf_s": 1.0,
+    "distinct_in_trace": 177,
+    "no cache (default path)": {
+      "requests": 600,
+      "distinct": 177,
+      "total_s": 41.38,
+      "requests_per_s": 14.5,
+      "latency": {
+        "n": 600,
+        "median_ms": 59.752,
+        "p90_ms": 94.197,
+        "p99_ms": 363.068,
+        "max_ms": 664.423,
+        "mean_ms": 68.866
+      },
+      "repeats": 423,
+      "repeats_same_answer": 423
+    },
+    "memory DecisionCache": {
+      "requests": 600,
+      "distinct": 177,
+      "total_s": 12.1,
+      "requests_per_s": 49.58,
+      "latency": {
+        "n": 600,
+        "median_ms": 0.846,
+        "p90_ms": 67.272,
+        "p99_ms": 154.701,
+        "max_ms": 313.696,
+        "mean_ms": 20.129
+      },
+      "repeats": 423,
+      "repeats_same_answer": 423,
+      "cache_info": {
+        "size": 177,
+        "maxsize": 100000,
+        "hits": 423,
+        "misses": 177,
+        "conflicts": 0,
+        "coalesced": 0
+      }
+    },
+    "SQLite DecisionCache": {
+      "requests": 600,
+      "distinct": 177,
+      "total_s": 10.65,
+      "requests_per_s": 56.36,
+      "latency": {
+        "n": 600,
+        "median_ms": 0.746,
+        "p90_ms": 55.622,
+        "p99_ms": 144.402,
+        "max_ms": 457.352,
+        "mean_ms": 17.705
+      },
+      "repeats": 423,
+      "repeats_same_answer": 423,
+      "cache_info": {
+        "size": 177,
+        "maxsize": 100000,
+        "hits": 423,
+        "misses": 177,
+        "conflicts": 0,
+        "coalesced": 0
+      }
+    }
+  },
+  "coalesce": {
+    "request": "en13/ticket, triage (3)",
+    "2": {
+      "coalesce=True": {
+        "forward_passes": 1,
+        "all_done_s": 0.2,
+        "identical_answers": true,
+        "cache_info": {
+          "size": 1,
+          "maxsize": 100000,
+          "hits": 1,
+          "misses": 1,
+          "conflicts": 0,
+          "coalesced": 1
+        }
+      },
+      "coalesce=False": {
+        "forward_passes": 2,
+        "all_done_s": 0.193,
+        "identical_answers": true,
+        "cache_info": {
+          "size": 1,
+          "maxsize": 100000,
+          "hits": 0,
+          "misses": 2,
+          "conflicts": 0,
+          "coalesced": 0
+        }
+      }
+    },
+    "4": {
+      "coalesce=True": {
+        "forward_passes": 1,
+        "all_done_s": 0.237,
+        "identical_answers": true,
+        "cache_info": {
+          "size": 1,
+          "maxsize": 100000,
+          "hits": 3,
+          "misses": 1,
+          "conflicts": 0,
+          "coalesced": 3
+        }
+      },
+      "coalesce=False": {
+        "forward_passes": 4,
+        "all_done_s": 0.431,
+        "identical_answers": true,
+        "cache_info": {
+          "size": 1,
+          "maxsize": 100000,
+          "hits": 0,
+          "misses": 4,
+          "conflicts": 0,
+          "coalesced": 0
+        }
+      }
+    },
+    "8": {
+      "coalesce=True": {
+        "forward_passes": 1,
+        "all_done_s": 0.215,
+        "identical_answers": true,
+        "cache_info": {
+          "size": 1,
+          "maxsize": 100000,
+          "hits": 7,
+          "misses": 1,
+          "conflicts": 0,
+          "coalesced": 7
+        }
+      },
+      "coalesce=False": {
+        "forward_passes": 8,
+        "all_done_s": 0.627,
+        "identical_answers": true,
+        "cache_info": {
+          "size": 1,
+          "maxsize": 100000,
+          "hits": 0,
+          "misses": 8,
+          "conflicts": 0,
+          "coalesced": 0
+        }
+      }
+    },
+    "16": {
+      "coalesce=True": {
+        "forward_passes": 1,
+        "all_done_s": 0.217,
+        "identical_answers": true,
+        "cache_info": {
+          "size": 1,
+          "maxsize": 100000,
+          "hits": 15,
+          "misses": 1,
+          "conflicts": 0,
+          "coalesced": 15
+        }
+      },
+      "coalesce=False": {
+        "forward_passes": 16,
+        "all_done_s": 1.264,
+        "identical_answers": true,
+        "cache_info": {
+          "size": 1,
+          "maxsize": 100000,
+          "hits": 0,
+          "misses": 16,
+          "conflicts": 0,
+          "coalesced": 0
+        }
+      }
+    }
+  },
+  "mps_threads": {
+    "returncode": -6,
+    "completed": false,
+    "assertion": "0:57:43.372 python[69298:8275912] failed assertion _status < MTLCommandBufferStatusCommitted at line 323 in -[IOGPUMetalCommandBuffer setCurrentCommandEncoder:]"
+  },
+  "serve": {
+    "hit alone": {
+      "http": {
+        "n": 100,
+        "median_ms": 0.683,
+        "p90_ms": 1.164,
+        "p99_ms": 2.087,
+        "max_ms": 2.087,
+        "mean_ms": 0.744
+      },
+      "inference_ms_median": 0.24
+    },
+    "miss alone": {
+      "http": {
+        "n": 12,
+        "median_ms": 34.869,
+        "p90_ms": 39.46,
+        "p99_ms": 43.056,
+        "max_ms": 43.056,
+        "mean_ms": 35.317
+      }
+    },
+    "hit while 3 clients send misses": {
+      "http": {
+        "n": 25,
+        "median_ms": 168.995,
+        "p90_ms": 183.852,
+        "p99_ms": 211.874,
+        "max_ms": 211.874,
+        "mean_ms": 162.516
+      }
+    }
+  }
+}

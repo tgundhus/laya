@@ -28,6 +28,16 @@
 
 ::: laya.presets.router_questions
 
+## Decision consistency
+
+See the [Decision consistency](../consistency.md) guide.
+
+::: laya.consistency.decision_margins
+
+::: laya.consistency.DecisionCache
+
+::: laya.consistency.DecisionStore
+
 ## Shortlisting
 
 ::: laya.shortlist.shortlist_choice

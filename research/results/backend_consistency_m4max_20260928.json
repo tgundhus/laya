@@ -1,0 +1,3510 @@
+{
+  "meta": {
+    "laya": "0.3.20",
+    "torch": "2.14.0",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpus": 14,
+    "torch_threads": 10,
+    "mps": true,
+    "requests": "requests.jsonl",
+    "batch_company": 4,
+    "load_average": [
+      42.0234375,
+      40.81396484375,
+      36.01708984375
+    ],
+    "routed": {
+      "english": 306,
+      "multilingual": 535
+    }
+  },
+  "models": {
+    "english": {
+      "requests": 306,
+      "seconds": {
+        "cpu-fp32": 72.2,
+        "cpu-fp32-again": 78.3,
+        "cpu-fp32-batched": 234.4,
+        "cpu-int8": 235.9,
+        "onnx-fp32": 122.9,
+        "onnx-int8": 216.3,
+        "mps-default": 99.5,
+        "mps-default-again": 69.8,
+        "mps-default-batched": 217.5,
+        "mps-fp32": 73.3,
+        "mps-fp16": 50.1
+      },
+      "accuracy": {
+        "cpu-fp32": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "cpu-fp32-again": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "cpu-fp32-batched": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "cpu-int8": {
+          "right": 153,
+          "n": 293,
+          "accuracy": 0.5222
+        },
+        "onnx-fp32": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "onnx-int8": {
+          "right": 189,
+          "n": 293,
+          "accuracy": 0.6451
+        },
+        "mps-default": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-default-again": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-default-batched": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-fp32": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-fp16": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        }
+      },
+      "vs_cpu_fp32": {
+        "cpu-fp32-again": {
+          "requests": 306,
+          "identical_payloads": 306,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0,
+          "mean_abs_prob_diff": 0.0,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "cpu-fp32-batched": {
+          "requests": 306,
+          "identical_payloads": 302,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 1e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "cpu-int8": {
+          "requests": 306,
+          "identical_payloads": 61,
+          "answers": 349,
+          "same_decision": 222,
+          "changed_decisions": 127,
+          "changed_share": 0.3639,
+          "max_abs_prob_diff": 1.0,
+          "mean_abs_prob_diff": 0.0408363,
+          "changed_ref_margin_max": 1.0,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 1
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 3
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 6
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 12
+            }
+          },
+          "changed": [
+            {
+              "request": "en13/email, ten (10)",
+              "question": "refund",
+              "ref_margin": 0.5694,
+              "ref": true,
+              "other": false
+            },
+            {
+              "request": "en13/shipping, support (4)",
+              "question": "priority",
+              "ref_margin": 0.0752,
+              "ref": "0",
+              "other": "1"
+            },
+            {
+              "request": "en13/shipping, support (4)",
+              "question": "sentiment",
+              "ref_margin": 0.8574,
+              "ref": "negative",
+              "other": "neutral"
+            },
+            {
+              "request": "en13/review, support (4)",
+              "question": "needs_human",
+              "ref_margin": 0.9966,
+              "ref": false,
+              "other": true
+            },
+            {
+              "request": "en13/security, support (4)",
+              "question": "priority",
+              "ref_margin": 0.3084,
+              "ref": "1",
+              "other": "3"
+            },
+            {
+              "request": "en13/feature, support (4)",
+              "question": "needs_human",
+              "ref_margin": 0.8292,
+              "ref": false,
+              "other": true
+            },
+            {
+              "request": "en13/chat dict, support (4)",
+              "question": "intent",
+              "ref_margin": 0.1961,
+              "ref": "account_security",
+              "other": "order_status"
+            },
+            {
+              "request": "en13/spam, moderation (3)",
+              "question": "action",
+              "ref_margin": 0.6896,
+              "ref": "approve",
+              "other": "remove"
+            },
+            {
+              "request": "massive/en/004",
+              "question": "intent",
+              "ref_margin": 0.9948,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/en/005",
+              "question": "intent",
+              "ref_margin": 0.9679,
+              "ref": "iot_cleaning",
+              "other": "general_quirky"
+            },
+            {
+              "request": "massive/en/006",
+              "question": "intent",
+              "ref_margin": 0.9895,
+              "ref": "iot_cleaning",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/en/007",
+              "question": "intent",
+              "ref_margin": 0.7886,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/en/008",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "general_greet",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/en/015",
+              "question": "intent",
+              "ref_margin": 0.4634,
+              "ref": "iot_hue_lightchange",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/en/022",
+              "question": "intent",
+              "ref_margin": 0.8645,
+              "ref": "general_joke",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/en/027",
+              "question": "intent",
+              "ref_margin": 0.5144,
+              "ref": "play_music",
+              "other": "play_audiobook"
+            },
+            {
+              "request": "massive/en/028",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "iot_hue_lightdim",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/en/030",
+              "question": "intent",
+              "ref_margin": 0.9996,
+              "ref": "transport_taxi",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/en/031",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "takeaway_query",
+              "other": "iot_cleaning"
+            },
+            {
+              "request": "massive/en/037",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "play_music",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/en/046",
+              "question": "intent",
+              "ref_margin": 0.9998,
+              "ref": "audio_volume_down",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/en/047",
+              "question": "intent",
+              "ref_margin": 0.7591,
+              "ref": "audio_volume_up",
+              "other": "audio_volume_down"
+            },
+            {
+              "request": "massive/en/050",
+              "question": "intent",
+              "ref_margin": 0.5554,
+              "ref": "qa_factoid",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/en/051",
+              "question": "intent",
+              "ref_margin": 0.7952,
+              "ref": "alarm_set",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/en/052",
+              "question": "intent",
+              "ref_margin": 0.9994,
+              "ref": "iot_cleaning",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/en/053",
+              "question": "intent",
+              "ref_margin": 0.9996,
+              "ref": "iot_wemo_off",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/en/054",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "play_music",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/en/059",
+              "question": "intent",
+              "ref_margin": 0.3997,
+              "ref": "iot_wemo_off",
+              "other": "general_joke"
+            },
+            {
+              "request": "massive/en/062",
+              "question": "intent",
+              "ref_margin": 0.9526,
+              "ref": "iot_wemo_on",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/en/066",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "weather_query",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/en/068",
+              "question": "intent",
+              "ref_margin": 0.9899,
+              "ref": "datetime_query",
+              "other": "audio_volume_other"
+            },
+            {
+              "request": "massive/en/072",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "iot_hue_lighton",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/en/085",
+              "question": "intent",
+              "ref_margin": 0.9926,
+              "ref": "iot_wemo_on",
+              "other": "iot_wemo_off"
+            },
+            {
+              "request": "massive/en/086",
+              "question": "intent",
+              "ref_margin": 0.3895,
+              "ref": "iot_cleaning",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/en/089",
+              "question": "intent",
+              "ref_margin": 0.7293,
+              "ref": "iot_wemo_off",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/en/090",
+              "question": "intent",
+              "ref_margin": 0.9717,
+              "ref": "news_query",
+              "other": "recommendation_movies"
+            },
+            {
+              "request": "massive/en/094",
+              "question": "intent",
+              "ref_margin": 0.997,
+              "ref": "news_query",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/en/096",
+              "question": "intent",
+              "ref_margin": 0.9994,
+              "ref": "iot_hue_lightdim",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/en/098",
+              "question": "intent",
+              "ref_margin": 0.9683,
+              "ref": "qa_factoid",
+              "other": "general_quirky"
+            },
+            {
+              "request": "massive/en/105",
+              "question": "intent",
+              "ref_margin": 0.7155,
+              "ref": "play_music",
+              "other": "general_quirky"
+            },
+            {
+              "request": "massive/en/106",
+              "question": "intent",
+              "ref_margin": 0.9755,
+              "ref": "takeaway_query",
+              "other": "recommendation_events"
+            },
+            {
+              "request": "massive/en/112",
+              "question": "intent",
+              "ref_margin": 0.998,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/en/117",
+              "question": "intent",
+              "ref_margin": 0.9981,
+              "ref": "audio_volume_down",
+              "other": "audio_volume_up"
+            },
+            {
+              "request": "massive/en/122",
+              "question": "intent",
+              "ref_margin": 0.33,
+              "ref": "iot_wemo_off",
+              "other": "iot_cleaning"
+            },
+            {
+              "request": "massive/en/123",
+              "question": "intent",
+              "ref_margin": 0.8676,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/en/124",
+              "question": "intent",
+              "ref_margin": 0.9836,
+              "ref": "datetime_query",
+              "other": "weather_query"
+            },
+            {
+              "request": "massive/en/127",
+              "question": "intent",
+              "ref_margin": 0.9944,
+              "ref": "news_query",
+              "other": "qa_stock"
+            },
+            {
+              "request": "massive/en/132",
+              "question": "intent",
+              "ref_margin": 0.9599,
+              "ref": "iot_hue_lightchange",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/en/144",
+              "question": "intent",
+              "ref_margin": 0.9995,
+              "ref": "weather_query",
+              "other": "music_dislikeness"
+            },
+            {
+              "request": "massive/en/147",
+              "question": "intent",
+              "ref_margin": 0.9994,
+              "ref": "weather_query",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/en/155",
+              "question": "intent",
+              "ref_margin": 0.0336,
+              "ref": "iot_wemo_off",
+              "other": "lists_createoradd"
+            },
+            {
+              "request": "massive/en/158",
+              "question": "intent",
+              "ref_margin": 0.9967,
+              "ref": "iot_hue_lightchange",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/en/159",
+              "question": "intent",
+              "ref_margin": 0.8243,
+              "ref": "iot_hue_lightdim",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/en/168",
+              "question": "intent",
+              "ref_margin": 0.7404,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/en/169",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "takeaway_query",
+              "other": "audio_volume_down"
+            },
+            {
+              "request": "massive/en/170",
+              "question": "intent",
+              "ref_margin": 0.7645,
+              "ref": "news_query",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/en/177",
+              "question": "intent",
+              "ref_margin": 0.9997,
+              "ref": "play_game",
+              "other": "general_greet"
+            },
+            {
+              "request": "massive/en/188",
+              "question": "intent",
+              "ref_margin": 0.5295,
+              "ref": "iot_wemo_off",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/en/189",
+              "question": "intent",
+              "ref_margin": 0.4576,
+              "ref": "iot_hue_lightup",
+              "other": "iot_wemo_off"
+            },
+            {
+              "request": "massive/en/190",
+              "question": "intent",
+              "ref_margin": 0.99,
+              "ref": "social_post",
+              "other": "iot_wemo_off"
+            },
+            {
+              "request": "massive/en/193",
+              "question": "intent",
+              "ref_margin": 0.5231,
+              "ref": "music_settings",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/en/199",
+              "question": "intent",
+              "ref_margin": 0.9668,
+              "ref": "play_music",
+              "other": "audio_volume_up"
+            },
+            {
+              "request": "massive/de/001",
+              "question": "intent",
+              "ref_margin": 0.247,
+              "ref": "play_radio",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/de/006",
+              "question": "intent",
+              "ref_margin": 0.9673,
+              "ref": "general_joke",
+              "other": "audio_volume_other"
+            },
+            {
+              "request": "massive/de/025",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "takeaway_order",
+              "other": "takeaway_query"
+            },
+            {
+              "request": "massive/de/027",
+              "question": "intent",
+              "ref_margin": 0.9999,
+              "ref": "play_music",
+              "other": "alarm_set"
+            },
+            {
+              "request": "massive/de/028",
+              "question": "intent",
+              "ref_margin": 0.9983,
+              "ref": "audio_volume_mute",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/de/029",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "takeaway_query",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/de/033",
+              "question": "intent",
+              "ref_margin": 0.986,
+              "ref": "calendar_query",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/de/048",
+              "question": "intent",
+              "ref_margin": 0.2032,
+              "ref": "music_likeness",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/es/006",
+              "question": "intent",
+              "ref_margin": 0.8152,
+              "ref": "audio_volume_other",
+              "other": "audio_volume_down"
+            },
+            {
+              "request": "massive/es/023",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "cooking_recipe",
+              "other": "calendar_remove"
+            },
+            {
+              "request": "massive/es/025",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "takeaway_order",
+              "other": "takeaway_query"
+            },
+            {
+              "request": "massive/es/027",
+              "question": "intent",
+              "ref_margin": 0.8836,
+              "ref": "play_music",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/es/028",
+              "question": "intent",
+              "ref_margin": 0.5937,
+              "ref": "general_joke",
+              "other": "iot_coffee"
+            },
+            {
+              "request": "massive/es/029",
+              "question": "intent",
+              "ref_margin": 0.9918,
+              "ref": "takeaway_query",
+              "other": "qa_stock"
+            },
+            {
+              "request": "massive/es/030",
+              "question": "intent",
+              "ref_margin": 0.8008,
+              "ref": "takeaway_query",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/es/031",
+              "question": "intent",
+              "ref_margin": 0.9038,
+              "ref": "general_greet",
+              "other": "iot_coffee"
+            },
+            {
+              "request": "massive/es/038",
+              "question": "intent",
+              "ref_margin": 0.9824,
+              "ref": "audio_volume_down",
+              "other": "audio_volume_mute"
+            },
+            {
+              "request": "massive/es/039",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "datetime_query",
+              "other": "calendar_query"
+            },
+            {
+              "request": "massive/es/040",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "play_music",
+              "other": "music_dislikeness"
+            },
+            {
+              "request": "massive/es/046",
+              "question": "intent",
+              "ref_margin": 0.9992,
+              "ref": "transport_taxi",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/es/048",
+              "question": "intent",
+              "ref_margin": 0.9955,
+              "ref": "music_likeness",
+              "other": "recommendation_movies"
+            },
+            {
+              "request": "massive/fr/001",
+              "question": "intent",
+              "ref_margin": 0.9991,
+              "ref": "audio_volume_mute",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/fr/008",
+              "question": "intent",
+              "ref_margin": 0.3146,
+              "ref": "qa_definition",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/fr/010",
+              "question": "intent",
+              "ref_margin": 0.179,
+              "ref": "alarm_query",
+              "other": "qa_maths"
+            },
+            {
+              "request": "massive/fr/014",
+              "question": "intent",
+              "ref_margin": 0.9037,
+              "ref": "music_likeness",
+              "other": "iot_coffee"
+            },
+            {
+              "request": "massive/fr/023",
+              "question": "intent",
+              "ref_margin": 0.7945,
+              "ref": "general_joke",
+              "other": "music_likeness"
+            },
+            {
+              "request": "massive/fr/026",
+              "question": "intent",
+              "ref_margin": 0.877,
+              "ref": "music_likeness",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/fr/027",
+              "question": "intent",
+              "ref_margin": 0.1975,
+              "ref": "audio_volume_other",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/fr/036",
+              "question": "intent",
+              "ref_margin": 0.9994,
+              "ref": "play_music",
+              "other": "music_settings"
+            },
+            {
+              "request": "massive/fr/038",
+              "question": "intent",
+              "ref_margin": 0.9984,
+              "ref": "audio_volume_down",
+              "other": "audio_volume_mute"
+            },
+            {
+              "request": "massive/sw/000",
+              "question": "intent",
+              "ref_margin": 0.9376,
+              "ref": "alarm_remove",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/sw/003",
+              "question": "intent",
+              "ref_margin": 0.8839,
+              "ref": "general_joke",
+              "other": "iot_coffee"
+            },
+            {
+              "request": "massive/sw/004",
+              "question": "intent",
+              "ref_margin": 0.4608,
+              "ref": "email_sendemail",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/sw/005",
+              "question": "intent",
+              "ref_margin": 0.5245,
+              "ref": "iot_cleaning",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/sw/006",
+              "question": "intent",
+              "ref_margin": 0.9998,
+              "ref": "cooking_recipe",
+              "other": "audio_volume_other"
+            },
+            {
+              "request": "massive/sw/007",
+              "question": "intent",
+              "ref_margin": 0.148,
+              "ref": "alarm_remove",
+              "other": "audio_volume_other"
+            },
+            {
+              "request": "massive/sw/008",
+              "question": "intent",
+              "ref_margin": 0.5475,
+              "ref": "general_joke",
+              "other": "iot_wemo_off"
+            },
+            {
+              "request": "massive/sw/010",
+              "question": "intent",
+              "ref_margin": 0.9708,
+              "ref": "music_likeness",
+              "other": "email_querycontact"
+            },
+            {
+              "request": "massive/sw/011",
+              "question": "intent",
+              "ref_margin": 0.435,
+              "ref": "iot_wemo_off",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/sw/012",
+              "question": "intent",
+              "ref_margin": 0.0971,
+              "ref": "music_query",
+              "other": "news_query"
+            },
+            {
+              "request": "massive/sw/014",
+              "question": "intent",
+              "ref_margin": 0.9916,
+              "ref": "music_likeness",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/sw/015",
+              "question": "intent",
+              "ref_margin": 0.103,
+              "ref": "play_music",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/sw/016",
+              "question": "intent",
+              "ref_margin": 0.0657,
+              "ref": "music_likeness",
+              "other": "recommendation_locations"
+            },
+            {
+              "request": "massive/sw/017",
+              "question": "intent",
+              "ref_margin": 0.879,
+              "ref": "qa_maths",
+              "other": "iot_wemo_on"
+            },
+            {
+              "request": "massive/sw/018",
+              "question": "intent",
+              "ref_margin": 0.3253,
+              "ref": "qa_factoid",
+              "other": "lists_remove"
+            },
+            {
+              "request": "massive/sw/021",
+              "question": "intent",
+              "ref_margin": 0.9714,
+              "ref": "lists_remove",
+              "other": "weather_query"
+            },
+            {
+              "request": "massive/sw/022",
+              "question": "intent",
+              "ref_margin": 0.1312,
+              "ref": "general_joke",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/sw/023",
+              "question": "intent",
+              "ref_margin": 0.8282,
+              "ref": "general_joke",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/sw/025",
+              "question": "intent",
+              "ref_margin": 0.5679,
+              "ref": "music_query",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/sw/026",
+              "question": "intent",
+              "ref_margin": 0.7374,
+              "ref": "music_likeness",
+              "other": "music_dislikeness"
+            },
+            {
+              "request": "massive/sw/027",
+              "question": "intent",
+              "ref_margin": 0.9787,
+              "ref": "alarm_set",
+              "other": "datetime_convert"
+            },
+            {
+              "request": "massive/sw/028",
+              "question": "intent",
+              "ref_margin": 0.2461,
+              "ref": "audio_volume_down",
+              "other": "qa_stock"
+            },
+            {
+              "request": "massive/sw/030",
+              "question": "intent",
+              "ref_margin": 0.5842,
+              "ref": "qa_definition",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/sw/031",
+              "question": "intent",
+              "ref_margin": 0.8854,
+              "ref": "iot_cleaning",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/sw/033",
+              "question": "intent",
+              "ref_margin": 0.3854,
+              "ref": "music_likeness",
+              "other": "transport_query"
+            },
+            {
+              "request": "massive/sw/035",
+              "question": "intent",
+              "ref_margin": 0.4289,
+              "ref": "iot_wemo_on",
+              "other": "news_query"
+            },
+            {
+              "request": "massive/sw/037",
+              "question": "intent",
+              "ref_margin": 0.5496,
+              "ref": "iot_cleaning",
+              "other": "email_querycontact"
+            },
+            {
+              "request": "massive/sw/038",
+              "question": "intent",
+              "ref_margin": 0.0176,
+              "ref": "iot_wemo_off",
+              "other": "music_dislikeness"
+            },
+            {
+              "request": "massive/sw/041",
+              "question": "intent",
+              "ref_margin": 0.5844,
+              "ref": "alarm_query",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/sw/042",
+              "question": "intent",
+              "ref_margin": 0.0336,
+              "ref": "music_settings",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/sw/043",
+              "question": "intent",
+              "ref_margin": 0.9883,
+              "ref": "play_game",
+              "other": "music_dislikeness"
+            },
+            {
+              "request": "massive/sw/044",
+              "question": "intent",
+              "ref_margin": 0.9634,
+              "ref": "play_music",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/sw/047",
+              "question": "intent",
+              "ref_margin": 0.9998,
+              "ref": "play_music",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/sw/048",
+              "question": "intent",
+              "ref_margin": 0.3376,
+              "ref": "music_likeness",
+              "other": "calendar_query"
+            },
+            {
+              "request": "massive/sw/049",
+              "question": "intent",
+              "ref_margin": 0.8938,
+              "ref": "qa_definition",
+              "other": "general_greet"
+            }
+          ]
+        },
+        "onnx-fp32": {
+          "requests": 306,
+          "identical_payloads": 296,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "onnx-int8": {
+          "requests": 306,
+          "identical_payloads": 99,
+          "answers": 349,
+          "same_decision": 314,
+          "changed_decisions": 35,
+          "changed_share": 0.10029,
+          "max_abs_prob_diff": 0.9998,
+          "mean_abs_prob_diff": 0.0104088,
+          "changed_ref_margin_max": 0.994,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 1
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 4
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 7
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 8
+            }
+          },
+          "changed": [
+            {
+              "request": "en13/shipping, support (4)",
+              "question": "priority",
+              "ref_margin": 0.0752,
+              "ref": "0",
+              "other": "3"
+            },
+            {
+              "request": "en13/security, support (4)",
+              "question": "needs_human",
+              "ref_margin": 0.0486,
+              "ref": false,
+              "other": true
+            },
+            {
+              "request": "en13/feature, support (4)",
+              "question": "priority",
+              "ref_margin": 0.0554,
+              "ref": "1",
+              "other": "2"
+            },
+            {
+              "request": "massive/en/002",
+              "question": "intent",
+              "ref_margin": 0.2842,
+              "ref": "iot_hue_lightoff",
+              "other": "music_dislikeness"
+            },
+            {
+              "request": "massive/en/003",
+              "question": "intent",
+              "ref_margin": 0.9353,
+              "ref": "iot_wemo_on",
+              "other": "audio_volume_mute"
+            },
+            {
+              "request": "massive/en/015",
+              "question": "intent",
+              "ref_margin": 0.4634,
+              "ref": "iot_hue_lightchange",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/en/026",
+              "question": "intent",
+              "ref_margin": 0.8402,
+              "ref": "music_likeness",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/en/027",
+              "question": "intent",
+              "ref_margin": 0.5144,
+              "ref": "play_music",
+              "other": "play_audiobook"
+            },
+            {
+              "request": "massive/en/042",
+              "question": "intent",
+              "ref_margin": 0.2774,
+              "ref": "takeaway_order",
+              "other": "weather_query"
+            },
+            {
+              "request": "massive/en/051",
+              "question": "intent",
+              "ref_margin": 0.7952,
+              "ref": "alarm_set",
+              "other": "alarm_remove"
+            },
+            {
+              "request": "massive/en/059",
+              "question": "intent",
+              "ref_margin": 0.3997,
+              "ref": "iot_wemo_off",
+              "other": "audio_volume_mute"
+            },
+            {
+              "request": "massive/en/086",
+              "question": "intent",
+              "ref_margin": 0.3895,
+              "ref": "iot_cleaning",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/en/089",
+              "question": "intent",
+              "ref_margin": 0.7293,
+              "ref": "iot_wemo_off",
+              "other": "lists_query"
+            },
+            {
+              "request": "massive/en/122",
+              "question": "intent",
+              "ref_margin": 0.33,
+              "ref": "iot_wemo_off",
+              "other": "alarm_remove"
+            },
+            {
+              "request": "massive/en/123",
+              "question": "intent",
+              "ref_margin": 0.8676,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/en/155",
+              "question": "intent",
+              "ref_margin": 0.0336,
+              "ref": "iot_wemo_off",
+              "other": "lists_createoradd"
+            },
+            {
+              "request": "massive/en/189",
+              "question": "intent",
+              "ref_margin": 0.4576,
+              "ref": "iot_hue_lightup",
+              "other": "audio_volume_other"
+            },
+            {
+              "request": "massive/en/193",
+              "question": "intent",
+              "ref_margin": 0.5231,
+              "ref": "music_settings",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/de/002",
+              "question": "intent",
+              "ref_margin": 0.99,
+              "ref": "iot_hue_lightchange",
+              "other": "takeaway_order"
+            },
+            {
+              "request": "massive/de/036",
+              "question": "intent",
+              "ref_margin": 0.994,
+              "ref": "play_music",
+              "other": "music_settings"
+            },
+            {
+              "request": "massive/es/001",
+              "question": "intent",
+              "ref_margin": 0.2608,
+              "ref": "iot_wemo_on",
+              "other": "audio_volume_mute"
+            },
+            {
+              "request": "massive/es/022",
+              "question": "intent",
+              "ref_margin": 0.4651,
+              "ref": "music_dislikeness",
+              "other": "transport_taxi"
+            },
+            {
+              "request": "massive/es/031",
+              "question": "intent",
+              "ref_margin": 0.9038,
+              "ref": "general_greet",
+              "other": "email_addcontact"
+            },
+            {
+              "request": "massive/fr/008",
+              "question": "intent",
+              "ref_margin": 0.3146,
+              "ref": "qa_definition",
+              "other": "general_greet"
+            },
+            {
+              "request": "massive/sw/008",
+              "question": "intent",
+              "ref_margin": 0.5475,
+              "ref": "general_joke",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/sw/011",
+              "question": "intent",
+              "ref_margin": 0.435,
+              "ref": "iot_wemo_off",
+              "other": "takeaway_order"
+            },
+            {
+              "request": "massive/sw/016",
+              "question": "intent",
+              "ref_margin": 0.0657,
+              "ref": "music_likeness",
+              "other": "lists_query"
+            },
+            {
+              "request": "massive/sw/018",
+              "question": "intent",
+              "ref_margin": 0.3253,
+              "ref": "qa_factoid",
+              "other": "music_likeness"
+            },
+            {
+              "request": "massive/sw/022",
+              "question": "intent",
+              "ref_margin": 0.1312,
+              "ref": "general_joke",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/sw/025",
+              "question": "intent",
+              "ref_margin": 0.5679,
+              "ref": "music_query",
+              "other": "takeaway_query"
+            },
+            {
+              "request": "massive/sw/030",
+              "question": "intent",
+              "ref_margin": 0.5842,
+              "ref": "qa_definition",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/sw/034",
+              "question": "intent",
+              "ref_margin": 0.3703,
+              "ref": "qa_factoid",
+              "other": "music_likeness"
+            },
+            {
+              "request": "massive/sw/038",
+              "question": "intent",
+              "ref_margin": 0.0176,
+              "ref": "iot_wemo_off",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/sw/042",
+              "question": "intent",
+              "ref_margin": 0.0336,
+              "ref": "music_settings",
+              "other": "general_greet"
+            },
+            {
+              "request": "massive/sw/043",
+              "question": "intent",
+              "ref_margin": 0.9883,
+              "ref": "play_game",
+              "other": "play_music"
+            }
+          ]
+        },
+        "mps-default": {
+          "requests": 306,
+          "identical_payloads": 293,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0031,
+          "mean_abs_prob_diff": 2.7e-06,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default-again": {
+          "requests": 306,
+          "identical_payloads": 293,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0031,
+          "mean_abs_prob_diff": 2.7e-06,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default-batched": {
+          "requests": 306,
+          "identical_payloads": 139,
+          "answers": 349,
+          "same_decision": 348,
+          "changed_decisions": 1,
+          "changed_share": 0.00287,
+          "max_abs_prob_diff": 0.0742,
+          "mean_abs_prob_diff": 0.0003449,
+          "changed_ref_margin_max": 0.0176,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 1
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 1
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 1
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 1
+            }
+          },
+          "changed": [
+            {
+              "request": "massive/sw/038",
+              "question": "intent",
+              "ref_margin": 0.0176,
+              "ref": "iot_wemo_off",
+              "other": "audio_volume_down"
+            }
+          ]
+        },
+        "mps-fp32": {
+          "requests": 306,
+          "identical_payloads": 295,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-fp16": {
+          "requests": 306,
+          "identical_payloads": 139,
+          "answers": 349,
+          "same_decision": 348,
+          "changed_decisions": 1,
+          "changed_share": 0.00287,
+          "max_abs_prob_diff": 0.0742,
+          "mean_abs_prob_diff": 0.0003449,
+          "changed_ref_margin_max": 0.0176,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 1
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 1
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 1
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 1
+            }
+          },
+          "changed": [
+            {
+              "request": "massive/sw/038",
+              "question": "intent",
+              "ref_margin": 0.0176,
+              "ref": "iot_wemo_off",
+              "other": "audio_volume_down"
+            }
+          ]
+        }
+      },
+      "by_set": {
+        "english13": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "cpu-fp32-batched": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "cpu-int8": {
+            "changed": 8,
+            "answers": 56,
+            "accuracy": null
+          },
+          "onnx-fp32": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "onnx-int8": {
+            "changed": 3,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-default-batched": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-fp16": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          }
+        },
+        "massive_en": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "cpu-fp32-batched": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "cpu-int8": {
+            "changed": 54,
+            "answers": 200,
+            "accuracy": 0.69
+          },
+          "onnx-fp32": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "onnx-int8": {
+            "changed": 15,
+            "answers": 200,
+            "accuracy": 0.8
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-default-batched": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-fp16": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          }
+        },
+        "massive_ml": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "cpu-fp32-batched": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "cpu-int8": {
+            "changed": 65,
+            "answers": 93,
+            "accuracy": 0.1613
+          },
+          "onnx-fp32": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "onnx-int8": {
+            "changed": 17,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-default-batched": {
+            "changed": 1,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-fp16": {
+            "changed": 1,
+            "answers": 93,
+            "accuracy": 0.3118
+          }
+        }
+      },
+      "decision_cache_replay": {
+        "fill_s": 103.64,
+        "setups": {
+          "cpu-int8": {
+            "identical_to_first_decision": 306,
+            "requests": 306,
+            "misses": 0,
+            "seconds": 0.028,
+            "ms_per_request": 0.093
+          },
+          "onnx-fp32": {
+            "identical_to_first_decision": 306,
+            "requests": 306,
+            "misses": 0,
+            "seconds": 0.015,
+            "ms_per_request": 0.05
+          },
+          "onnx-int8": {
+            "identical_to_first_decision": 306,
+            "requests": 306,
+            "misses": 0,
+            "seconds": 0.017,
+            "ms_per_request": 0.054
+          },
+          "mps-default": {
+            "identical_to_first_decision": 306,
+            "requests": 306,
+            "misses": 0,
+            "seconds": 0.015,
+            "ms_per_request": 0.05
+          },
+          "mps-default-batched": {
+            "identical_to_first_decision": 306,
+            "requests": 306,
+            "misses_incl_batch_company": 1190,
+            "seconds": 69.001,
+            "ms_per_request": 225.492
+          }
+        }
+      }
+    },
+    "multilingual": {
+      "requests": 535,
+      "seconds": {
+        "cpu-fp32": 119.5,
+        "cpu-fp32-again": 143.7,
+        "cpu-fp32-batched": 423.1,
+        "cpu-int8": 212.1,
+        "mps-default": 25.5,
+        "mps-default-again": 33.5,
+        "mps-default-batched": 106.9,
+        "mps-fp32": 75.2,
+        "mps-fp16": 79.2
+      },
+      "accuracy": {
+        "cpu-fp32": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "cpu-fp32-again": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "cpu-fp32-batched": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "cpu-int8": {
+          "right": 252,
+          "n": 471,
+          "accuracy": 0.535
+        },
+        "mps-default": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "mps-default-again": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "mps-default-batched": {
+          "right": 246,
+          "n": 471,
+          "accuracy": 0.5223
+        },
+        "mps-fp32": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "mps-fp16": {
+          "right": 246,
+          "n": 471,
+          "accuracy": 0.5223
+        }
+      },
+      "vs_cpu_fp32": {
+        "cpu-fp32-again": {
+          "requests": 535,
+          "identical_payloads": 535,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0,
+          "mean_abs_prob_diff": 0.0,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "cpu-fp32-batched": {
+          "requests": 535,
+          "identical_payloads": 527,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 1e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "cpu-int8": {
+          "requests": 535,
+          "identical_payloads": 11,
+          "answers": 727,
+          "same_decision": 555,
+          "changed_decisions": 172,
+          "changed_share": 0.23659,
+          "max_abs_prob_diff": 0.9997,
+          "mean_abs_prob_diff": 0.0360486,
+          "changed_ref_margin_max": 1.0,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 2
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 6
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 15
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 29
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 45
+            }
+          },
+          "changed": [
+            {
+              "request": "feishu/ownership-04/choice",
+              "question": "category",
+              "ref_margin": 0.2419,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "feishu/ownership-05/four_noul",
+              "question": "action",
+              "ref_margin": 0.6818,
+              "ref": false,
+              "other": true
+            },
+            {
+              "request": "feishu/ownership-05/four_noul",
+              "question": "value",
+              "ref_margin": 0.6318,
+              "ref": false,
+              "other": true
+            },
+            {
+              "request": "feishu/ownership-06/choice",
+              "question": "category",
+              "ref_margin": 0.8462,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/ownership-06/four_noul",
+              "question": "action",
+              "ref_margin": 0.5436,
+              "ref": false,
+              "other": true
+            },
+            {
+              "request": "feishu/lifecycle-01/choice",
+              "question": "category",
+              "ref_margin": 0.1282,
+              "ref": "urgent",
+              "other": "valuable"
+            },
+            {
+              "request": "feishu/lifecycle-03/choice",
+              "question": "category",
+              "ref_margin": 0.069,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/lifecycle-04/choice",
+              "question": "category",
+              "ref_margin": 0.004,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/lifecycle-06/choice",
+              "question": "category",
+              "ref_margin": 0.2055,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "feishu/urgency-01/choice",
+              "question": "category",
+              "ref_margin": 0.871,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/urgency-04/choice",
+              "question": "category",
+              "ref_margin": 0.3349,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/urgency-08/choice",
+              "question": "category",
+              "ref_margin": 0.0304,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/knowledge-01/choice",
+              "question": "category",
+              "ref_margin": 0.2504,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/knowledge-01/four_noul",
+              "question": "action",
+              "ref_margin": 0.603,
+              "ref": true,
+              "other": false
+            },
+            {
+              "request": "feishu/knowledge-02/choice",
+              "question": "category",
+              "ref_margin": 0.2113,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/knowledge-04/choice",
+              "question": "category",
+              "ref_margin": 0.3438,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/knowledge-05/choice",
+              "question": "category",
+              "ref_margin": 0.1014,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/knowledge-05/four_noul",
+              "question": "action",
+              "ref_margin": 0.8984,
+              "ref": true,
+              "other": false
+            },
+            {
+              "request": "feishu/knowledge-06/choice",
+              "question": "category",
+              "ref_margin": 0.6997,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/knowledge-06/four_noul",
+              "question": "value",
+              "ref_margin": 0.9626,
+              "ref": true,
+              "other": false
+            },
+            {
+              "request": "feishu/knowledge-07/four_noul",
+              "question": "value",
+              "ref_margin": 0.3264,
+              "ref": true,
+              "other": false
+            },
+            {
+              "request": "feishu/knowledge-08/choice",
+              "question": "category",
+              "ref_margin": 0.2548,
+              "ref": "valuable",
+              "other": "noise"
+            },
+            {
+              "request": "feishu/conditional-01/choice",
+              "question": "category",
+              "ref_margin": 0.2795,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/conditional-02/choice",
+              "question": "category",
+              "ref_margin": 0.034,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/conditional-04/choice",
+              "question": "category",
+              "ref_margin": 0.0112,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/conditional-06/choice",
+              "question": "category",
+              "ref_margin": 0.6695,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "feishu/conditional-07/choice",
+              "question": "category",
+              "ref_margin": 0.0649,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/untrusted_content-02/choice",
+              "question": "category",
+              "ref_margin": 0.0303,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/untrusted_content-03/choice",
+              "question": "category",
+              "ref_margin": 0.055,
+              "ref": "valuable",
+              "other": "urgent"
+            },
+            {
+              "request": "feishu/untrusted_content-07/choice",
+              "question": "category",
+              "ref_margin": 0.0144,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "feishu/thread_context-01/choice",
+              "question": "category",
+              "ref_margin": 0.0029,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "feishu/thread_context-04/choice",
+              "question": "category",
+              "ref_margin": 0.037,
+              "ref": "valuable",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/thread_context-04/four_noul",
+              "question": "action",
+              "ref_margin": 0.7768,
+              "ref": true,
+              "other": false
+            },
+            {
+              "request": "feishu/thread_context-06/choice",
+              "question": "category",
+              "ref_margin": 0.0142,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "feishu/thread_context-07/choice",
+              "question": "category",
+              "ref_margin": 0.0959,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/thread_context-08/choice",
+              "question": "category",
+              "ref_margin": 0.8196,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/cross_chat-01/choice",
+              "question": "category",
+              "ref_margin": 0.1579,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/cross_chat-02/choice",
+              "question": "category",
+              "ref_margin": 0.3223,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/cross_chat-03/choice",
+              "question": "category",
+              "ref_margin": 0.1542,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/cross_chat-05/choice",
+              "question": "category",
+              "ref_margin": 0.5946,
+              "ref": "urgent",
+              "other": "todo"
+            },
+            {
+              "request": "feishu/cross_chat-08/four_noul",
+              "question": "action",
+              "ref_margin": 0.6738,
+              "ref": true,
+              "other": false
+            },
+            {
+              "request": "massive/de/004",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/de/005",
+              "question": "intent",
+              "ref_margin": 0.5073,
+              "ref": "play_music",
+              "other": "general_quirky"
+            },
+            {
+              "request": "massive/de/007",
+              "question": "intent",
+              "ref_margin": 0.9812,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/de/009",
+              "question": "intent",
+              "ref_margin": 0.5095,
+              "ref": "alarm_remove",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/de/010",
+              "question": "intent",
+              "ref_margin": 0.371,
+              "ref": "iot_hue_lightchange",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/de/012",
+              "question": "intent",
+              "ref_margin": 0.0233,
+              "ref": "iot_wemo_on",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/de/013",
+              "question": "intent",
+              "ref_margin": 0.1389,
+              "ref": "iot_wemo_off",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/de/015",
+              "question": "intent",
+              "ref_margin": 0.0659,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/de/022",
+              "question": "intent",
+              "ref_margin": 0.3916,
+              "ref": "iot_hue_lighton",
+              "other": "general_joke"
+            },
+            {
+              "request": "massive/de/023",
+              "question": "intent",
+              "ref_margin": 0.9923,
+              "ref": "general_joke",
+              "other": "music_likeness"
+            },
+            {
+              "request": "massive/de/030",
+              "question": "intent",
+              "ref_margin": 0.3316,
+              "ref": "music_dislikeness",
+              "other": "takeaway_query"
+            },
+            {
+              "request": "massive/de/031",
+              "question": "intent",
+              "ref_margin": 0.3457,
+              "ref": "general_greet",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/de/032",
+              "question": "intent",
+              "ref_margin": 0.8357,
+              "ref": "qa_factoid",
+              "other": "takeaway_query"
+            },
+            {
+              "request": "massive/de/035",
+              "question": "intent",
+              "ref_margin": 0.0489,
+              "ref": "social_post",
+              "other": "qa_definition"
+            },
+            {
+              "request": "massive/de/038",
+              "question": "intent",
+              "ref_margin": 0.7841,
+              "ref": "audio_volume_mute",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/de/042",
+              "question": "intent",
+              "ref_margin": 0.0341,
+              "ref": "weather_query",
+              "other": "general_greet"
+            },
+            {
+              "request": "massive/de/044",
+              "question": "intent",
+              "ref_margin": 0.2343,
+              "ref": "iot_hue_lightdim",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/de/049",
+              "question": "intent",
+              "ref_margin": 0.3295,
+              "ref": "iot_hue_lightdim",
+              "other": "weather_query"
+            },
+            {
+              "request": "massive/es/000",
+              "question": "intent",
+              "ref_margin": 0.1126,
+              "ref": "alarm_set",
+              "other": "alarm_remove"
+            },
+            {
+              "request": "massive/es/002",
+              "question": "intent",
+              "ref_margin": 0.3711,
+              "ref": "takeaway_order",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/es/007",
+              "question": "intent",
+              "ref_margin": 0.9345,
+              "ref": "iot_hue_lightup",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/es/014",
+              "question": "intent",
+              "ref_margin": 0.1999,
+              "ref": "play_music",
+              "other": "music_likeness"
+            },
+            {
+              "request": "massive/es/016",
+              "question": "intent",
+              "ref_margin": 0.9781,
+              "ref": "datetime_query",
+              "other": "calendar_set"
+            },
+            {
+              "request": "massive/es/021",
+              "question": "intent",
+              "ref_margin": 0.6315,
+              "ref": "alarm_remove",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/es/026",
+              "question": "intent",
+              "ref_margin": 0.9392,
+              "ref": "play_music",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/es/036",
+              "question": "intent",
+              "ref_margin": 0.5459,
+              "ref": "music_settings",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/es/044",
+              "question": "intent",
+              "ref_margin": 0.7637,
+              "ref": "iot_wemo_on",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/es/047",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "audio_volume_down",
+              "other": "audio_volume_up"
+            },
+            {
+              "request": "massive/fr/002",
+              "question": "intent",
+              "ref_margin": 0.0515,
+              "ref": "iot_wemo_on",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/fr/004",
+              "question": "intent",
+              "ref_margin": 0.9529,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/fr/005",
+              "question": "intent",
+              "ref_margin": 0.122,
+              "ref": "iot_hue_lighton",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/fr/006",
+              "question": "intent",
+              "ref_margin": 0.4397,
+              "ref": "iot_cleaning",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/fr/007",
+              "question": "intent",
+              "ref_margin": 0.9769,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/fr/009",
+              "question": "intent",
+              "ref_margin": 0.0513,
+              "ref": "alarm_remove",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/fr/028",
+              "question": "intent",
+              "ref_margin": 0.9835,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/fr/033",
+              "question": "intent",
+              "ref_margin": 0.9994,
+              "ref": "iot_hue_lightchange",
+              "other": "alarm_set"
+            },
+            {
+              "request": "massive/fr/039",
+              "question": "intent",
+              "ref_margin": 0.5843,
+              "ref": "alarm_remove",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/fr/046",
+              "question": "intent",
+              "ref_margin": 0.0479,
+              "ref": "iot_hue_lightoff",
+              "other": "general_quirky"
+            },
+            {
+              "request": "massive/ja/002",
+              "question": "intent",
+              "ref_margin": 0.6843,
+              "ref": "iot_hue_lightchange",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/ja/007",
+              "question": "intent",
+              "ref_margin": 0.9806,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/ja/008",
+              "question": "intent",
+              "ref_margin": 0.8418,
+              "ref": "general_greet",
+              "other": "qa_definition"
+            },
+            {
+              "request": "massive/ja/015",
+              "question": "intent",
+              "ref_margin": 0.2618,
+              "ref": "iot_hue_lightdim",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/ja/021",
+              "question": "intent",
+              "ref_margin": 0.9889,
+              "ref": "weather_query",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/ja/028",
+              "question": "intent",
+              "ref_margin": 0.9941,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/ja/029",
+              "question": "intent",
+              "ref_margin": 0.9849,
+              "ref": "iot_wemo_off",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/ja/030",
+              "question": "intent",
+              "ref_margin": 0.9997,
+              "ref": "transport_taxi",
+              "other": "audio_volume_mute"
+            },
+            {
+              "request": "massive/ja/032",
+              "question": "intent",
+              "ref_margin": 0.475,
+              "ref": "general_greet",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/ja/043",
+              "question": "intent",
+              "ref_margin": 0.4029,
+              "ref": "takeaway_order",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/ja/044",
+              "question": "intent",
+              "ref_margin": 0.1991,
+              "ref": "audio_volume_other",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/ja/047",
+              "question": "intent",
+              "ref_margin": 0.9989,
+              "ref": "audio_volume_down",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/zh-CN/004",
+              "question": "intent",
+              "ref_margin": 0.8308,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/zh-CN/005",
+              "question": "intent",
+              "ref_margin": 0.1918,
+              "ref": "audio_volume_down",
+              "other": "iot_cleaning"
+            },
+            {
+              "request": "massive/zh-CN/006",
+              "question": "intent",
+              "ref_margin": 0.5936,
+              "ref": "iot_cleaning",
+              "other": "takeaway_order"
+            },
+            {
+              "request": "massive/zh-CN/007",
+              "question": "intent",
+              "ref_margin": 0.2767,
+              "ref": "alarm_remove",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/zh-CN/013",
+              "question": "intent",
+              "ref_margin": 0.4768,
+              "ref": "general_quirky",
+              "other": "alarm_query"
+            },
+            {
+              "request": "massive/zh-CN/015",
+              "question": "intent",
+              "ref_margin": 0.4417,
+              "ref": "iot_hue_lightdim",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/zh-CN/019",
+              "question": "intent",
+              "ref_margin": 0.0857,
+              "ref": "recommendation_events",
+              "other": "weather_query"
+            },
+            {
+              "request": "massive/zh-CN/025",
+              "question": "intent",
+              "ref_margin": 0.4902,
+              "ref": "qa_definition",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/zh-CN/027",
+              "question": "intent",
+              "ref_margin": 0.854,
+              "ref": "play_music",
+              "other": "play_audiobook"
+            },
+            {
+              "request": "massive/zh-CN/030",
+              "question": "intent",
+              "ref_margin": 0.1032,
+              "ref": "transport_taxi",
+              "other": "qa_currency"
+            },
+            {
+              "request": "massive/zh-CN/031",
+              "question": "intent",
+              "ref_margin": 0.096,
+              "ref": "takeaway_query",
+              "other": "qa_currency"
+            },
+            {
+              "request": "massive/zh-CN/032",
+              "question": "intent",
+              "ref_margin": 0.2559,
+              "ref": "general_greet",
+              "other": "qa_definition"
+            },
+            {
+              "request": "massive/zh-CN/042",
+              "question": "intent",
+              "ref_margin": 0.9865,
+              "ref": "weather_query",
+              "other": "transport_taxi"
+            },
+            {
+              "request": "massive/zh-CN/047",
+              "question": "intent",
+              "ref_margin": 0.9978,
+              "ref": "audio_volume_down",
+              "other": "music_likeness"
+            },
+            {
+              "request": "massive/ar/004",
+              "question": "intent",
+              "ref_margin": 0.4339,
+              "ref": "iot_wemo_on",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/ar/006",
+              "question": "intent",
+              "ref_margin": 0.242,
+              "ref": "general_joke",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/ar/007",
+              "question": "intent",
+              "ref_margin": 0.1519,
+              "ref": "alarm_remove",
+              "other": "general_quirky"
+            },
+            {
+              "request": "massive/ar/009",
+              "question": "intent",
+              "ref_margin": 0.7736,
+              "ref": "qa_factoid",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/ar/011",
+              "question": "intent",
+              "ref_margin": 0.1672,
+              "ref": "general_joke",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/ar/012",
+              "question": "intent",
+              "ref_margin": 0.7095,
+              "ref": "music_settings",
+              "other": "iot_cleaning"
+            },
+            {
+              "request": "massive/ar/016",
+              "question": "intent",
+              "ref_margin": 0.9939,
+              "ref": "datetime_query",
+              "other": "calendar_set"
+            },
+            {
+              "request": "massive/ar/019",
+              "question": "intent",
+              "ref_margin": 0.4652,
+              "ref": "iot_wemo_on",
+              "other": "weather_query"
+            },
+            {
+              "request": "massive/ar/022",
+              "question": "intent",
+              "ref_margin": 0.9772,
+              "ref": "play_audiobook",
+              "other": "music_dislikeness"
+            },
+            {
+              "request": "massive/ar/023",
+              "question": "intent",
+              "ref_margin": 0.9758,
+              "ref": "general_joke",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/ar/024",
+              "question": "intent",
+              "ref_margin": 0.2431,
+              "ref": "general_greet",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/ar/029",
+              "question": "intent",
+              "ref_margin": 0.8615,
+              "ref": "iot_cleaning",
+              "other": "general_greet"
+            },
+            {
+              "request": "massive/ar/030",
+              "question": "intent",
+              "ref_margin": 0.4211,
+              "ref": "takeaway_query",
+              "other": "qa_maths"
+            },
+            {
+              "request": "massive/ar/035",
+              "question": "intent",
+              "ref_margin": 0.5409,
+              "ref": "social_post",
+              "other": "news_query"
+            },
+            {
+              "request": "massive/ar/036",
+              "question": "intent",
+              "ref_margin": 0.0323,
+              "ref": "play_music",
+              "other": "iot_coffee"
+            },
+            {
+              "request": "massive/ar/043",
+              "question": "intent",
+              "ref_margin": 0.47,
+              "ref": "play_music",
+              "other": "play_game"
+            },
+            {
+              "request": "massive/ar/044",
+              "question": "intent",
+              "ref_margin": 0.9853,
+              "ref": "audio_volume_other",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/ar/046",
+              "question": "intent",
+              "ref_margin": 0.9869,
+              "ref": "audio_volume_up",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/ar/047",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "audio_volume_down",
+              "other": "takeaway_order"
+            },
+            {
+              "request": "massive/hi/002",
+              "question": "intent",
+              "ref_margin": 0.7661,
+              "ref": "takeaway_order",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/hi/004",
+              "question": "intent",
+              "ref_margin": 0.0711,
+              "ref": "iot_hue_lightoff",
+              "other": "lists_remove"
+            },
+            {
+              "request": "massive/hi/005",
+              "question": "intent",
+              "ref_margin": 0.0669,
+              "ref": "general_quirky",
+              "other": "iot_hue_lighton"
+            },
+            {
+              "request": "massive/hi/007",
+              "question": "intent",
+              "ref_margin": 0.2826,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/hi/009",
+              "question": "intent",
+              "ref_margin": 0.7477,
+              "ref": "music_dislikeness",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/hi/010",
+              "question": "intent",
+              "ref_margin": 0.9463,
+              "ref": "qa_maths",
+              "other": "datetime_convert"
+            },
+            {
+              "request": "massive/hi/013",
+              "question": "intent",
+              "ref_margin": 0.9572,
+              "ref": "takeaway_query",
+              "other": "general_greet"
+            },
+            {
+              "request": "massive/hi/022",
+              "question": "intent",
+              "ref_margin": 0.2627,
+              "ref": "general_joke",
+              "other": "social_post"
+            },
+            {
+              "request": "massive/hi/024",
+              "question": "intent",
+              "ref_margin": 0.9407,
+              "ref": "qa_maths",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/hi/027",
+              "question": "intent",
+              "ref_margin": 0.0151,
+              "ref": "iot_hue_lightoff",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/hi/028",
+              "question": "intent",
+              "ref_margin": 0.0879,
+              "ref": "audio_volume_mute",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/hi/030",
+              "question": "intent",
+              "ref_margin": 0.0749,
+              "ref": "recommendation_movies",
+              "other": "transport_taxi"
+            },
+            {
+              "request": "massive/hi/039",
+              "question": "intent",
+              "ref_margin": 0.0594,
+              "ref": "audio_volume_down",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/hi/044",
+              "question": "intent",
+              "ref_margin": 0.8985,
+              "ref": "iot_wemo_on",
+              "other": "iot_hue_lightdim"
+            },
+            {
+              "request": "massive/hi/046",
+              "question": "intent",
+              "ref_margin": 0.9087,
+              "ref": "audio_volume_down",
+              "other": "social_post"
+            },
+            {
+              "request": "massive/hi/047",
+              "question": "intent",
+              "ref_margin": 0.9996,
+              "ref": "audio_volume_down",
+              "other": "takeaway_order"
+            },
+            {
+              "request": "massive/hi/049",
+              "question": "intent",
+              "ref_margin": 0.2845,
+              "ref": "general_greet",
+              "other": "takeaway_query"
+            },
+            {
+              "request": "massive/ru/004",
+              "question": "intent",
+              "ref_margin": 0.942,
+              "ref": "iot_hue_lightoff",
+              "other": "alarm_set"
+            },
+            {
+              "request": "massive/ru/006",
+              "question": "intent",
+              "ref_margin": 0.9264,
+              "ref": "iot_cleaning",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/ru/009",
+              "question": "intent",
+              "ref_margin": 0.202,
+              "ref": "alarm_remove",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/ru/011",
+              "question": "intent",
+              "ref_margin": 0.969,
+              "ref": "iot_hue_lightchange",
+              "other": "alarm_remove"
+            },
+            {
+              "request": "massive/ru/013",
+              "question": "intent",
+              "ref_margin": 0.2007,
+              "ref": "general_quirky",
+              "other": "general_greet"
+            },
+            {
+              "request": "massive/ru/015",
+              "question": "intent",
+              "ref_margin": 0.9649,
+              "ref": "iot_hue_lightdim",
+              "other": "iot_hue_lightchange"
+            },
+            {
+              "request": "massive/ru/019",
+              "question": "intent",
+              "ref_margin": 0.1018,
+              "ref": "news_query",
+              "other": "calendar_set"
+            },
+            {
+              "request": "massive/ru/023",
+              "question": "intent",
+              "ref_margin": 0.6907,
+              "ref": "general_joke",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/ru/026",
+              "question": "intent",
+              "ref_margin": 0.7887,
+              "ref": "play_music",
+              "other": "music_query"
+            },
+            {
+              "request": "massive/ru/029",
+              "question": "intent",
+              "ref_margin": 0.9972,
+              "ref": "iot_wemo_off",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/ru/030",
+              "question": "intent",
+              "ref_margin": 1.0,
+              "ref": "transport_taxi",
+              "other": "recommendation_movies"
+            },
+            {
+              "request": "massive/ru/036",
+              "question": "intent",
+              "ref_margin": 0.9804,
+              "ref": "play_music",
+              "other": "music_settings"
+            },
+            {
+              "request": "massive/ru/038",
+              "question": "intent",
+              "ref_margin": 0.9923,
+              "ref": "audio_volume_mute",
+              "other": "audio_volume_down"
+            },
+            {
+              "request": "massive/ru/039",
+              "question": "intent",
+              "ref_margin": 0.1455,
+              "ref": "alarm_remove",
+              "other": "datetime_query"
+            },
+            {
+              "request": "massive/ru/041",
+              "question": "intent",
+              "ref_margin": 0.8581,
+              "ref": "general_greet",
+              "other": "weather_query"
+            },
+            {
+              "request": "massive/ru/046",
+              "question": "intent",
+              "ref_margin": 0.827,
+              "ref": "audio_volume_down",
+              "other": "general_quirky"
+            },
+            {
+              "request": "massive/sw/036",
+              "question": "intent",
+              "ref_margin": 0.546,
+              "ref": "play_music",
+              "other": "general_greet"
+            },
+            {
+              "request": "massive/th/000",
+              "question": "intent",
+              "ref_margin": 0.4757,
+              "ref": "general_greet",
+              "other": "alarm_set"
+            },
+            {
+              "request": "massive/th/005",
+              "question": "intent",
+              "ref_margin": 0.2406,
+              "ref": "general_quirky",
+              "other": "play_music"
+            },
+            {
+              "request": "massive/th/007",
+              "question": "intent",
+              "ref_margin": 0.8433,
+              "ref": "iot_hue_lightup",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/th/010",
+              "question": "intent",
+              "ref_margin": 0.6987,
+              "ref": "qa_maths",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/th/019",
+              "question": "intent",
+              "ref_margin": 0.9999,
+              "ref": "iot_wemo_on",
+              "other": "weather_query"
+            },
+            {
+              "request": "massive/th/024",
+              "question": "intent",
+              "ref_margin": 0.6369,
+              "ref": "qa_maths",
+              "other": "qa_currency"
+            },
+            {
+              "request": "massive/th/028",
+              "question": "intent",
+              "ref_margin": 0.4271,
+              "ref": "general_joke",
+              "other": "iot_hue_lightup"
+            },
+            {
+              "request": "massive/th/029",
+              "question": "intent",
+              "ref_margin": 0.3562,
+              "ref": "transport_taxi",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/th/031",
+              "question": "intent",
+              "ref_margin": 0.5262,
+              "ref": "transport_traffic",
+              "other": "iot_cleaning"
+            },
+            {
+              "request": "massive/th/037",
+              "question": "intent",
+              "ref_margin": 0.9997,
+              "ref": "play_music",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/th/040",
+              "question": "intent",
+              "ref_margin": 0.1366,
+              "ref": "iot_cleaning",
+              "other": "qa_factoid"
+            },
+            {
+              "request": "massive/th/042",
+              "question": "intent",
+              "ref_margin": 0.5012,
+              "ref": "general_greet",
+              "other": "calendar_set"
+            },
+            {
+              "request": "massive/th/046",
+              "question": "intent",
+              "ref_margin": 0.9903,
+              "ref": "audio_volume_down",
+              "other": "iot_hue_lightoff"
+            },
+            {
+              "request": "massive/th/047",
+              "question": "intent",
+              "ref_margin": 0.9998,
+              "ref": "audio_volume_down",
+              "other": "takeaway_order"
+            }
+          ]
+        },
+        "mps-default": {
+          "requests": 535,
+          "identical_payloads": 517,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default-again": {
+          "requests": 535,
+          "identical_payloads": 517,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default-batched": {
+          "requests": 535,
+          "identical_payloads": 50,
+          "answers": 727,
+          "same_decision": 724,
+          "changed_decisions": 3,
+          "changed_share": 0.00413,
+          "max_abs_prob_diff": 0.103,
+          "mean_abs_prob_diff": 0.000937,
+          "changed_ref_margin_max": 0.0229,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 2
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 3
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 3
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 3
+            }
+          },
+          "changed": [
+            {
+              "request": "feishu/conditional-03/choice",
+              "question": "category",
+              "ref_margin": 0.0229,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "massive/ar/028",
+              "question": "intent",
+              "ref_margin": 0.0135,
+              "ref": "takeaway_query",
+              "other": "general_joke"
+            },
+            {
+              "request": "massive/hi/027",
+              "question": "intent",
+              "ref_margin": 0.0151,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_cleaning"
+            }
+          ]
+        },
+        "mps-fp32": {
+          "requests": 535,
+          "identical_payloads": 517,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-fp16": {
+          "requests": 535,
+          "identical_payloads": 50,
+          "answers": 727,
+          "same_decision": 724,
+          "changed_decisions": 3,
+          "changed_share": 0.00413,
+          "max_abs_prob_diff": 0.103,
+          "mean_abs_prob_diff": 0.000937,
+          "changed_ref_margin_max": 0.0229,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 2
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 3
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 3
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 3
+            }
+          },
+          "changed": [
+            {
+              "request": "feishu/conditional-03/choice",
+              "question": "category",
+              "ref_margin": 0.0229,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "massive/ar/028",
+              "question": "intent",
+              "ref_margin": 0.0135,
+              "ref": "takeaway_query",
+              "other": "general_joke"
+            },
+            {
+              "request": "massive/hi/027",
+              "question": "intent",
+              "ref_margin": 0.0151,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_cleaning"
+            }
+          ]
+        }
+      },
+      "by_set": {
+        "feishu": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "cpu-fp32-batched": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "cpu-int8": {
+            "changed": 41,
+            "answers": 320,
+            "accuracy": 0.3438
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "mps-default-batched": {
+            "changed": 1,
+            "answers": 320,
+            "accuracy": 0.2969
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "mps-fp16": {
+            "changed": 1,
+            "answers": 320,
+            "accuracy": 0.2969
+          }
+        },
+        "massive_ml": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "cpu-fp32-batched": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "cpu-int8": {
+            "changed": 131,
+            "answers": 407,
+            "accuracy": 0.5651
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-default-batched": {
+            "changed": 2,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-fp16": {
+            "changed": 2,
+            "answers": 407,
+            "accuracy": 0.5577
+          }
+        }
+      },
+      "decision_cache_replay": {
+        "fill_s": 89.53,
+        "setups": {
+          "cpu-int8": {
+            "identical_to_first_decision": 535,
+            "requests": 535,
+            "misses": 0,
+            "seconds": 0.023,
+            "ms_per_request": 0.042
+          },
+          "mps-default": {
+            "identical_to_first_decision": 535,
+            "requests": 535,
+            "misses": 0,
+            "seconds": 0.021,
+            "ms_per_request": 0.039
+          },
+          "mps-default-batched": {
+            "identical_to_first_decision": 535,
+            "requests": 535,
+            "misses_incl_batch_company": 1634,
+            "seconds": 32.084,
+            "ms_per_request": 59.97
+          }
+        }
+      }
+    }
+  }
+}

@@ -134,6 +134,31 @@ check_true("laya.hooks/run_coroutine_sync exists",
 for event in HOOK_EVENTS:
     check_true("BaseHook/%s callable" % event, callable(getattr(BaseHook, event, None)))
 
+# DecisionCache is a hook object, DecisionStore the protocol its stores follow, decision_margins
+# reads a result. All three are top-level.
+for name in ("DecisionCache", "DecisionStore", "decision_margins"):
+    check_true("__all__/%s" % name, name in laya.__all__)
+    check_true("laya.%s exists" % name, hasattr(laya, name))
+check_param("DecisionCache.__init__", laya.DecisionCache.__init__, "path", None,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD)
+for param, default in (("ttl", None), ("maxsize", 100_000), ("fingerprint", None), ("renew_on_hit", False),
+                       ("store", None), ("coalesce", True)):
+    check_param("DecisionCache.__init__", laya.DecisionCache.__init__, param, default,
+                inspect.Parameter.KEYWORD_ONLY)
+for method in ("on_predict_start", "on_predict_end", "prune", "cache_info", "cache_clear", "close"):
+    check_true("DecisionCache/%s callable" % method, callable(getattr(laya.DecisionCache, method, None)))
+check("DecisionCache/cache_info keys", list(laya.DecisionCache().cache_info()),
+      ["size", "maxsize", "hits", "misses", "conflicts", "coalesced", "errors"])
+check_true("DecisionCache/accepted as a hook",
+           len(__import__("laya.hooks", fromlist=["normalise_hooks"]).normalise_hooks([laya.DecisionCache()])) == 1)
+for method in ("get", "add", "renew", "prune", "__len__", "clear", "close"):
+    check_true("DecisionStore/%s declared" % method, hasattr(laya.DecisionStore, method))
+for method, params in (("get", ["self", "key", "now"]), ("add", ["self", "items", "now"]),
+                       ("renew", ["self", "key", "expires_at", "now"]), ("prune", ["self", "now"])):
+    check("DecisionStore.%s parameters" % method, list(sig(getattr(laya.DecisionStore, method))), params)
+check_param("decision_margins", laya.decision_margins, "result", inspect.Parameter.empty)
+check_param("decision_margins", laya.decision_margins, "noul_threshold", 0.5)
+
 # process-wide default registry lives in laya.hooks (not the top level)
 for helper in ("default_hooks", "set_default_hooks", "add_default_hook", "clear_default_hooks",
                "compose_hooks"):

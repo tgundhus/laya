@@ -8,8 +8,8 @@ from `ONNXAgent`, every name below can be imported from the top-level package, f
   model.
 - [Router](router.md): `Router` picks the checkpoint for each request; `RouteDecision` records
   the choice.
-- [Helpers](helpers.md): language detection, email cleaning, question presets, shortlisting
-  and calibration utilities.
+- [Helpers](helpers.md): language detection, email cleaning, question presets, decision
+  consistency (`decision_margins`, `DecisionCache`), shortlisting and calibration utilities.
 - [LangChain components](langchain.md): `LayaRouter`, `LayaGuardrail`, `LayaTriage` and
   `LayaEvaluator`.
 

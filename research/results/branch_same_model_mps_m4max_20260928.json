@@ -1,0 +1,100 @@
+{
+  "meta": {
+    "head": "laya/__init__.py",
+    "base": "laya_base/__init__.py",
+    "device": "mps",
+    "torch": "2.14.0",
+    "torch_threads": 10,
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "pairs": 60,
+    "load_average_at_start": [
+      47.416015625,
+      48.2197265625,
+      48.7265625
+    ],
+    "load_average_at_end": [
+      46.11767578125,
+      45.95361328125,
+      47.59619140625
+    ]
+  },
+  "scenarios": {
+    "english ticket, 1 question": {
+      "base_median_ms": 22.433,
+      "head_median_ms": 22.36,
+      "saved_ms_median_of_pairs": -0.014,
+      "speedup_median_of_pair_ratios_ci95": [
+        0.9994,
+        0.9943,
+        1.0122
+      ],
+      "answers_identical": true
+    },
+    "english ticket, 3 questions": {
+      "base_median_ms": 49.021,
+      "head_median_ms": 48.172,
+      "saved_ms_median_of_pairs": 0.55,
+      "speedup_median_of_pair_ratios_ci95": [
+        1.0107,
+        1.0047,
+        1.0181
+      ],
+      "answers_identical": true
+    },
+    "english ticket, 10 questions": {
+      "base_median_ms": 104.649,
+      "head_median_ms": 103.006,
+      "saved_ms_median_of_pairs": 1.688,
+      "speedup_median_of_pair_ratios_ci95": [
+        1.0158,
+        1.0109,
+        1.0209
+      ],
+      "answers_identical": true
+    },
+    "english email, 3 questions": {
+      "base_median_ms": 138.168,
+      "head_median_ms": 138.455,
+      "saved_ms_median_of_pairs": 0.62,
+      "speedup_median_of_pair_ratios_ci95": [
+        1.0045,
+        0.9965,
+        1.0135
+      ],
+      "answers_identical": true
+    },
+    "english batch of 32 tickets, 3 questions": {
+      "base_median_ms": 1004.135,
+      "head_median_ms": 998.186,
+      "saved_ms_median_of_pairs": 0.831,
+      "speedup_median_of_pair_ratios_ci95": [
+        1.0008,
+        0.9978,
+        1.0045
+      ],
+      "answers_identical": true
+    },
+    "multilingual ticket, 3 questions": {
+      "base_median_ms": 24.789,
+      "head_median_ms": 23.44,
+      "saved_ms_median_of_pairs": 0.941,
+      "speedup_median_of_pair_ratios_ci95": [
+        1.0417,
+        1.0251,
+        1.0547
+      ],
+      "answers_identical": true
+    },
+    "multilingual email, 3 questions": {
+      "base_median_ms": 36.826,
+      "head_median_ms": 36.755,
+      "saved_ms_median_of_pairs": 1.0,
+      "speedup_median_of_pair_ratios_ci95": [
+        1.0303,
+        1.0059,
+        1.0432
+      ],
+      "answers_identical": true
+    }
+  }
+}

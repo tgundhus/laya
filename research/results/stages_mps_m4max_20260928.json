@@ -1,0 +1,522 @@
+{
+  "meta": {
+    "laya": "0.3.20",
+    "torch": "2.14.0",
+    "python": "3.11.16",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpus": 14,
+    "device": "mps",
+    "torch_threads": 10,
+    "checkpoints": {
+      "english": "hub",
+      "multilingual": "hub"
+    },
+    "synthetic_weights": false,
+    "params_millions": {
+      "english": 421.3,
+      "multilingual": 321.9
+    },
+    "repeats": 10,
+    "warmup": 2
+  },
+  "scenarios": {
+    "english ticket, 1 question": {
+      "latency_ms": {
+        "median": 18.77,
+        "min": 17.988,
+        "p90": 19.896
+      },
+      "stages_ms": {
+        "routing: language detection": 0.0578,
+        "routing: rest": 0.0407,
+        "checkpoint lookup": 0.0073,
+        "validate questions": 0.001,
+        "normalise questions": 0.0008,
+        "tokenize state": 0.128,
+        "build rows: tokenize questions and options": 0.0205,
+        "encode: rest": 0.0125,
+        "collate tensors": 0.0681,
+        "encoder": 15.4274,
+        "decision head": 3.1267,
+        "host copy and act softmax": 1.8575,
+        "decode answers": 0.1184,
+        "everything else (hooks, context, results)": 0.1379
+      },
+      "stages_share": {
+        "routing: language detection": 0.0028,
+        "routing: rest": 0.0019,
+        "checkpoint lookup": 0.0003,
+        "validate questions": 0.0,
+        "normalise questions": 0.0,
+        "tokenize state": 0.0061,
+        "build rows: tokenize questions and options": 0.001,
+        "encode: rest": 0.0006,
+        "collate tensors": 0.0032,
+        "encoder": 0.7345,
+        "decision head": 0.1489,
+        "host copy and act softmax": 0.0884,
+        "decode answers": 0.0056,
+        "everything else (hooks, context, results)": 0.0066
+      }
+    },
+    "english ticket, 3 questions": {
+      "latency_ms": {
+        "median": 34.121,
+        "min": 32.526,
+        "p90": 36.695
+      },
+      "stages_ms": {
+        "routing: language detection": 0.0709,
+        "routing: rest": 0.0524,
+        "checkpoint lookup": 0.0061,
+        "validate questions": 0.0039,
+        "normalise questions": 0.0018,
+        "tokenize state": 0.1552,
+        "build rows: tokenize questions and options": 0.05,
+        "encode: rest": 0.0185,
+        "collate tensors": 0.1263,
+        "encoder": 35.1351,
+        "decision head": 4.6257,
+        "host copy and act softmax": 2.1891,
+        "decode answers": 0.2142,
+        "everything else (hooks, context, results)": 0.1522
+      },
+      "stages_share": {
+        "routing: language detection": 0.0017,
+        "routing: rest": 0.0012,
+        "checkpoint lookup": 0.0001,
+        "validate questions": 0.0001,
+        "normalise questions": 0.0,
+        "tokenize state": 0.0036,
+        "build rows: tokenize questions and options": 0.0012,
+        "encode: rest": 0.0004,
+        "collate tensors": 0.003,
+        "encoder": 0.8209,
+        "decision head": 0.1081,
+        "host copy and act softmax": 0.0511,
+        "decode answers": 0.005,
+        "everything else (hooks, context, results)": 0.0036
+      }
+    },
+    "english ticket, 10 questions": {
+      "latency_ms": {
+        "median": 135.446,
+        "min": 111.04,
+        "p90": 145.328
+      },
+      "stages_ms": {
+        "routing: language detection": 0.0824,
+        "routing: rest": 0.0546,
+        "checkpoint lookup": 0.0066,
+        "validate questions": 0.0081,
+        "normalise questions": 0.0044,
+        "tokenize state": 0.1763,
+        "build rows: tokenize questions and options": 0.1236,
+        "encode: rest": 0.0326,
+        "collate tensors": 0.3011,
+        "encoder": 120.2135,
+        "decision head": 10.5679,
+        "host copy and act softmax": 3.0088,
+        "decode answers": 0.3301,
+        "everything else (hooks, context, results)": 0.174
+      },
+      "stages_share": {
+        "routing: language detection": 0.0006,
+        "routing: rest": 0.0004,
+        "checkpoint lookup": 0.0,
+        "validate questions": 0.0001,
+        "normalise questions": 0.0,
+        "tokenize state": 0.0013,
+        "build rows: tokenize questions and options": 0.0009,
+        "encode: rest": 0.0002,
+        "collate tensors": 0.0022,
+        "encoder": 0.8899,
+        "decision head": 0.0782,
+        "host copy and act softmax": 0.0223,
+        "decode answers": 0.0024,
+        "everything else (hooks, context, results)": 0.0013
+      }
+    },
+    "english email, 3 questions": {
+      "latency_ms": {
+        "median": 181.95,
+        "min": 176.637,
+        "p90": 185.275
+      },
+      "stages_ms": {
+        "routing: language detection": 0.7497,
+        "routing: rest": 0.0651,
+        "checkpoint lookup": 0.0078,
+        "validate questions": 0.0053,
+        "normalise questions": 0.0022,
+        "tokenize state": 0.6466,
+        "build rows: tokenize questions and options": 0.0688,
+        "encode: rest": 0.0303,
+        "collate tensors": 0.2367,
+        "encoder": 152.5846,
+        "decision head": 14.0987,
+        "host copy and act softmax": 3.0844,
+        "decode answers": 0.2657,
+        "everything else (hooks, context, results)": 0.1957
+      },
+      "stages_share": {
+        "routing: language detection": 0.0044,
+        "routing: rest": 0.0004,
+        "checkpoint lookup": 0.0,
+        "validate questions": 0.0,
+        "normalise questions": 0.0,
+        "tokenize state": 0.0038,
+        "build rows: tokenize questions and options": 0.0004,
+        "encode: rest": 0.0002,
+        "collate tensors": 0.0014,
+        "encoder": 0.8869,
+        "decision head": 0.0819,
+        "host copy and act softmax": 0.0179,
+        "decode answers": 0.0015,
+        "everything else (hooks, context, results)": 0.0011
+      }
+    },
+    "english batch of 32 tickets, 3 questions": {
+      "latency_ms": {
+        "median": 927.685,
+        "min": 898.28,
+        "p90": 953.944
+      },
+      "stages_ms": {
+        "routing: language detection": 1.0504,
+        "routing: rest": 0.4206,
+        "checkpoint lookup": 0.0069,
+        "validate questions": 0.0046,
+        "normalise questions": 0.0023,
+        "tokenize state": 2.3575,
+        "build rows: tokenize questions and options": 0.9952,
+        "encode: rest": 0.2789,
+        "collate tensors": 2.2633,
+        "encoder": 858.2607,
+        "decision head": 58.1989,
+        "host copy and act softmax": 4.5134,
+        "decode answers": 2.8082,
+        "everything else (hooks, context, results)": 1.1014
+      },
+      "stages_share": {
+        "routing: language detection": 0.0011,
+        "routing: rest": 0.0005,
+        "checkpoint lookup": 0.0,
+        "validate questions": 0.0,
+        "normalise questions": 0.0,
+        "tokenize state": 0.0025,
+        "build rows: tokenize questions and options": 0.0011,
+        "encode: rest": 0.0003,
+        "collate tensors": 0.0024,
+        "encoder": 0.9206,
+        "decision head": 0.0624,
+        "host copy and act softmax": 0.0048,
+        "decode answers": 0.003,
+        "everything else (hooks, context, results)": 0.0012
+      }
+    },
+    "multilingual ticket, 3 questions": {
+      "latency_ms": {
+        "median": 26.709,
+        "min": 25.414,
+        "p90": 27.8
+      },
+      "stages_ms": {
+        "routing: language detection": 0.08,
+        "routing: rest": 0.0573,
+        "checkpoint lookup": 0.0065,
+        "validate questions": 0.0044,
+        "normalise questions": 0.0021,
+        "tokenize state": 0.1554,
+        "build rows: tokenize questions and options": 0.0567,
+        "encode: rest": 0.0212,
+        "collate tensors": 0.1376,
+        "encoder": 20.6737,
+        "decision head": 4.2016,
+        "host copy and act softmax": 2.0847,
+        "decode answers": 0.2018,
+        "everything else (hooks, context, results)": 0.1547
+      },
+      "stages_share": {
+        "routing: language detection": 0.0029,
+        "routing: rest": 0.0021,
+        "checkpoint lookup": 0.0002,
+        "validate questions": 0.0002,
+        "normalise questions": 0.0001,
+        "tokenize state": 0.0056,
+        "build rows: tokenize questions and options": 0.002,
+        "encode: rest": 0.0008,
+        "collate tensors": 0.0049,
+        "encoder": 0.7426,
+        "decision head": 0.1509,
+        "host copy and act softmax": 0.0749,
+        "decode answers": 0.0072,
+        "everything else (hooks, context, results)": 0.0056
+      }
+    },
+    "multilingual email, 3 questions": {
+      "latency_ms": {
+        "median": 38.205,
+        "min": 36.368,
+        "p90": 39.647
+      },
+      "stages_ms": {
+        "routing: language detection": 0.251,
+        "routing: rest": 0.0559,
+        "checkpoint lookup": 0.0062,
+        "validate questions": 0.0044,
+        "normalise questions": 0.0021,
+        "tokenize state": 0.3339,
+        "build rows: tokenize questions and options": 0.0609,
+        "encode: rest": 0.0239,
+        "collate tensors": 0.1714,
+        "encoder": 31.2889,
+        "decision head": 5.8935,
+        "host copy and act softmax": 2.0679,
+        "decode answers": 0.1964,
+        "everything else (hooks, context, results)": 0.1436
+      },
+      "stages_share": {
+        "routing: language detection": 0.0062,
+        "routing: rest": 0.0014,
+        "checkpoint lookup": 0.0002,
+        "validate questions": 0.0001,
+        "normalise questions": 0.0001,
+        "tokenize state": 0.0082,
+        "build rows: tokenize questions and options": 0.0015,
+        "encode: rest": 0.0006,
+        "collate tensors": 0.0042,
+        "encoder": 0.7726,
+        "decision head": 0.1455,
+        "host copy and act softmax": 0.0511,
+        "decode answers": 0.0049,
+        "everything else (hooks, context, results)": 0.0035
+      }
+    },
+    "english ticket, 3 questions, DecisionCache hit": {
+      "latency_ms": {
+        "median": 0.058,
+        "min": 0.056,
+        "p90": 0.076
+      }
+    },
+    "english email, 3 questions, DecisionCache hit": {
+      "latency_ms": {
+        "median": 0.063,
+        "min": 0.061,
+        "p90": 0.071
+      }
+    }
+  },
+  "variants": {
+    "inference_mode": {
+      "english ticket, 3 questions": {
+        "baseline_ms": {
+          "median": 44.98,
+          "min": 43.808,
+          "p90": 45.7
+        },
+        "latency_ms": {
+          "median": 44.415,
+          "min": 43.569,
+          "p90": 45.618
+        },
+        "speedup_vs_baseline": 1.013,
+        "vs_base_outputs": {
+          "max_abs_prob_delta": 0.0,
+          "same_decision": "3/3"
+        }
+      },
+      "english email, 3 questions": {
+        "baseline_ms": {
+          "median": 150.735,
+          "min": 145.181,
+          "p90": 158.207
+        },
+        "latency_ms": {
+          "median": 151.326,
+          "min": 145.564,
+          "p90": 159.823
+        },
+        "speedup_vs_baseline": 0.996,
+        "vs_base_outputs": {
+          "max_abs_prob_delta": 0.0,
+          "same_decision": "3/3"
+        }
+      }
+    },
+    "question-head cache off": {
+      "english ticket, 3 questions": {
+        "baseline_ms": {
+          "median": 44.321,
+          "min": 41.348,
+          "p90": 49.997
+        },
+        "latency_ms": {
+          "median": 45.141,
+          "min": 40.935,
+          "p90": 47.308
+        },
+        "speedup_vs_baseline": 0.982,
+        "stages_ms": {
+          "routing: language detection": 0.0805,
+          "routing: rest": 0.0525,
+          "checkpoint lookup": 0.0069,
+          "validate questions": 0.0045,
+          "normalise questions": 0.0021,
+          "tokenize state": 0.1681,
+          "build rows: tokenize questions and options": 0.6275,
+          "encode: rest": 0.0251,
+          "collate tensors": 0.1476,
+          "encoder": 35.5214,
+          "decision head": 4.8299,
+          "host copy and act softmax": 2.7701,
+          "decode answers": 0.203,
+          "everything else (hooks, context, results)": 0.153
+        },
+        "stages_share": {
+          "routing: language detection": 0.0018,
+          "routing: rest": 0.0012,
+          "checkpoint lookup": 0.0002,
+          "validate questions": 0.0001,
+          "normalise questions": 0.0,
+          "tokenize state": 0.0038,
+          "build rows: tokenize questions and options": 0.0141,
+          "encode: rest": 0.0006,
+          "collate tensors": 0.0033,
+          "encoder": 0.7966,
+          "decision head": 0.1083,
+          "host copy and act softmax": 0.0621,
+          "decode answers": 0.0046,
+          "everything else (hooks, context, results)": 0.0034
+        },
+        "vs_base_outputs": {
+          "max_abs_prob_delta": 0.0,
+          "same_decision": "3/3"
+        }
+      },
+      "english email, 3 questions": {
+        "baseline_ms": {
+          "median": 142.731,
+          "min": 127.034,
+          "p90": 148.906
+        },
+        "latency_ms": {
+          "median": 145.303,
+          "min": 130.133,
+          "p90": 152.773
+        },
+        "speedup_vs_baseline": 0.982,
+        "stages_ms": {
+          "routing: language detection": 0.7391,
+          "routing: rest": 0.0561,
+          "checkpoint lookup": 0.0061,
+          "validate questions": 0.0045,
+          "normalise questions": 0.0021,
+          "tokenize state": 0.5951,
+          "build rows: tokenize questions and options": 0.6166,
+          "encode: rest": 0.0299,
+          "collate tensors": 0.2038,
+          "encoder": 121.853,
+          "decision head": 11.5123,
+          "host copy and act softmax": 3.0937,
+          "decode answers": 0.1971,
+          "everything else (hooks, context, results)": 0.1469
+        },
+        "stages_share": {
+          "routing: language detection": 0.0053,
+          "routing: rest": 0.0004,
+          "checkpoint lookup": 0.0,
+          "validate questions": 0.0,
+          "normalise questions": 0.0,
+          "tokenize state": 0.0043,
+          "build rows: tokenize questions and options": 0.0044,
+          "encode: rest": 0.0002,
+          "collate tensors": 0.0015,
+          "encoder": 0.8763,
+          "decision head": 0.0828,
+          "host copy and act softmax": 0.0222,
+          "decode answers": 0.0014,
+          "everything else (hooks, context, results)": 0.0011
+        },
+        "vs_base_outputs": {
+          "max_abs_prob_delta": 0.0,
+          "same_decision": "3/3"
+        }
+      }
+    },
+    "fp16 autocast from 1 row": {
+      "english ticket, 3 questions": {
+        "baseline_ms": {
+          "median": 40.279,
+          "min": 39.054,
+          "p90": 44.537
+        },
+        "latency_ms": {
+          "median": 51.062,
+          "min": 48.468,
+          "p90": 55.021
+        },
+        "speedup_vs_baseline": 0.789,
+        "vs_base_outputs": {
+          "max_abs_prob_delta": 0.0003,
+          "same_decision": "3/3"
+        }
+      },
+      "english email, 3 questions": {
+        "baseline_ms": {
+          "median": 128.797,
+          "min": 113.506,
+          "p90": 133.759
+        },
+        "latency_ms": {
+          "median": 137.64,
+          "min": 122.657,
+          "p90": 147.098
+        },
+        "speedup_vs_baseline": 0.936,
+        "vs_base_outputs": {
+          "max_abs_prob_delta": 0.0031,
+          "same_decision": "3/3"
+        }
+      }
+    },
+    "fp32 always": {
+      "english ticket, 3 questions": {
+        "baseline_ms": {
+          "median": 41.911,
+          "min": 39.457,
+          "p90": 48.808
+        },
+        "latency_ms": {
+          "median": 42.786,
+          "min": 40.266,
+          "p90": 49.315
+        },
+        "speedup_vs_baseline": 0.98,
+        "vs_base_outputs": {
+          "max_abs_prob_delta": 0.0,
+          "same_decision": "3/3"
+        }
+      },
+      "english email, 3 questions": {
+        "baseline_ms": {
+          "median": 133.707,
+          "min": 117.762,
+          "p90": 140.299
+        },
+        "latency_ms": {
+          "median": 133.434,
+          "min": 122.236,
+          "p90": 138.008
+        },
+        "speedup_vs_baseline": 1.002,
+        "vs_base_outputs": {
+          "max_abs_prob_delta": 0.0,
+          "same_decision": "3/3"
+        }
+      }
+    }
+  }
+}

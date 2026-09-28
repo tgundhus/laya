@@ -1,0 +1,740 @@
+{
+  "meta": {
+    "laya": "0.3.20",
+    "torch": "2.14.0",
+    "onnxruntime": "1.30.0",
+    "python": "3.11.16",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "arm",
+    "cpus": 14,
+    "torch_threads": 10,
+    "ort_threads": "default",
+    "model": "english",
+    "checkpoint": "hub",
+    "synthetic_weights": false,
+    "onnx": {
+      "fp32": "english.onnx",
+      "int8": "english.int8.onnx"
+    },
+    "requests": "built-in english",
+    "n_requests": 13,
+    "repeats": 5,
+    "warmup": 1
+  },
+  "backends": {
+    "torch-fp32": {
+      "median_of_request_medians_ms": 302.938,
+      "total_of_request_medians_ms": 4996.322,
+      "speedup_total": 1.0,
+      "speedup_geomean": 1.0,
+      "per_request": [
+        {
+          "request": "ticket, one (1)",
+          "questions": 1,
+          "input_tokens": 52,
+          "latency_ms": {
+            "median": 98.514,
+            "min": 76.682,
+            "p90": 135.871
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "ticket, triage (3)",
+          "questions": 3,
+          "input_tokens": 164,
+          "latency_ms": {
+            "median": 162.036,
+            "min": 133.28,
+            "p90": 171.149
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "ticket, ten (10)",
+          "questions": 10,
+          "input_tokens": 516,
+          "latency_ms": {
+            "median": 359.093,
+            "min": 326.019,
+            "p90": 402.856
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "email, triage (3)",
+          "questions": 3,
+          "input_tokens": 839,
+          "latency_ms": {
+            "median": 524.666,
+            "min": 461.198,
+            "p90": 562.914
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "email, ten (10)",
+          "questions": 10,
+          "input_tokens": 2766,
+          "latency_ms": {
+            "median": 1545.423,
+            "min": 1291.185,
+            "p90": 1653.862
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "shipping, support (4)",
+          "questions": 4,
+          "input_tokens": 315,
+          "latency_ms": {
+            "median": 313.626,
+            "min": 285.92,
+            "p90": 512.058
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "review, support (4)",
+          "questions": 4,
+          "input_tokens": 303,
+          "latency_ms": {
+            "median": 279.993,
+            "min": 264.671,
+            "p90": 311.735
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "security, support (4)",
+          "questions": 4,
+          "input_tokens": 315,
+          "latency_ms": {
+            "median": 302.938,
+            "min": 250.496,
+            "p90": 772.565
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "feature, support (4)",
+          "questions": 4,
+          "input_tokens": 291,
+          "latency_ms": {
+            "median": 312.489,
+            "min": 230.987,
+            "p90": 1215.521
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "chat dict, support (4)",
+          "questions": 4,
+          "input_tokens": 603,
+          "latency_ms": {
+            "median": 451.42,
+            "min": 413.981,
+            "p90": 946.667
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "chat dict, triage (3)",
+          "questions": 3,
+          "input_tokens": 443,
+          "latency_ms": {
+            "median": 302.896,
+            "min": 278.527,
+            "p90": 348.552
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "spam, moderation (3)",
+          "questions": 3,
+          "input_tokens": 176,
+          "latency_ms": {
+            "median": 157.012,
+            "min": 142.584,
+            "p90": 167.949
+          },
+          "speedup": 1.0
+        },
+        {
+          "request": "review, moderation (3)",
+          "questions": 3,
+          "input_tokens": 227,
+          "latency_ms": {
+            "median": 186.218,
+            "min": 168.652,
+            "p90": 246.417
+          },
+          "speedup": 1.0
+        }
+      ]
+    },
+    "torch-int8": {
+      "median_of_request_medians_ms": 799.299,
+      "total_of_request_medians_ms": 13820.644,
+      "speedup_total": 0.362,
+      "speedup_geomean": 0.402,
+      "per_request": [
+        {
+          "request": "ticket, one (1)",
+          "questions": 1,
+          "input_tokens": 52,
+          "latency_ms": {
+            "median": 137.528,
+            "min": 133.07,
+            "p90": 203.265
+          },
+          "speedup": 0.716
+        },
+        {
+          "request": "ticket, triage (3)",
+          "questions": 3,
+          "input_tokens": 164,
+          "latency_ms": {
+            "median": 359.097,
+            "min": 349.175,
+            "p90": 385.076
+          },
+          "speedup": 0.451
+        },
+        {
+          "request": "ticket, ten (10)",
+          "questions": 10,
+          "input_tokens": 516,
+          "latency_ms": {
+            "median": 1006.561,
+            "min": 985.591,
+            "p90": 1066.723
+          },
+          "speedup": 0.357
+        },
+        {
+          "request": "email, triage (3)",
+          "questions": 3,
+          "input_tokens": 839,
+          "latency_ms": {
+            "median": 1489.393,
+            "min": 1360.429,
+            "p90": 1657.183
+          },
+          "speedup": 0.352
+        },
+        {
+          "request": "email, ten (10)",
+          "questions": 10,
+          "input_tokens": 2766,
+          "latency_ms": {
+            "median": 4810.711,
+            "min": 4185.022,
+            "p90": 5057.306
+          },
+          "speedup": 0.321
+        },
+        {
+          "request": "shipping, support (4)",
+          "questions": 4,
+          "input_tokens": 315,
+          "latency_ms": {
+            "median": 762.662,
+            "min": 752.428,
+            "p90": 810.204
+          },
+          "speedup": 0.411
+        },
+        {
+          "request": "review, support (4)",
+          "questions": 4,
+          "input_tokens": 303,
+          "latency_ms": {
+            "median": 808.117,
+            "min": 696.874,
+            "p90": 881.945
+          },
+          "speedup": 0.346
+        },
+        {
+          "request": "security, support (4)",
+          "questions": 4,
+          "input_tokens": 315,
+          "latency_ms": {
+            "median": 799.299,
+            "min": 649.08,
+            "p90": 885.859
+          },
+          "speedup": 0.379
+        },
+        {
+          "request": "feature, support (4)",
+          "questions": 4,
+          "input_tokens": 291,
+          "latency_ms": {
+            "median": 778.068,
+            "min": 633.58,
+            "p90": 1422.548
+          },
+          "speedup": 0.402
+        },
+        {
+          "request": "chat dict, support (4)",
+          "questions": 4,
+          "input_tokens": 603,
+          "latency_ms": {
+            "median": 1262.258,
+            "min": 1241.8,
+            "p90": 2317.974
+          },
+          "speedup": 0.358
+        },
+        {
+          "request": "chat dict, triage (3)",
+          "questions": 3,
+          "input_tokens": 443,
+          "latency_ms": {
+            "median": 820.605,
+            "min": 741.648,
+            "p90": 915.32
+          },
+          "speedup": 0.369
+        },
+        {
+          "request": "spam, moderation (3)",
+          "questions": 3,
+          "input_tokens": 176,
+          "latency_ms": {
+            "median": 350.54,
+            "min": 340.422,
+            "p90": 395.391
+          },
+          "speedup": 0.448
+        },
+        {
+          "request": "review, moderation (3)",
+          "questions": 3,
+          "input_tokens": 227,
+          "latency_ms": {
+            "median": 435.805,
+            "min": 390.424,
+            "p90": 555.741
+          },
+          "speedup": 0.427
+        }
+      ],
+      "agreement": {
+        "same_decision": 48,
+        "answers": 56,
+        "same_decision_share": 0.8571,
+        "max_abs_prob_diff": 0.6255,
+        "mean_abs_prob_diff": 0.134,
+        "changed": [
+          {
+            "request": "email, ten (10)",
+            "question": "refund",
+            "fp32_margin": 0.5694,
+            "fp32": true,
+            "backend": false
+          },
+          {
+            "request": "shipping, support (4)",
+            "question": "priority",
+            "fp32_margin": 0.0752,
+            "fp32": "0",
+            "backend": "1"
+          },
+          {
+            "request": "shipping, support (4)",
+            "question": "sentiment",
+            "fp32_margin": 0.8574,
+            "fp32": "negative",
+            "backend": "neutral"
+          },
+          {
+            "request": "review, support (4)",
+            "question": "needs_human",
+            "fp32_margin": 0.9966,
+            "fp32": false,
+            "backend": true
+          },
+          {
+            "request": "security, support (4)",
+            "question": "priority",
+            "fp32_margin": 0.3084,
+            "fp32": "1",
+            "backend": "3"
+          },
+          {
+            "request": "feature, support (4)",
+            "question": "needs_human",
+            "fp32_margin": 0.8292,
+            "fp32": false,
+            "backend": true
+          },
+          {
+            "request": "chat dict, support (4)",
+            "question": "intent",
+            "fp32_margin": 0.1961,
+            "fp32": "account_security",
+            "backend": "order_status"
+          },
+          {
+            "request": "spam, moderation (3)",
+            "question": "action",
+            "fp32_margin": 0.6896,
+            "fp32": "approve",
+            "backend": "remove"
+          }
+        ],
+        "changed_fp32_margin_max": 0.9966,
+        "fp32_answers_with_margin_below_0.05": 1
+      }
+    },
+    "onnx-fp32": {
+      "median_of_request_medians_ms": 259.843,
+      "total_of_request_medians_ms": 4687.995,
+      "speedup_total": 1.066,
+      "speedup_geomean": 1.221,
+      "per_request": [
+        {
+          "request": "ticket, one (1)",
+          "questions": 1,
+          "input_tokens": 52,
+          "latency_ms": {
+            "median": 40.677,
+            "min": 35.674,
+            "p90": 41.401
+          },
+          "speedup": 2.422
+        },
+        {
+          "request": "ticket, triage (3)",
+          "questions": 3,
+          "input_tokens": 164,
+          "latency_ms": {
+            "median": 112.116,
+            "min": 104.54,
+            "p90": 215.518
+          },
+          "speedup": 1.445
+        },
+        {
+          "request": "ticket, ten (10)",
+          "questions": 10,
+          "input_tokens": 516,
+          "latency_ms": {
+            "median": 339.445,
+            "min": 320.86,
+            "p90": 368.068
+          },
+          "speedup": 1.058
+        },
+        {
+          "request": "email, triage (3)",
+          "questions": 3,
+          "input_tokens": 839,
+          "latency_ms": {
+            "median": 523.405,
+            "min": 449.747,
+            "p90": 598.118
+          },
+          "speedup": 1.002
+        },
+        {
+          "request": "email, ten (10)",
+          "questions": 10,
+          "input_tokens": 2766,
+          "latency_ms": {
+            "median": 1651.303,
+            "min": 1587.382,
+            "p90": 1739.198
+          },
+          "speedup": 0.936
+        },
+        {
+          "request": "shipping, support (4)",
+          "questions": 4,
+          "input_tokens": 315,
+          "latency_ms": {
+            "median": 248.755,
+            "min": 225.485,
+            "p90": 664.839
+          },
+          "speedup": 1.261
+        },
+        {
+          "request": "review, support (4)",
+          "questions": 4,
+          "input_tokens": 303,
+          "latency_ms": {
+            "median": 259.843,
+            "min": 237.048,
+            "p90": 470.276
+          },
+          "speedup": 1.078
+        },
+        {
+          "request": "security, support (4)",
+          "questions": 4,
+          "input_tokens": 315,
+          "latency_ms": {
+            "median": 265.073,
+            "min": 225.522,
+            "p90": 721.806
+          },
+          "speedup": 1.143
+        },
+        {
+          "request": "feature, support (4)",
+          "questions": 4,
+          "input_tokens": 291,
+          "latency_ms": {
+            "median": 259.44,
+            "min": 191.78,
+            "p90": 334.642
+          },
+          "speedup": 1.204
+        },
+        {
+          "request": "chat dict, support (4)",
+          "questions": 4,
+          "input_tokens": 603,
+          "latency_ms": {
+            "median": 460.141,
+            "min": 374.276,
+            "p90": 752.962
+          },
+          "speedup": 0.981
+        },
+        {
+          "request": "chat dict, triage (3)",
+          "questions": 3,
+          "input_tokens": 443,
+          "latency_ms": {
+            "median": 282.405,
+            "min": 258.286,
+            "p90": 447.818
+          },
+          "speedup": 1.073
+        },
+        {
+          "request": "spam, moderation (3)",
+          "questions": 3,
+          "input_tokens": 176,
+          "latency_ms": {
+            "median": 109.479,
+            "min": 108.891,
+            "p90": 164.269
+          },
+          "speedup": 1.434
+        },
+        {
+          "request": "review, moderation (3)",
+          "questions": 3,
+          "input_tokens": 227,
+          "latency_ms": {
+            "median": 135.914,
+            "min": 132.031,
+            "p90": 208.236
+          },
+          "speedup": 1.37
+        }
+      ],
+      "agreement": {
+        "same_decision": 56,
+        "answers": 56,
+        "same_decision_share": 1.0,
+        "max_abs_prob_diff": 0.0,
+        "mean_abs_prob_diff": 0.0,
+        "changed": [],
+        "changed_fp32_margin_max": null,
+        "fp32_answers_with_margin_below_0.05": 1
+      }
+    },
+    "onnx-int8": {
+      "median_of_request_medians_ms": 276.682,
+      "total_of_request_medians_ms": 4923.299,
+      "speedup_total": 1.015,
+      "speedup_geomean": 1.217,
+      "per_request": [
+        {
+          "request": "ticket, one (1)",
+          "questions": 1,
+          "input_tokens": 52,
+          "latency_ms": {
+            "median": 37.5,
+            "min": 34.227,
+            "p90": 45.359
+          },
+          "speedup": 2.627
+        },
+        {
+          "request": "ticket, triage (3)",
+          "questions": 3,
+          "input_tokens": 164,
+          "latency_ms": {
+            "median": 105.189,
+            "min": 91.979,
+            "p90": 142.226
+          },
+          "speedup": 1.54
+        },
+        {
+          "request": "ticket, ten (10)",
+          "questions": 10,
+          "input_tokens": 516,
+          "latency_ms": {
+            "median": 366.556,
+            "min": 336.4,
+            "p90": 472.934
+          },
+          "speedup": 0.98
+        },
+        {
+          "request": "email, triage (3)",
+          "questions": 3,
+          "input_tokens": 839,
+          "latency_ms": {
+            "median": 481.961,
+            "min": 441.934,
+            "p90": 630.47
+          },
+          "speedup": 1.089
+        },
+        {
+          "request": "email, ten (10)",
+          "questions": 10,
+          "input_tokens": 2766,
+          "latency_ms": {
+            "median": 1849.03,
+            "min": 1764.655,
+            "p90": 1863.061
+          },
+          "speedup": 0.836
+        },
+        {
+          "request": "shipping, support (4)",
+          "questions": 4,
+          "input_tokens": 315,
+          "latency_ms": {
+            "median": 271.355,
+            "min": 207.996,
+            "p90": 574.46
+          },
+          "speedup": 1.156
+        },
+        {
+          "request": "review, support (4)",
+          "questions": 4,
+          "input_tokens": 303,
+          "latency_ms": {
+            "median": 236.364,
+            "min": 218.255,
+            "p90": 458.705
+          },
+          "speedup": 1.185
+        },
+        {
+          "request": "security, support (4)",
+          "questions": 4,
+          "input_tokens": 315,
+          "latency_ms": {
+            "median": 276.682,
+            "min": 203.595,
+            "p90": 328.332
+          },
+          "speedup": 1.095
+        },
+        {
+          "request": "feature, support (4)",
+          "questions": 4,
+          "input_tokens": 291,
+          "latency_ms": {
+            "median": 309.384,
+            "min": 207.867,
+            "p90": 414.265
+          },
+          "speedup": 1.01
+        },
+        {
+          "request": "chat dict, support (4)",
+          "questions": 4,
+          "input_tokens": 603,
+          "latency_ms": {
+            "median": 470.451,
+            "min": 368.592,
+            "p90": 1026.815
+          },
+          "speedup": 0.96
+        },
+        {
+          "request": "chat dict, triage (3)",
+          "questions": 3,
+          "input_tokens": 443,
+          "latency_ms": {
+            "median": 295.392,
+            "min": 247.458,
+            "p90": 369.331
+          },
+          "speedup": 1.025
+        },
+        {
+          "request": "spam, moderation (3)",
+          "questions": 3,
+          "input_tokens": 176,
+          "latency_ms": {
+            "median": 98.608,
+            "min": 90.54,
+            "p90": 110.534
+          },
+          "speedup": 1.592
+        },
+        {
+          "request": "review, moderation (3)",
+          "questions": 3,
+          "input_tokens": 227,
+          "latency_ms": {
+            "median": 124.826,
+            "min": 118.058,
+            "p90": 160.145
+          },
+          "speedup": 1.492
+        }
+      ],
+      "agreement": {
+        "same_decision": 53,
+        "answers": 56,
+        "same_decision_share": 0.9464,
+        "max_abs_prob_diff": 0.1521,
+        "mean_abs_prob_diff": 0.0214,
+        "changed": [
+          {
+            "request": "shipping, support (4)",
+            "question": "priority",
+            "fp32_margin": 0.0752,
+            "fp32": "0",
+            "backend": "3"
+          },
+          {
+            "request": "security, support (4)",
+            "question": "needs_human",
+            "fp32_margin": 0.0486,
+            "fp32": false,
+            "backend": true
+          },
+          {
+            "request": "feature, support (4)",
+            "question": "priority",
+            "fp32_margin": 0.0554,
+            "fp32": "1",
+            "backend": "2"
+          }
+        ],
+        "changed_fp32_margin_max": 0.0752,
+        "fp32_answers_with_margin_below_0.05": 1
+      }
+    }
+  }
+}
