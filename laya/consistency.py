@@ -136,6 +136,18 @@ def _unpack(blob: bytes) -> Dict[str, Any]:
     return json.loads(raw.decode("utf-8", "surrogatepass"))
 
 
+def _storable(result: Dict[str, Any]) -> Dict[str, Any]:
+    """What is kept of a result: not `routing`, which a Router re-adds to a replay, nor the marks
+    one call's options put on its answers (`low_confidence` under `min_confidence`), which the
+    engine applies again to each call's results, replays included."""
+    payload = {k: v for k, v in result.items() if k != "routing"}
+    answers = payload.get("answers")
+    if isinstance(answers, dict) and any(isinstance(a, dict) and "low_confidence" in a for a in answers.values()):
+        payload["answers"] = {q: {k: v for k, v in a.items() if k != "low_confidence"} if isinstance(a, dict) else a
+                              for q, a in answers.items()}
+    return payload
+
+
 def _fingerprint(agent: Any) -> List[Any]:
     """What identifies the answering model: when any of it changes, old decisions must not replay."""
     from . import __version__
@@ -529,8 +541,13 @@ class DecisionCache:
         # its detection the detected one. Otherwise requests routed to the same checkpoint by
         # different means get the same answer, so they share an entry.
         route = ctx.decision if lang_sensitive else None
-        base = hashlib.blake2b(_canonical([_KEY_VERSION, model, ctx.model, route, ctx.max_len,
-                                           ctx.head_max_len, ctx.questions]), digest_size=16)
+        prefix = [_KEY_VERSION, model, ctx.model, route, ctx.max_len, ctx.head_max_len, ctx.questions]
+        scan = getattr(ctx, "scan", None)
+        if scan is not None:
+            # A scan of every window (Router.predict_long) answers differently from the single
+            # window `predict` reads of the same state, so the two never share an entry.
+            prefix.append(scan)
+        base = hashlib.blake2b(_canonical(prefix), digest_size=16)
         keys = []
         for state in states:
             key = base.copy()
@@ -709,8 +726,7 @@ class DecisionCache:
         for n, (i, result) in enumerate(zip(computed, results)):
             if not isinstance(result, dict):
                 continue
-            # The Router re-adds the current `routing` to a replay, so it is not stored.
-            payload = {k: v for k, v in result.items() if k != "routing"}
+            payload = _storable(result)
             lifetime = self._lifetime(ctx.questions, payload)
             if lifetime is not None and lifetime <= 0:
                 continue

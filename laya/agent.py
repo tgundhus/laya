@@ -248,6 +248,25 @@ def _start_evidence():
     return probe, evidence
 
 
+def _replayed_from_memory(evidence, windows, results):
+    """Whether a decision cache answered the scan per window, in whole or in part.
+
+    Its signature is one result per window either way: every window answered from memory (the
+    start chain answered with that many results), or the windows it did not hold sent on in their
+    order while it put the rest back. A hook that answers the document returns one result, and one
+    that drops windows returns fewer, so neither reads as a replay.
+    """
+    if len(results) != len(windows) or len(windows) < 2:
+        return False
+    if evidence["answered"]:
+        return True
+    sent = evidence["states"]
+    if sent is None or len(sent) >= len(windows):
+        return False
+    rest = iter(windows)
+    return all(any(state == window for window in rest) for state in sent)
+
+
 def _with_start_probe(hook_kwargs, probe):
     """`hook_kwargs` with `probe` appended after the caller's own start hooks."""
     kwargs = dict(hook_kwargs)
@@ -1086,6 +1105,10 @@ class Agent(HookRegistry):
                     ctx.error.__context__ = hook_exc
                 else:
                     raise
+        if mc is not None and ctx.results:
+            # Again after the end hooks: one may have put back results this call never marked (a
+            # decision cache's replays, which it stores without any call's marks).
+            flag_low_confidence(ctx.results, mc)
         return ctx.results
 
     def predict_long(self, state: Union[str, dict, list], questions: Dict[str, Dict[str, Any]],
@@ -1203,8 +1226,13 @@ class Agent(HookRegistry):
         # attributes answers to, and the counts would agree while `starts` no longer lined up.
         results = self.predict_batch(list(windows), questions, batch_size=batch_size, lang=lang,
                                      **_with_start_probe(hook_kwargs, probe))
+        # A decision cache answers per window: every window of the split from memory, or the ones
+        # it holds while inference scores the rest. That is still this split, one result per
+        # window, so it is aggregated and attributed as scored; only the windows inference actually
+        # read are counted in `usage["windows"]`.
+        from_memory = _replayed_from_memory(evidence, windows, results)
 
-        if evidence["answered"]:
+        if evidence["answered"] and not from_memory:
             # The hook replaced the call before any window was scored. Aggregating over its payload
             # would pick between answers that were never scored and name a deciding window that
             # decided nothing, so pass the document answer through unattributed and report the
@@ -1225,7 +1253,7 @@ class Agent(HookRegistry):
         # so a scan that comes back different from the split above is a supported outcome, not a
         # failure to report: the states that were scored are the hook's, while `starts` describes
         # this method's windows. Aggregate what came back and name nothing.
-        rewritten = evidence["states"] is not None and evidence["states"] != windows
+        rewritten = evidence["states"] is not None and evidence["states"] != windows and not from_memory
 
         if len(results) != len(windows) and not rewritten:
             # The observer saw the scan leave the hook chain and it is the one computed above, so
@@ -1276,7 +1304,8 @@ class Agent(HookRegistry):
             for key, val in r["usage"].items():
                 usage[key] = (usage.get(key, 0) + val) if isinstance(val, (int, float)) else val
         usage["output_tokens"] = 0
-        usage["windows"] = len(results)
+        usage["windows"] = 0 if evidence["answered"] else len(
+            evidence["states"] if evidence["states"] is not None else results)
         return {"model": "laya-rl-agent", "answers": answers, "usage": usage}
 
     @torch.no_grad()

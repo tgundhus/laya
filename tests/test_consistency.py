@@ -547,6 +547,103 @@ per_lang.predict_batch(["s0"], Q, lang="de")
 per_lang.predict_batch(["s0"], Q, lang="fr")
 check("agent/with per-language temperatures the cache stands aside", per_lang.encoded, ["s0", "s0"])
 
+# --------------------------------------------------------------- abstention, predict_long and the cache
+class CharTok:
+    """A character tokenizer with `decode`, so `predict_long` can split a state into windows."""
+    mask_token, mask_token_id, cls_token_id, sep_token_id, pad_token_id = "[MASK]", 1, 2, 3, 0
+
+    def __call__(self, text, **kw):
+        ids = [ord(c) + 4 for c in text]
+        return {"input_ids": ids[:kw["max_length"]] if kw.get("truncation") else ids}
+
+    def decode(self, ids, **kw):
+        return "".join(chr(i - 4) for i in ids)
+
+
+def make_scanner(hooks):
+    """A real `predict_batch` and `predict_long` over the character tokenizer, forward pass stubbed."""
+    a = Agent.__new__(Agent)
+    a.tok, a.cfg, a.model_id = CharTok(), {"max_len": 512, "head_max_len": 192}, "stub/scanner"
+    a.hooks = list(hooks)
+    a.rows = []
+
+    def forward(b):
+        a.rows.append(b["input_ids"].shape[0])
+        shape = b["marker_pos"].shape
+        return np.zeros(shape, dtype=np.float32), np.full((shape[0], 2), 0.5, dtype=np.float32)
+
+    def decode(logits, act, items, ids, internal, offset, **kw):
+        return {q: {"type": "choice", "choice": "billing", "answer_confidence": 0.5, "confidence": 0.5,
+                    "probabilities": {"billing": 0.6, "tech": 0.4}} for q in ids}
+
+    a._forward, a._decode_answers = forward, decode
+    return a
+
+
+TEAM = {"team": {"type": "choice", "instructions": "Which team?",
+                 "criteria": {"billing": "charges", "tech": "errors"}}}
+
+
+def marked(result):
+    return result["answers"]["team"].get("low_confidence")
+
+
+# min_confidence marks answers for one call; the cache keeps them unmarked and they are marked
+# again for each call that asks, replays included.
+a = make_scanner([DecisionCache()])
+a.predict_batch(["a"], TEAM)
+got = a.predict_batch(["a", "b"], TEAM, min_confidence=0.9)
+check("abstention/a replay in a partial hit is marked for this call", marked(got[0]), True)
+check("abstention/the computed answer beside it too", marked(got[1]), True)
+check("abstention/a replay for a call with no threshold is not marked", marked(a.predict_batch(["b"], TEAM)[0]), None)
+check("abstention/nor for a call whose threshold it clears",
+      marked(a.predict_batch(["b"], TEAM, min_confidence=0.2)[0]), None)
+router = Router(hooks=[DecisionCache()])
+router.attach("english", make_scanner([]))
+router.predict(STATE, TEAM, model="english")
+check("abstention/Router: a full hit is marked for this call",
+      marked(router.predict(STATE, TEAM, model="english", min_confidence=0.9)), True)
+batch = router.predict_batch([{"state": STATE, "questions": TEAM, "model": "english"},
+                              {"state": STATE + " again", "questions": TEAM, "model": "english"}],
+                             min_confidence=0.9)
+check("abstention/Router: a batch marks replays and computed answers", [marked(b) for b in batch], [True, True])
+check("abstention/Router: the stored decision carries no mark",
+      marked(router.predict(STATE + " again", TEAM, model="english")), None)
+
+# Agent.predict_long answers from windows; a cache that holds them, all or some, is still that scan.
+DOC = " ".join("w%d" % i for i in range(120))
+a = make_scanner([DecisionCache()])
+first = a.predict_long(DOC, TEAM, window=80, stride=50)
+rows = sum(a.rows)
+second = a.predict_long(DOC, TEAM, window=80, stride=50)
+check("long/every window kept: the document is answered again", second["answers"]["team"]["choice"],
+      first["answers"]["team"]["choice"])
+check("long/every window kept: the model does not run", sum(a.rows), rows)
+check("long/every window kept: the deciding window is still named", second["answers"]["team"].get("window"),
+      first["answers"]["team"].get("window"))
+check("long/every window kept: no window was read", (first["usage"]["windows"] > 1, second["usage"]["windows"]),
+      (True, 0))
+third = a.predict_long(DOC + " and a tail the first document did not have", TEAM, window=80, stride=50)
+check("long/some windows kept: the deciding window is still named", "window" in third["answers"]["team"], True)
+check("long/some windows kept: only the windows read are counted",
+      0 < third["usage"]["windows"] < third["answers"]["team"]["window"]["count"], True)
+
+# Router.predict_long scans every window; Router.predict reads one. They must not share an entry.
+cache = DecisionCache()
+router = Router(hooks=[cache])
+router.attach("english", make_scanner([]))
+plain = router.predict(DOC, TEAM, model="english")
+scan = router.predict_long(DOC, TEAM, model="english", window=80, stride=50)
+check("long/Router: predict_long is not a replay of predict", ("windows" in plain["usage"], "windows" in scan["usage"]),
+      (False, True))
+check("long/Router: nor is predict a replay of predict_long",
+      "windows" in router.predict(DOC, TEAM, model="english")["usage"], False)
+check("long/Router: each replays its own", router.predict_long(DOC, TEAM, model="english", window=80, stride=50),
+      scan)
+check("long/Router: two hits, one for each", cache.cache_info()["hits"], 2)
+router.predict_long(DOC, TEAM, model="english", window=60, stride=50)
+check("long/Router: another window size is another request", cache.cache_info()["hits"], 2)
+
 # --------------------------------------------------------------- retention policy
 DAY = 24 * 3600
 FRAUD = {"fraud": {"type": "noul", "instructions": "Is this fraud?"}}

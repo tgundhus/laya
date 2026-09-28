@@ -245,6 +245,10 @@ class _ScanLong:
         self.batch_size = batch_size
         self.lang = lang
 
+    def settings(self) -> Dict[str, Any]:
+        """What decides the scan's answer, for `ctx.scan`: not `batch_size` or `lang`, which do not."""
+        return {"window": self.window, "stride": self.stride, "aggregate": self.aggregate}
+
     def on_predict_start(self, ctx):
         if ctx.results is not None:
             return
@@ -790,6 +794,9 @@ class Router(HookRegistry):
         raise_errors = self.hooks_raise if hooks_raise is None else bool(hooks_raise)
         timeout = self.hooks_timeout if hooks_timeout is None else validate_timeout(hooks_timeout)
 
+        # `predict_long` is `predict` with a scan hook appended: a hook ahead of it (a decision
+        # cache) has to know it is answering a scan of every window, not the first window alone.
+        scan = next((h for h in active if isinstance(h, _ScanLong)), None)
         ctx = PredictContext(
             states=[state],
             questions=questions,
@@ -799,6 +806,7 @@ class Router(HookRegistry):
             router=self,
             max_len=max_len,
             head_max_len=head_max_len,
+            scan=None if scan is None else scan.settings(),
         )
         try:
             # Per-call hooks apply to the whole call, including on_route inside route().
@@ -864,6 +872,10 @@ class Router(HookRegistry):
                     ctx.error.__context__ = hook_exc
                 else:
                     raise
+        if mc is not None and ctx.results:
+            # Again after the end hooks: one may have put back results this call never marked (a
+            # decision cache's replays, which it stores without any call's marks).
+            flag_low_confidence(ctx.results, mc)
         return ctx.results[0]
 
     def predict_long(self, state: Union[str, dict, list], questions: Dict[str, Any],
@@ -1214,6 +1226,10 @@ class Router(HookRegistry):
                 if mc is not None and ctx.results:
                     flag_low_confidence(ctx.results, mc)
             self._end_contexts(active, started, raise_errors, timeout)
+            for ctx in started:
+                if mc is not None and ctx.results:
+                    # Again after the end hooks, as in `predict`: replays they put back are unmarked.
+                    flag_low_confidence(ctx.results, mc)
             for i, ctx in zip(indices, started):
                 results[i] = ctx.results[0]
             answered += len(indices)
