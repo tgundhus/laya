@@ -89,14 +89,15 @@ Reports: [consistency and speed work](docs/reports/index.md).
 ## Benchmarks: Laya-Pro against Laya and Jev
 
 <p align="center">
-  <img src="assets/laya_pro_vs_laya_vs_jev.png" alt="Laya-Pro against Laya against TypeSafe Jev: the same request gives the same answer (Jev 22.7% identical across three runs, Laya 100% on one setup but 72-99.6% of decisions unchanged across precisions, Laya-Pro 100%); a repeated request takes 0.04-0.06 ms on Laya-Pro against 34-144 ms on Laya and 236-276 ms on Jev; accuracy where Jev numbers exist; 3.6 times the requests served at 70% repeats; decision memory by retention period; decisions changed when the setup changes" width="100%" />
+  <img src="https://raw.githubusercontent.com/tgundhus/laya/main/assets/laya_pro_vs_laya_vs_jev.png" alt="Laya-Pro against Laya against TypeSafe Jev: the same request gives the same answer (Jev 22.7% identical across three runs, Laya 100% on one setup but 72-99.6% of decisions unchanged across precisions, Laya-Pro 100%); a repeated request takes 0.04-0.06 ms on Laya-Pro against 34-144 ms on Laya and 236-276 ms on Jev; accuracy where Jev numbers exist; 3.6 times the requests served at 70% repeats; decision memory by retention period; decisions changed when the setup changes" width="100%" />
 </p>
 
 The figure comes from [`research/scripts/make_laya_pro_plot.py`](research/scripts/make_laya_pro_plot.py), which
 reads the committed results. The tables below hold the same measurements.
 
-Measured on an Apple M4 Max with the published checkpoints, the original Laya against Laya-Pro, over 841
-requests in 11 languages. Rows marked *cache* need `DecisionCache` installed; the rest are the default
+Measured on an Apple M4 Max with the published checkpoints, the original Laya (0.3.20, the version Laya-Pro
+branched from) against Laya-Pro, over 841 requests in 11 languages. The checks after merging Laya 0.3.21
+are in [the report](docs/reports/real-checkpoints-m4-max.md#merging-laya-0321). Rows marked *cache* need `DecisionCache` installed; the rest are the default
 path. Method and raw results: [Real checkpoints on an Apple M4 Max](docs/reports/real-checkpoints-m4-max.md).
 
 **Consistency**
@@ -143,9 +144,9 @@ row runs both versions around one model in one process, in alternating pairs.
 
 ---
 
-*Everything below is Laya's own README, written by its original authors. It applies to Laya-Pro too,
-except that `pip install laya` installs the original release: install Laya-Pro from this repository as
-shown above.*
+*Everything below is Laya's own README, written by its original authors, apart from
+[What's new in Laya-Pro](#whats-new-in-laya-pro). It applies to Laya-Pro too, except that
+`pip install laya` installs the original release: install Laya-Pro from this repository as shown above.*
 
 ## Installation
 
@@ -220,20 +221,32 @@ The shipped checkpoints work zero-shot, but fine-tuning on decisions from your o
 
 **[nandhakishorm.github.io/laya](https://nandhakishorm.github.io/laya/)**: guides for [prediction hooks](https://nandhakishorm.github.io/laya/hooks/), [schema-driven decisions](https://nandhakishorm.github.io/laya/structured/), [Docker](https://nandhakishorm.github.io/laya/docker/) and [LangChain and LangGraph](https://nandhakishorm.github.io/laya/langchain/), plus a full [API reference](https://nandhakishorm.github.io/laya/reference/).
 
-## What's new in 0.3.21
+## What's new in Laya-Pro
 
-* **ONNX catches up with PyTorch.** `ONNXAgent` gains `predict_batch` (with `sort_by_length`), `predict_long` and `decide_batch`, `scripts/export_onnx.py --quantize` writes a per-channel INT8 copy for CPU, and `laya-evals run --onnx` scores an export with the same gates as the torch path.
-* **Opt-in abstention.** `min_confidence=` on `predict`, `predict_batch`, `decide` and `decide_batch` flags answers below a threshold on `answer_confidence` with `low_confidence: True`, and `decide` returns `None` for them.
-* **Batch everywhere.** `decide_batch`, `Router.predict_long`, `laya --batch FILE`, the MCP `laya_predict_batch` / `laya_route_batch` / `laya_decide` tools, and LangChain `batch()` / `abatch()` all run on shared forward passes. New `LayaDecision` (LangChain), LlamaIndex selectors (`laya[llamaindex]`) and CrewAI routing (`laya[crewai]`).
-* **Per-request token budget.** `max_len` / `head_max_len` now reach every surface: `laya-serve` (capped by `LAYA_MAX_TOKEN_BUDGET`), `Router.predict_batch` requests, the CLI (`--questions`, `--max-len`, `--head-max-len`), MCP tools and LangChain nodes.
-* **Operations.** `LAYA_MAX_LOADED`, `LAYA_REVISION` and per-checkpoint SHA-256 maps; `/health` reports the device a checkpoint really runs on and its CPU-fallback count; the 503 busy answer carries `Retry-After`; `compile=True` no longer recompiles for every request shape.
-* **Stricter inputs.** A null or duplicate `choice` label, a short temperature list, a `None` state and non-dict questions are refused with a message that names them, and `usage["options"]` says when the head budget left two options with the same tokens.
+* **A memory for decisions.** `DecisionCache` replays the decision a request got the first time:
+  across threads, processes and machines sharing a store, and across fp32, int8 and ONNX backends.
+  Each decision carries its own retention (a `ttl`, renewal on use, a size bound), kept in memory,
+  in a SQLite file or in your own `DecisionStore` (a Redis example is included). Concurrent
+  identical requests share one forward pass, and a store that fails never fails a prediction.
+  Guide: [Decision consistency](docs/consistency.md).
+* **How shaky an answer is.** `decision_margins(result)` measures how close each answer is to
+  flipping. A margin under 0.05 flags 2.5% of answers and caught every precision flip measured.
+* **Less work around the model.** A question's instructions and options are tokenized once across
+  requests, the Router remembers recent language detections, and English detection takes ASCII
+  shortcuts, with byte-identical answers. Around one model, a new request is level on CPU and up
+  to 4% faster on the Apple GPU; a repeat replayed from the cache takes 0.04-0.06 ms.
+* **ONNX export** strips redundant attention NaN guards, and `--quantize` (or `--int8`) writes a
+  per-channel INT8 copy.
+* **Measured on the published checkpoints.** The [benchmark tables and figure](#benchmarks-laya-pro-against-laya-and-jev)
+  above, and the [reports](docs/reports/index.md) behind them.
+* **Includes Laya 0.3.21.** Everything the original shipped up to
+  [0.3.21](https://github.com/NandhaKishorM/laya/releases/tag/v0.3.21) is merged in: ONNX batch and
+  long-document parity, per-channel INT8, opt-in abstention with `min_confidence`, batch calls on
+  every surface, per-request token budgets and the new operations settings. The cache works with
+  all of it: abstention marks follow each call's threshold, and `predict_long` scans are cached
+  apart from single-window answers.
 
 ---
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/tgundhus/laya/main/assets/laya_vs_jev_full.png" alt="Laya versus TypeSafe Jev: accuracy on shared public datasets, every application workflow, all 51 languages, speed, calibration, and the cost of not preloading" width="100%" />
-</p>
 
 Laya evaluates typed questions (`choice`, `score`, `noul`) over any state (text, email, ticket or JSON document) in **a single forward pass** — 33 ms for one question, 7.2 ms/question batched, measured on a T4. No text generation, so nothing to parse and nothing to hallucinate.
 
@@ -1109,6 +1122,10 @@ scheduled workflow evaluates the English checkpoint against the committed baseli
 Community diagnostics: [Chinese workplace decisions (Feishu-style)](research/benchmarks/feishu_zh/README.md) · [中文说明](research/benchmarks/feishu_zh/README.zh-CN.md). Includes frozen synthetic cases, archived paired Laya/Jev responses, and an offline audit; separate from the benchmark suites below. Also [Chinese short-command routing](research/benchmarks/zh_short_commands/README.md) · [中文说明](research/benchmarks/zh_short_commands/README.zh-CN.md): 18 frozen commands and a seven-rung ablation of the documented prompt guidance, which locates the accuracy loss on the four-question path rather than the six-option one.
 
 **Full report: [`BENCHMARKS.md`](BENCHMARKS.md)** — every run consolidated, languages and themes, with per-language detail for all 51 languages.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tgundhus/laya/main/assets/laya_vs_jev_full.png" alt="Laya versus TypeSafe Jev: accuracy on shared public datasets, every application workflow, all 51 languages, speed, calibration, and the cost of not preloading" width="100%" />
+</p>
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/tgundhus/laya/main/assets/laya_benchmark.png" alt="Per-language accuracy for both checkpoints across 51 languages" width="100%" />
