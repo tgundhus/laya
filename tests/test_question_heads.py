@@ -12,6 +12,7 @@ Run: python tests/test_question_heads.py
 import os
 import random
 import sys
+import weakref
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -76,7 +77,8 @@ FAST = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]", pad_
                                cls_token="[CLS]", sep_token="[SEP]", mask_token="[MASK]")
 
 
-class FakeTok:
+class _Tok:
+    __slots__ = ()
     mask_token, mask_token_id, cls_token_id, sep_token_id, pad_token_id = "[MASK]", 4, 2, 3, 0
 
     def __call__(self, text, add_special_tokens=False, truncation=False, max_length=None):
@@ -84,8 +86,12 @@ class FakeTok:
         return {"input_ids": ids[:max_length] if truncation and max_length else ids}
 
 
-class SlottedTok(FakeTok):
-    """No __weakref__ slot: the head cannot be kept for it, and must still be right."""
+class FakeTok(_Tok):
+    """No __slots__ of its own, so it can be weakly referenced and its heads are kept."""
+
+
+class SlottedTok(_Tok):
+    """No __weakref__ slot anywhere in its bases: the head cannot be kept for it, and must still be right."""
     __slots__ = ()
 
 
@@ -135,6 +141,20 @@ check("heads/cold and warm rows equal the uncached code (%d builds)" % cases, mi
 
 check("heads/kept per tokenizer", FAST in common._QUESTION_HEADS, True)
 check("heads/bounded per tokenizer", len(common._QUESTION_HEADS[FAST]) <= common._QUESTION_HEADS_MAX, True)
+
+
+def weakly_referenceable(obj):
+    try:
+        weakref.ref(obj)
+    except TypeError:
+        return False
+    return True
+
+
+# The premise of the SlottedTok rows above: its heads cannot be kept, so every one of them went
+# through the uncached fallback, while FakeTok's went through the cache.
+check("heads/SlottedTok cannot be weakly referenced", weakly_referenceable(SlottedTok()), False)
+check("heads/FakeTok can", weakly_referenceable(FakeTok()), True)
 
 
 class Counting(FakeTok):
