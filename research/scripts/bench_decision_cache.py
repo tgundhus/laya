@@ -220,7 +220,7 @@ class WriteBehindStore:
                 items = [(k,) + self.pending[k] for k in batch if k in self.pending]
             self.inner.add(items, 3.0)
             with self.lock:
-                for k, _ in items:
+                for k, _, _ in items:
                     self.pending.pop(k, None)
 
     def get(self, key, now):

@@ -11,94 +11,94 @@
     "short_140_chars": {
       "canonical_bytes": 875,
       "DecisionCache._keys (total)": {
-        "median_us": 8.731,
-        "best_us": 8.519
+        "median_us": 10.538,
+        "best_us": 10.469
       },
       "fingerprint": {
-        "median_us": 0.661,
-        "best_us": 0.609
+        "median_us": 0.757,
+        "best_us": 0.737
       },
       "canonical json, prefix": {
-        "median_us": 7.289,
-        "best_us": 7.197
+        "median_us": 8.261,
+        "best_us": 7.784
       },
       "canonical json, state": {
-        "median_us": 0.739,
-        "best_us": 0.732
+        "median_us": 0.789,
+        "best_us": 0.778
       },
       "blake2b-128 over the bytes": {
-        "median_us": 0.998,
-        "best_us": 0.986
+        "median_us": 1.179,
+        "best_us": 1.155
       },
       "sha256 over the bytes": {
-        "median_us": 0.765,
-        "best_us": 0.746
+        "median_us": 0.919,
+        "best_us": 0.894
       },
       "md5 over the bytes (reference only)": {
-        "median_us": 1.773,
-        "best_us": 1.659
+        "median_us": 2.106,
+        "best_us": 2.025
       }
     },
     "medium_2k_chars": {
       "canonical_bytes": 2679,
       "DecisionCache._keys (total)": {
-        "median_us": 14.82,
-        "best_us": 12.998
+        "median_us": 15.823,
+        "best_us": 15.173
       },
       "fingerprint": {
-        "median_us": 0.659,
-        "best_us": 0.593
+        "median_us": 0.74,
+        "best_us": 0.733
       },
       "canonical json, prefix": {
-        "median_us": 6.722,
-        "best_us": 6.641
+        "median_us": 8.459,
+        "best_us": 8.176
       },
       "canonical json, state": {
-        "median_us": 3.208,
-        "best_us": 3.165
+        "median_us": 3.696,
+        "best_us": 3.495
       },
       "blake2b-128 over the bytes": {
-        "median_us": 2.591,
-        "best_us": 2.562
+        "median_us": 3.133,
+        "best_us": 3.028
       },
       "sha256 over the bytes": {
-        "median_us": 1.653,
-        "best_us": 1.558
+        "median_us": 1.93,
+        "best_us": 1.856
       },
       "md5 over the bytes (reference only)": {
-        "median_us": 4.365,
-        "best_us": 4.308
+        "median_us": 5.552,
+        "best_us": 5.147
       }
     },
     "long_20k_chars": {
       "canonical_bytes": 20175,
       "DecisionCache._keys (total)": {
-        "median_us": 52.22,
-        "best_us": 50.32
+        "median_us": 68.552,
+        "best_us": 59.669
       },
       "fingerprint": {
-        "median_us": 0.605,
-        "best_us": 0.604
+        "median_us": 0.752,
+        "best_us": 0.715
       },
       "canonical json, prefix": {
-        "median_us": 6.974,
-        "best_us": 6.712
+        "median_us": 8.397,
+        "best_us": 7.967
       },
       "canonical json, state": {
-        "median_us": 26.476,
-        "best_us": 24.594
+        "median_us": 29.294,
+        "best_us": 28.86
       },
       "blake2b-128 over the bytes": {
-        "median_us": 19.032,
-        "best_us": 17.768
+        "median_us": 22.598,
+        "best_us": 19.346
       },
       "sha256 over the bytes": {
-        "median_us": 9.387,
-        "best_us": 8.95
+        "median_us": 11.03,
+        "best_us": 10.227
       },
       "md5 over the bytes (reference only)": {
-        "median_us": 31.2,
-        "best_us": 29.297
+        "median_us": 35.292,
+        "best_us": 33.827
       }
     }
   },
@@ -108,20 +108,20 @@
       "stored_bytes": 179,
       "stored_as": "zlib",
       "encode (json + zlib when smaller)": {
-        "median_us": 13.547,
-        "best_us": 13.26
+        "median_us": 14.812,
+        "best_us": 14.479
       },
       "decode": {
-        "median_us": 3.751,
-        "best_us": 3.636
+        "median_us": 5.315,
+        "best_us": 4.747
       },
       "encode, json only": {
-        "median_us": 3.701,
-        "best_us": 3.541
+        "median_us": 3.996,
+        "best_us": 3.897
       },
       "decode, json only": {
-        "median_us": 2.021,
-        "best_us": 1.935
+        "median_us": 2.314,
+        "best_us": 2.308
       }
     },
     "four_noul": {
@@ -129,20 +129,20 @@
       "stored_bytes": 182,
       "stored_as": "zlib",
       "encode (json + zlib when smaller)": {
-        "median_us": 17.182,
-        "best_us": 16.189
+        "median_us": 18.474,
+        "best_us": 17.983
       },
       "decode": {
-        "median_us": 4.498,
-        "best_us": 4.463
+        "median_us": 5.654,
+        "best_us": 5.19
       },
       "encode, json only": {
-        "median_us": 5.594,
-        "best_us": 5.5
+        "median_us": 6.835,
+        "best_us": 6.526
       },
       "decode, json only": {
-        "median_us": 3.076,
-        "best_us": 2.754
+        "median_us": 3.334,
+        "best_us": 3.07
       }
     }
   },
@@ -151,141 +151,141 @@
       "entries": 100000,
       "bytes_per_entry_python_heap": 336.4,
       "get hit": {
-        "median_us": 0.324,
-        "best_us": 0.317
+        "median_us": 0.372,
+        "best_us": 0.335
       },
       "get miss": {
-        "median_us": 0.206,
-        "best_us": 0.203
+        "median_us": 0.241,
+        "best_us": 0.237
       },
       "put one": {
-        "median_us": 0.487,
-        "best_us": 0.43
+        "median_us": 0.995,
+        "best_us": 0.473
       }
     },
     "sqlite synchronous=NORMAL": {
       "entries": 100000,
       "file_bytes_per_entry": 319.0,
       "get hit": {
-        "median_us": 3.794,
-        "best_us": 3.638
+        "median_us": 7.836,
+        "best_us": 5.145
       },
       "get miss": {
-        "median_us": 3.34,
-        "best_us": 3.137
+        "median_us": 4.901,
+        "best_us": 4.467
       },
       "put one (own transaction)": {
-        "median_us": 101.321,
-        "best_us": 31.536
+        "median_us": 147.509,
+        "best_us": 57.534
       },
       "put 100 in one transaction, per decision": {
-        "median_us": 73.269,
-        "best_us": 60.922
+        "median_us": 103.067,
+        "best_us": 101.634
       }
     },
     "sqlite synchronous=FULL": {
       "entries": 100000,
       "file_bytes_per_entry": 319.0,
       "get hit": {
-        "median_us": 3.884,
-        "best_us": 3.816
+        "median_us": 4.572,
+        "best_us": 4.543
       },
       "get miss": {
-        "median_us": 3.626,
-        "best_us": 3.122
+        "median_us": 4.168,
+        "best_us": 3.983
       },
       "put one (own transaction)": {
-        "median_us": 122.999,
-        "best_us": 72.926
+        "median_us": 154.563,
+        "best_us": 112.69
       },
       "put 100 in one transaction, per decision": {
-        "median_us": 73.635,
-        "best_us": 71.546
+        "median_us": 92.112,
+        "best_us": 81.443
       }
     }
   },
   "write_behind": {
     "synchronous (shipped)": {
       "store one decision on the request path": {
-        "median_us": 26.117,
-        "best_us": 25.321
+        "median_us": 39.951,
+        "best_us": 35.766
       }
     },
     "write-behind thread": {
       "store one decision on the request path": {
-        "median_us": 0.701,
-        "best_us": 0.629
+        "median_us": 0.802,
+        "best_us": 0.791
       }
     }
   },
   "request": {
     "Router.predict, no cache": {
-      "median_us": 18.705,
-      "best_us": 18.255
+      "median_us": 26.273,
+      "best_us": 23.463
     },
     "Router.predict, memory cache hit": {
-      "median_us": 30.99,
-      "best_us": 29.992
+      "median_us": 43.649,
+      "best_us": 40.54
     },
     "Router.predict, memory cache miss": {
-      "median_us": 138.13,
-      "best_us": 118.574
+      "median_us": 146.813,
+      "best_us": 129.222
     },
     "Router.predict, sqlite cache hit": {
-      "median_us": 48.384,
-      "best_us": 33.292
+      "median_us": 44.466,
+      "best_us": 40.751
     },
     "Router.predict, sqlite cache miss": {
-      "median_us": 122.928,
-      "best_us": 110.992
+      "median_us": 128.315,
+      "best_us": 124.14
     },
     "routing only, new state: short_140_chars": {
-      "median_us": 28.38,
-      "best_us": 25.193
+      "median_us": 35.058,
+      "best_us": 34.133
     },
     "routing only, repeated state: short_140_chars": {
-      "median_us": 4.578,
-      "best_us": 4.55
+      "median_us": 6.713,
+      "best_us": 6.046
     },
     "cache hit, detection remembered: short_140_chars": {
-      "median_us": 37.386,
-      "best_us": 29.932
+      "median_us": 45.776,
+      "best_us": 39.721
     },
     "cache hit, detection afresh: short_140_chars": {
-      "median_us": 78.152,
-      "best_us": 71.625
+      "median_us": 83.633,
+      "best_us": 75.74
     },
     "routing only, new state: medium_2k_chars": {
-      "median_us": 178.262,
-      "best_us": 151.573
+      "median_us": 195.669,
+      "best_us": 164.845
     },
     "routing only, repeated state: medium_2k_chars": {
-      "median_us": 6.18,
-      "best_us": 6.176
+      "median_us": 8.133,
+      "best_us": 7.976
     },
     "cache hit, detection remembered: medium_2k_chars": {
-      "median_us": 37.111,
-      "best_us": 36.096
+      "median_us": 44.364,
+      "best_us": 41.054
     },
     "cache hit, detection afresh: medium_2k_chars": {
-      "median_us": 225.462,
-      "best_us": 174.387
+      "median_us": 221.77,
+      "best_us": 203.079
     },
     "routing only, new state: long_20k_chars": {
-      "median_us": 348.863,
-      "best_us": 283.412
+      "median_us": 361.473,
+      "best_us": 323.401
     },
     "routing only, repeated state: long_20k_chars": {
-      "median_us": 22.824,
-      "best_us": 22.048
+      "median_us": 25.667,
+      "best_us": 24.9
     },
     "cache hit, detection remembered: long_20k_chars": {
-      "median_us": 97.336,
-      "best_us": 94.062
+      "median_us": 130.325,
+      "best_us": 115.452
     },
     "cache hit, detection afresh: long_20k_chars": {
-      "median_us": 425.31,
-      "best_us": 361.548
+      "median_us": 458.454,
+      "best_us": 421.422
     }
   }
 }

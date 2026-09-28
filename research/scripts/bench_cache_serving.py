@@ -145,11 +145,13 @@ def run_coalesce(pool, device, threads=(2, 4, 8, 16)):
     router = Router(device=device)
     agents = {m: router.load(m) for m in ("english", "multilingual")}
     calls = {"n": 0}
+    count_lock = threading.Lock()  # `+=` is not atomic, and up to 16 threads run passes at once
     for agent in agents.values():
         inner = agent._forward
 
         def counted(b, inner=inner):
-            calls["n"] += 1
+            with count_lock:
+                calls["n"] += 1
             return inner(b)
         agent._forward = counted
     req = next(r for r in pool if r["set"] == "english13" and len(r["questions"]) == 3)

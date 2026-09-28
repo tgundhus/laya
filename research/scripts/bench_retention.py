@@ -348,9 +348,10 @@ def run_simulation(tmp, payload, n_requests, days, universe, one_off, s):
         out["runs"][name] = simulate(events, make, clock, payload, restart_every=restart)
         out["runs"][name]["wall_s"] = round(time.perf_counter() - t, 1)
         r = out["runs"][name]
-        print("  %-58s replayed %5.1f%%  repeats given earlier decision %5.1f%%  held max %7d  writes %7d"
-              % (name, 100 * r["replayed_share"], 100 * r["repeats_given_earlier_decision_share"], r["held_max"],
-                 r["store_writes"]), flush=True)
+        kept = r["repeats_given_earlier_decision_share"]  # None when the trace repeats nothing
+        print("  %-58s replayed %5.1f%%  repeats given earlier decision %s  held max %7d  writes %7d"
+              % (name, 100 * r["replayed_share"], "   n/a" if kept is None else "%5.1f%%" % (100 * kept),
+                 r["held_max"], r["store_writes"]), flush=True)
     consistency._now = time.time
     return out
 
