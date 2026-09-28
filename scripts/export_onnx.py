@@ -55,27 +55,44 @@ def strip_nan_guards(path):
     return len(rename)
 
 
-def quantize_int8(path, output_path):
-    """Write an int8 copy of an exported model: MatMul/Gemm weights in QInt8, dynamic activations.
+def quantize_model(model_path: str, output_path: str) -> str:
+    """Write an INT8 weight-only dynamically quantized copy of `model_path`.
 
-    About 2x faster than fp32 on an AVX-512 VNNI CPU and a third of the size, but the arithmetic
-    changes, so answers near a decision boundary can change too; measure it on your own data
-    (research/scripts/bench_cpu_fast_path.py) before serving it.
+    Dynamic quantization converts the weights of every `MatMul` (the attention and MLP linear
+    layers) to int8 while leaving activations in fp32; the quantization scales are computed per
+    output channel at load time, so no calibration dataset is needed. The graph structure and
+    the input/output names are unchanged, which is what lets `ONNXAgent` load the result by
+    pointing `onnx_path` at it. It is CPU-only: ONNX Runtime has no INT8 MatMul kernel on the
+    CUDAExecutionProvider, so an int8 graph on GPU falls back to CPU.
     """
-    import onnx
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
-    # The dynamo exporter leaves value_info annotations ONNX shape inference disagrees with
-    # (act_head: "(1028) vs (256)"), which aborts quantize_dynamic; drop them from a scratch copy.
-    model = onnx.load(path, load_external_data=False)
+    import onnx
+
+    model = onnx.load(model_path)
+    # The torch exporter leaves intermediate `value_info` shapes that disagree with what the
+    # quantizer's own shape-inference pass re-derives ("Inferred shape and existing shape
+    # differ"). The declarations are informational only, so drop them and let quantization
+    # recompute whatever it needs.
     del model.graph.value_info[:]
-    scratch = os.path.join(os.path.dirname(os.path.abspath(path)), "_quantize_" + os.path.basename(path))
-    onnx.save(model, scratch)
-    try:
-        quantize_dynamic(scratch, output_path, weight_type=QuantType.QInt8, per_channel=False,
-                         op_types_to_quantize=["MatMul", "Gemm"])
-    finally:
-        os.remove(scratch)
+    quantize_dynamic(
+        model_input=model,
+        model_output=output_path,
+        op_types_to_quantize=["MatMul"],
+        weight_type=QuantType.QInt8,
+        # One scale per output channel rather than one per tensor. On the English checkpoint
+        # measured on 20 support-ticket states x choice/noul/score, per-tensor int8 flipped 3
+        # of 20 decisions (max probability drift 0.29); per-channel flipped none (max 0.09)
+        # at the same size and speed.
+        per_channel=True,
+    )
+    return output_path
+
+
+def int8_output_path(output_path: str) -> str:
+    """`laya.onnx` -> `laya.int8.onnx`, next to the fp32 export it was quantized from."""
+    root, ext = os.path.splitext(output_path)
+    return "%s.int8%s" % (root, ext or ".onnx")
 
 
 def export_to_onnx(model_id_or_path: str, output_path: str):
@@ -154,12 +171,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export a Laya model to ONNX format")
     parser.add_argument("--model", type=str, default="convaiinnovations/laya", help="HuggingFace Hub ID or local path")
     parser.add_argument("--output", type=str, default="laya.onnx", help="Output path for the ONNX file")
-    parser.add_argument("--int8", action="store_true",
-                        help="also write an int8 copy next to it (<output>.int8.onnx); answers can change")
+    parser.add_argument("--quantize", "--int8", dest="quantize", action="store_true",
+                        help="Also write an INT8 weight-only quantized copy (CPU-only speed and "
+                             "size win) next to --output, named <output>.int8.onnx; answers can "
+                             "change, so measure them (research/scripts/bench_cpu_fast_path.py)")
     args = parser.parse_args()
-    
+
     export_to_onnx(args.model, args.output)
-    if args.int8:
-        int8_path = os.path.splitext(args.output)[0] + ".int8.onnx"
-        quantize_int8(args.output, int8_path)
-        print(f"Wrote the int8 copy to: {int8_path}")
+    if args.quantize:
+        int8_path = quantize_model(args.output, int8_output_path(args.output))
+        print(f"Successfully wrote INT8 quantized model to: {int8_path}")

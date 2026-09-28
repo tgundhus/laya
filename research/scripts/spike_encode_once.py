@@ -120,7 +120,7 @@ def late_batch(agent, ids, internal, st):
     items = []
     for qid in ids:
         q = internal[qid]
-        head, markers = _question_head(tok, q, head_max_len)
+        head, markers, _ = _question_head(tok, q, head_max_len)
         items.append({"ids": list(head), "markers": list(markers), "qtype": QTYPES[q["t"]]})
     heads = collate_items([items], tok.pad_token_id)
     srow = torch.tensor([[tok.cls_token_id] + list(st) + [tok.sep_token_id]])
