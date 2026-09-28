@@ -148,7 +148,7 @@ for param, default in (("ttl", None), ("maxsize", 100_000), ("fingerprint", None
 for method in ("on_predict_start", "on_predict_end", "prune", "cache_info", "cache_clear", "close"):
     check_true("DecisionCache/%s callable" % method, callable(getattr(laya.DecisionCache, method, None)))
 check("DecisionCache/cache_info keys", list(laya.DecisionCache().cache_info()),
-      ["size", "maxsize", "hits", "misses", "conflicts", "coalesced"])
+      ["size", "maxsize", "hits", "misses", "conflicts", "coalesced", "errors"])
 check_true("DecisionCache/accepted as a hook",
            len(__import__("laya.hooks", fromlist=["normalise_hooks"]).normalise_hooks([laya.DecisionCache()])) == 1)
 for method in ("get", "add", "renew", "prune", "__len__", "clear", "close"):

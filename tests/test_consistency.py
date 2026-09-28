@@ -144,7 +144,7 @@ check("cache/the replay is the stored answer", second["answers"], first["answers
 check("cache/the replay keeps usage", second["usage"], first["usage"])
 check("cache/the Router adds routing to a replay", second["routing"]["model"], "english")
 check("cache/counters", cache.cache_info(),
-      {"size": 1, "maxsize": 100_000, "hits": 1, "misses": 1, "conflicts": 0, "coalesced": 0})
+      {"size": 1, "maxsize": 100_000, "hits": 1, "misses": 1, "conflicts": 0, "coalesced": 0, "errors": 0})
 
 first["answers"]["billing"]["noul"] = -1.0
 second["answers"]["billing"]["noul"] = -2.0
@@ -237,7 +237,7 @@ check("prune/drops what is expired", cache.prune(), 1)
 check("prune/keeps the rest", cache.cache_info()["size"], 1)
 cache.cache_clear()
 check("clear/empties and resets", cache.cache_info(),
-      {"size": 0, "maxsize": 100_000, "hits": 0, "misses": 0, "conflicts": 0, "coalesced": 0})
+      {"size": 0, "maxsize": 100_000, "hits": 0, "misses": 0, "conflicts": 0, "coalesced": 0, "errors": 0})
 
 check_raises("args/ttl must be positive", ValueError, lambda: DecisionCache(ttl=0))
 check_raises("args/ttl is not a bool", ValueError, lambda: DecisionCache(ttl=True))
@@ -689,6 +689,75 @@ check("store/first decision wins through a shared custom store",
 check_raises("store/path and store together", ValueError, lambda: DecisionCache("x.sqlite", store=SpyStore()))
 check_raises("store/maxsize with a custom store", ValueError, lambda: DecisionCache(store=SpyStore(), maxsize=5))
 check_raises("store/an object without the protocol", TypeError, lambda: DecisionCache(store=object()))
+check("store/maxsize=None with a custom store says the store bounds itself",
+      DecisionCache(store=SpyStore(), maxsize=None).maxsize, None)
+
+
+# --------------------------------------------------------------- a failing store never fails a prediction
+class FailingStore(SpyStore):
+    """Raises on the operations named, as a locked SQLite file or an unreachable Redis would."""
+
+    def __init__(self, *fail):
+        super().__init__()
+        self.fail = set(fail)
+
+    def get(self, key, now):
+        if "get" in self.fail:
+            raise OSError("store unreachable")
+        return super().get(key, now)
+
+    def add(self, items, now):
+        if "add" in self.fail:
+            raise OSError("database is locked")
+        return super().add(items, now)
+
+    def renew(self, key, expires_at, now):
+        if "renew" in self.fail:
+            raise OSError("database is locked")
+        return super().renew(key, expires_at, now)
+
+
+def quietly(call):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = call()
+    return out, [str(w.message) for w in caught if "DecisionCache: could not" in str(w.message)]
+
+
+for op in ("get", "add"):
+    cache = DecisionCache(store=FailingStore(op))
+    r, en, _ = router_with(cache)
+    outs, warned = quietly(lambda: [r.predict(STATE, Q) for _ in range(3)])
+    check("fail-open/%s raises: every request is still answered" % op,
+          [o["answers"]["billing"]["noul"] for o in outs], [0.7] * 3)
+    check("fail-open/%s raises: each request runs the model" % op, len(en.calls), 3)
+    check("fail-open/%s raises: each failure is counted" % op, cache.cache_info()["errors"], 3)
+    check("fail-open/%s raises: it warns once" % op, len(warned), 1)
+    check("fail-open/%s raises: no claim outlives its request" % op, cache._inflight, {})
+
+cache = DecisionCache(store=FailingStore("renew"), ttl=160, renew_on_hit=True)
+r, en, _ = router_with(cache)
+r.predict(STATE, Q)
+clock.t += 20  # past a 16th of the ttl, so the hit tries to renew
+out, _ = quietly(lambda: r.predict(STATE, Q))
+check("fail-open/renew raises: the hit is still replayed", (len(en.calls), out["answers"]["billing"]["noul"]),
+      (1, 0.7))
+check("fail-open/renew raises: counted", cache.cache_info()["errors"], 1)
+
+spy = SpyStore()
+cache = DecisionCache(store=spy)
+r, en, _ = router_with(cache)
+r.predict(STATE, Q)
+for key, (_, expires_at) in list(spy.data.items()):
+    spy.data[key] = (b"z not zlib, not JSON", expires_at)
+out, warned = quietly(lambda: r.predict(STATE, Q))
+check("fail-open/an undecodable decision is computed again", (len(en.calls), out["answers"]["billing"]["noul"]),
+      (2, 0.7))
+check("fail-open/an undecodable decision is counted and warned about", (cache.cache_info()["errors"], len(warned)),
+      (1, 1))
+check("fail-open/the new decision replaces the undecodable one", r.predict(STATE, Q)["answers"]["billing"]["noul"],
+      0.7)
+check("fail-open/and is replayed from then on", len(en.calls), 2)
 
 # --------------------------------------------------------------- SQLite layout
 with tempfile.TemporaryDirectory() as tmp:

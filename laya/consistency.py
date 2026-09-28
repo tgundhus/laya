@@ -155,7 +155,8 @@ class DecisionStore(Protocol):
     The cache does the hashing, encoding and retention policy; a store only keeps bytes. Implement
     one to share decisions between machines -- over Redis or Postgres, say -- and pass it as
     `DecisionCache(store=...)`. Times are Unix seconds, and `math.inf` means never. A store is
-    called from several threads at once and must be safe for that.
+    called from several threads at once and must be safe for that. A call that raises does not
+    fail the prediction: the cache counts it and lets that request go on without the store.
 
     The rule that matters is in `add`: when a key already holds a value that has not expired,
     the store keeps that value and returns it. That is what makes the first decision stored for a
@@ -403,6 +404,11 @@ class DecisionCache:
     A replay is the stored payload exactly, `usage` included; a `Router` adds the current
     `routing` to it.
 
+    The cache never fails a prediction. When its store raises (a locked or full SQLite file, a
+    shared store that cannot be reached) or holds a value that cannot be decoded, the request
+    goes on as if there were no cache: it is computed and, where the store cannot take it, not
+    kept. The first failure warns, and `cache_info()["errors"]` counts them all.
+
     The key is a 16-byte BLAKE2b hash of the state, the questions in their given order (option
     order is positional), the per-call token budget, the checkpoint and the model's fingerprint,
     plus the routing decision when the checkpoint has per-language temperatures, the one way
@@ -457,7 +463,7 @@ class DecisionCache:
         if store is not None:
             if path is not None:
                 raise ValueError("pass a path or a store, not both")
-            if maxsize != DEFAULT_MAXSIZE:
+            if maxsize not in (DEFAULT_MAXSIZE, None):  # None says the same: the store bounds itself
                 raise ValueError("maxsize bounds the built-in stores; bound a custom store yourself")
             missing = [name for name in _STORE_METHODS if not callable(getattr(store, name, None))]
             if missing:
@@ -478,12 +484,37 @@ class DecisionCache:
         # Reentrant, because a claim's finalizer can run from garbage collection while it is held.
         self._lock = threading.RLock()
         self._pending: "weakref.WeakKeyDictionary[PredictContext, tuple]" = weakref.WeakKeyDictionary()
-        self._counts = {"hits": 0, "misses": 0, "conflicts": 0, "coalesced": 0}
+        self._counts = {"hits": 0, "misses": 0, "conflicts": 0, "coalesced": 0, "errors": 0}
         self._warned = False
+        self._store_warned = False
 
     def __repr__(self) -> str:
         where = self.path if self.path is not None else type(self._store).__name__
         return "DecisionCache(%r, ttl=%r, maxsize=%r)" % (where, self.ttl, self.maxsize)
+
+    def _failed(self, exc: BaseException, what: str) -> None:
+        """A store call or a stored value failed: count it, warn once, and go on without the cache.
+
+        The cache is an accelerator. A locked SQLite file, a full disk, an unreachable shared store
+        or a value it cannot decode must not fail the prediction it was only meant to speed up.
+        """
+        with self._lock:
+            self._counts["errors"] += 1
+            first, self._store_warned = not self._store_warned, True
+        if first:
+            warnings.warn("laya: DecisionCache: could not %s (%s: %s); requests go on without the cache "
+                          "while this lasts, and cache_info()['errors'] counts it"
+                          % (what, type(exc).__name__, exc), RuntimeWarning, stacklevel=4)
+
+    def _replay(self, entry: Optional[Tuple[bytes, float]]) -> Optional[Dict[str, Any]]:
+        """A held entry decoded, or None when there is none or it cannot be decoded (then it is recomputed)."""
+        if entry is None:
+            return None
+        try:
+            return _unpack(entry[0])
+        except Exception as exc:  # a corrupt or foreign value: zlib, UTF-8 or JSON errors
+            self._failed(exc, "decode a stored decision")
+            return None
 
     def _lifetime(self, questions: Any, result: Dict[str, Any]) -> Optional[float]:
         """Seconds this decision is kept: None for ever, 0 or less for not at all."""
@@ -522,14 +553,17 @@ class DecisionCache:
     def _renew(self, ctx: PredictContext, keys: List[bytes], held: List[Any], replays: List[Any],
                now: float) -> None:
         for key, entry, replay in zip(keys, held, replays):
-            if entry is None:
+            if entry is None or replay is None:
                 continue
             lifetime = self._lifetime(ctx.questions, replay)
             if lifetime is None or lifetime <= 0:
                 continue
             expires_at = now + lifetime
             if expires_at - entry[1] > lifetime * _RENEW_FRACTION:
-                self._store.renew(key, expires_at, now)
+                try:
+                    self._store.renew(key, expires_at, now)
+                except Exception as exc:  # a missed renewal only shortens that decision's life
+                    self._failed(exc, "renew a decision")
 
     def _coalesce_safe(self, ctx: PredictContext) -> bool:
         """Whether this request may wait for another thread computing the same one.
@@ -575,7 +609,11 @@ class DecisionCache:
                 entry[1].wait(max(0.0, deadline - time.monotonic()))
             now = _now()
             for i, _ in waits:
-                held[i] = self._store.get(keys[i], now)
+                try:
+                    held[i] = self._store.get(keys[i], now)
+                except Exception as exc:  # computed here instead, once the owner's claim is gone
+                    self._failed(exc, "read the decision store")
+                    held[i] = None
                 filled += held[i] is not None
 
     def _release(self, owned: Sequence[Tuple[bytes, Tuple[int, threading.Event]]]) -> None:
@@ -594,7 +632,12 @@ class DecisionCache:
             return
         keys = self._keys(ctx, states, lang_sensitive)
         now = _now()
-        held = [self._store.get(key, now) for key in keys]
+        try:
+            held = [self._store.get(key, now) for key in keys]
+        except Exception as exc:
+            # Nothing is claimed or pending yet, so this request simply runs without the cache.
+            self._failed(exc, "read the decision store")
+            return
         coalesced, owned = 0, []
         if self._coalesce_safe(ctx) and any(entry is None for entry in held):
             coalesced, owned = self._claim(keys, held)
@@ -602,8 +645,16 @@ class DecisionCache:
         # outlives its request.
         release = weakref.finalize(ctx, self._release, owned) if owned else None
         try:
-            hits = sum(entry is not None for entry in held)
-            replays = [None if entry is None else _unpack(entry[0]) for entry in held]
+            replays = [self._replay(entry) for entry in held]
+            for key, entry, replay in zip(keys, held, replays):
+                if entry is not None and replay is None:
+                    # Undecodable: expire it now, so the decision this request computes can take
+                    # its place instead of being refused by the store as a second decision.
+                    try:
+                        self._store.renew(key, now, now)
+                    except Exception as exc:
+                        self._failed(exc, "expire an undecodable decision")
+            hits = sum(replay is not None for replay in replays)
             if hits and self.renew_on_hit:
                 self._renew(ctx, keys, held, replays, now)
         except BaseException:
@@ -668,7 +719,12 @@ class DecisionCache:
                 continue
             items.append((keys[i], value, math.inf if lifetime is None else now + lifetime))
             positions.append(n)
-        held = self._store.add(items, now) if items else []
+        try:
+            held = self._store.add(items, now) if items else []
+        except Exception as exc:
+            # Not stored: every caller keeps the decision it computed, as without a cache.
+            self._failed(exc, "store decisions")
+            held = [value for _, value, _ in items]
         merged = list(replays)
         for i, result in zip(computed, results):
             merged[i] = result
@@ -678,7 +734,9 @@ class DecisionCache:
                 # Another run stored this request first, possibly on other hardware: replay its
                 # decision, so every caller of this request gets the same one.
                 i = computed[n]
-                replay = _unpack(first)
+                replay = self._replay((first, math.inf))
+                if replay is None:  # the stored one cannot be decoded: keep this run's decision
+                    continue
                 if isinstance(results[n], dict) and "routing" in results[n]:
                     replay["routing"] = results[n]["routing"]
                 merged[i] = replay
@@ -708,7 +766,9 @@ class DecisionCache:
             `misses` (per state looked up), `conflicts`: decisions computed for a request that
             another run had already stored differently, which were replaced by the stored one,
             and `coalesced`: hits that waited for another thread of this process computing the
-            same request instead of running the model again.
+            same request instead of running the model again, and `errors`: store calls that
+            failed, or stored values that could not be decoded, each of which let its request go
+            on without the cache.
         """
         size = len(self._store)
         with self._lock:

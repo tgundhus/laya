@@ -157,6 +157,12 @@ Run the example file to check it against a Redis server (`REDIS_URL`) or fakered
 standing for two machines, answer one request, and the second replays the first one's decision
 without running its model.
 
+A store that fails never fails a prediction. When a call raises (Redis cannot be reached, a
+SQLite file is locked or its disk is full) or a stored value cannot be decoded, that request is
+answered by the model as if there were no cache, and a value that cannot be decoded is replaced
+by the new decision. The first failure warns, and `cache_info()["errors"]` counts them, so watch
+it where decisions must stay consistent: while the store is down, repeats are recomputed.
+
 ### Concurrent identical requests
 
 When the same request arrives on several threads at once, the first one to miss runs the model
