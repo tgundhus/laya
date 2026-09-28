@@ -157,10 +157,10 @@ def _detection_key(state: Any) -> Optional[bytes]:
 
 
 def _copy_detection(det: Dict[str, Any]) -> Dict[str, Any]:
-    copy = dict(det)
-    if isinstance(copy.get("script_profile"), dict):
-        copy["script_profile"] = dict(copy["script_profile"])
-    return copy
+    # Every nested dict or list gets its own copy, not just today's `script_profile`, so a caller
+    # changing its detection never changes what later requests for the same state are given.
+    return {k: dict(v) if isinstance(v, dict) else list(v) if isinstance(v, list) else v
+            for k, v in det.items()}
 
 
 def _detect(state: Any) -> Dict[str, Any]:
