@@ -18,4 +18,5 @@ nav:
       - reports/consistency-jev-vs-laya.md
       - reports/request-performance.md
       - reports/decision-cache-engineering.md
+      - reports/real-checkpoints-m4-max.md
   - reference

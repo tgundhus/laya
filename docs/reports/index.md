@@ -22,6 +22,9 @@ The detailed reports:
   the CPU fast path and the encode-once spike.
 - [Decision cache engineering](decision-cache-engineering.md): how the cache works, what it
   costs, retention, shared stores, concurrent requests and sharing across backends.
+- [Real checkpoints on an Apple M4 Max](real-checkpoints-m4-max.md): these claims re-measured on
+  the published checkpoints against `main`, plus retention, restarts, concurrency, serving and
+  requests that differ only in formatting.
 
 The user guides these reports feed are [Decision consistency](../consistency.md) and
 [Where a request's time goes](../performance.md).
@@ -73,7 +76,9 @@ It is better on consistency, and no worse on anything else measured:
 
 ## Open items
 
-- **Real checkpoints and other hardware.** Every timing here used random weights on a Xeon.
+- **Real checkpoints and other hardware.** Done on Apple silicon, CPU and MPS: see [Real
+  checkpoints on an Apple M4 Max](real-checkpoints-m4-max.md), which changes the int8 findings.
+  Every other timing here used random weights on a Xeon.
   Run `research/scripts/bench_stages.py --device mps` and `bench_cpu_fast_path.py` on an Apple
   M4 and on a GPU. Check int8's decision agreement on trained checkpoints before serving it.
 - **Fused ONNX attention.** ONNX fp32 is 0.90x of PyTorch on a 1,125-character email, because
