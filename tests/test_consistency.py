@@ -361,11 +361,12 @@ check("coalesce/off: the first decision still wins", len({json.dumps(o["answers"
 
 # different requests never wait for each other
 cache = DecisionCache()
-r, slow, _ = router_with(cache, english=Slow(delay=0.2))
+r, slow, _ = router_with(cache, english=Slow(delay=0.5))
 t0 = time.perf_counter()
 concurrently(4, lambda: r.predict("state %s" % threading.get_ident(), Q))
 check("coalesce/distinct requests all compute", len(slow.calls), 4)
-check_true("coalesce/distinct requests are not serialised", time.perf_counter() - t0 < 0.7,
+# Serialised, four 0.5 s passes take 2 s; together, about 0.5 s. 1.5 s leaves room for a busy runner.
+check_true("coalesce/distinct requests are not serialised", time.perf_counter() - t0 < 1.5,
            "%.2fs" % (time.perf_counter() - t0))
 
 # a batch holding the same request twice runs it once and does not wait on itself
@@ -403,7 +404,8 @@ t0 = time.perf_counter()
 outs = concurrently(4, attempt)
 check("coalesce/one caller sees the failure", sum(isinstance(o, RuntimeError) for o in outs), 1)
 check("coalesce/the rest still get a decision", sum(isinstance(o, dict) for o in outs), 3)
-check_true("coalesce/waiters are released at once, not at the wait bound", time.perf_counter() - t0 < 5,
+# The wait bound is 300 s; released at once takes well under a second, so 30 s is still decisive.
+check_true("coalesce/waiters are released at once, not at the wait bound", time.perf_counter() - t0 < 30,
            "%.2fs" % (time.perf_counter() - t0))
 check("coalesce/the failure leaves no claim", cache._inflight, {})
 
