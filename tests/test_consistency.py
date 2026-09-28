@@ -24,6 +24,7 @@ import laya  # noqa: E402
 import laya.consistency as consistency  # noqa: E402
 from laya import DecisionCache, Router, decision_margins  # noqa: E402
 from laya.agent import Agent  # noqa: E402
+from laya.onnx_agent import ONNXAgent  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -626,6 +627,55 @@ check("long/every window kept: no window was read", (first["usage"]["windows"] >
 third = a.predict_long(DOC + " and a tail the first document did not have", TEAM, window=80, stride=50)
 check("long/some windows kept: the deciding window is still named", "window" in third["answers"]["team"], True)
 check("long/some windows kept: only the windows read are counted",
+      0 < third["usage"]["windows"] < third["answers"]["team"]["window"]["count"], True)
+
+
+# ONNXAgent follows the same rules on its session path: replays are marked per call, and a cached
+# scan is still that scan -- before, every window cached raised, and some cached lost the window.
+def make_onnx_scanner(hooks):
+    """A real ONNXAgent `predict_batch`/`predict_long` over the character tokenizer, session stubbed."""
+    o = ONNXAgent.__new__(ONNXAgent)
+    o.tok, o.cfg, o.model_id = CharTok(), {"max_len": 512, "head_max_len": 192}, "stub/onnx-scanner"
+    o.temperature, o.temperature_by_options, o.lang_temperatures = [1.0, 1.0, 1.0], {}, {}
+    o.hooks, o.hooks_raise, o.hooks_concurrent, o.hooks_timeout = tuple(hooks), True, True, None
+    o._hooks_lock, o._hooks_mutex = None, threading.Lock()
+    o.rows = []
+
+    class Session:
+        def run(self, names, inputs):
+            shape = inputs["marker_pos"].shape
+            o.rows.append(shape[0])
+            return [np.zeros(shape, dtype=np.float32), np.full((shape[0], 2), 0.5, dtype=np.float32)]
+
+    def decode(logits, act, items, ids, internal, offset, **kw):
+        return {q: {"type": "choice", "choice": "billing", "answer_confidence": 0.5, "confidence": 0.5,
+                    "probabilities": {"billing": 0.6, "tech": 0.4}} for q in ids}
+
+    o.session, o._decode_answers = Session(), decode
+    return o
+
+
+o = make_onnx_scanner([DecisionCache()])
+o.predict_batch(["a"], TEAM)
+got = o.predict_batch(["a", "b"], TEAM, min_confidence=0.9)
+check("onnx/abstention: a replay in a partial hit is marked for this call", marked(got[0]), True)
+check("onnx/abstention: the computed answer beside it too", marked(got[1]), True)
+check("onnx/abstention: system_one marks a full hit", marked(o.system_one("a", TEAM, min_confidence=0.9)), True)
+check("onnx/abstention: a replay for a call with no threshold is not marked",
+      marked(o.predict_batch(["b"], TEAM)[0]), None)
+o = make_onnx_scanner([DecisionCache()])
+first = o.predict_long(DOC, TEAM, window=80, stride=50)
+rows = sum(o.rows)
+with warnings.catch_warnings():
+    warnings.simplefilter("error")  # a cached scan is not a hook answering the document
+    second = o.predict_long(DOC, TEAM, window=80, stride=50)
+check("onnx/long: every window kept: the document is answered again", second["answers"], first["answers"])
+check("onnx/long: every window kept: the session does not run", sum(o.rows), rows)
+check("onnx/long: every window kept: no window was read", (first["usage"]["windows"] > 1, second["usage"]["windows"]),
+      (True, 0))
+third = o.predict_long(DOC + " and a tail the first document did not have", TEAM, window=80, stride=50)
+check("onnx/long: some windows kept: the deciding window is still named", "window" in third["answers"]["team"], True)
+check("onnx/long: some windows kept: only the windows read are counted",
       0 < third["usage"]["windows"] < third["answers"]["team"]["window"]["count"], True)
 
 # Router.predict_long scans every window; Router.predict reads one. They must not share an entry.

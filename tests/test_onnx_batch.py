@@ -178,6 +178,18 @@ check_raises("empty/invalid question rejected before any run", ValueError,
 check("budget/max_len and head_max_len forward through the batch path",
       _bare_onnx().predict_batch(STATES, QUESTIONS, max_len=32, head_max_len=16),
       [_bare_onnx().system_one(s, QUESTIONS, max_len=32, head_max_len=16) for s in STATES])
+# The sequence is already cut to max_len when the markers are counted, so the message used to
+# print that cut length as what the question "needs" -- "need 40 tokens, more than max_len=40".
+_crowded = {"many": {"type": "choice", "instructions": "Which?",
+                     "criteria": {"k%d" % i: "a description long enough to push later markers out"
+                                  for i in range(6)}}}
+try:
+    _bare_onnx().predict_batch(STATES[:1], _crowded, max_len=40, head_max_len=200)
+    _overflow = "did not raise"
+except ValueError as e:
+    _overflow = str(e)
+check_true("budget/an option overflow counts the options that fit",
+           "only 1 of its 6 options fit in max_len=40" in _overflow, _overflow)
 
 # ---------------------------------------------------------------- hooks
 seen, events = [], []

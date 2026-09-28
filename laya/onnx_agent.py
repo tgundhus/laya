@@ -365,6 +365,10 @@ class ONNXAgent(HookRegistry):
                     ctx.error.__context__ = hook_exc
                 else:
                     raise
+        if mc is not None and ctx.results:
+            # Again after the end hooks, as on the torch Agent: one may have put back results this
+            # call never marked (a decision cache's replays, which it stores without any marks).
+            flag_low_confidence(ctx.results, mc)
         return ctx.results
 
     def predict_long(self, state: Union[str, dict, list], questions: Dict[str, Dict[str, Any]],
@@ -418,7 +422,7 @@ class ONNXAgent(HookRegistry):
         Returns a single result dict, the same shape as `system_one`, with `usage["windows"]`
         added.
         """
-        from .agent import _start_evidence, _with_start_probe
+        from .agent import _replayed_from_memory, _start_evidence, _with_start_probe
         from .hooks import aggregate_usage
 
         hook_kwargs = {"hooks": hooks, "on_predict_start": on_predict_start,
@@ -460,8 +464,12 @@ class ONNXAgent(HookRegistry):
         # A copy, so a start hook that mutates `ctx.states` in place cannot shift `starts`.
         results = self.predict_batch(list(windows), questions, batch_size=batch_size, lang=lang,
                                      **_with_start_probe(hook_kwargs, probe))
+        # A decision cache answers per window, as on the torch Agent: every window from memory, or
+        # the ones it holds while the session scores the rest. That is still this split, so it is
+        # aggregated and attributed; only the windows the session read count in usage["windows"].
+        from_memory = _replayed_from_memory(evidence, windows, results)
 
-        if evidence["answered"]:
+        if evidence["answered"] and not from_memory:
             # A hook answered the document before any window was scored: pass that answer
             # through unattributed, with no window counted (the torch Agent's rule).
             if len(results) != 1:
@@ -476,7 +484,7 @@ class ONNXAgent(HookRegistry):
             document["usage"]["windows"] = 0
             return document
 
-        rewritten = evidence["states"] is not None and evidence["states"] != windows
+        rewritten = evidence["states"] is not None and evidence["states"] != windows and not from_memory
         if len(results) != len(windows) and not rewritten:
             raise ValueError(
                 "predict_long: the state was split into %d windows and the call returned %d results"
@@ -514,7 +522,8 @@ class ONNXAgent(HookRegistry):
             for key, val in r["usage"].items():
                 usage[key] = (usage.get(key, 0) + val) if isinstance(val, (int, float)) else val
         usage["output_tokens"] = 0
-        usage["windows"] = len(results)
+        usage["windows"] = 0 if evidence["answered"] else len(
+            evidence["states"] if evidence["states"] is not None else results)
         return {"model": "laya-rl-agent-onnx", "answers": answers, "usage": usage}
 
     def _infer(self, state: Union[str, dict, list], questions: Dict[str, Dict[str, Any]],
@@ -552,11 +561,13 @@ class ONNXAgent(HookRegistry):
                 # ceiling that dropped them. Naming only `head_max_len` pointed at the wrong knob
                 # in both directions: lowering it shortens the option block and can make the
                 # call succeed, while raising it makes the overflow worse.
+                # `seq` is already cut to `max_len`, so its length cannot say how far over the
+                # question is; the options that kept their marker can.
                 raise ValueError(
-                    "question %r: its %d options and question text need %d tokens, more than "
-                    "max_len=%d allows once head_max_len=%d is spent on them; lower head_max_len, "
-                    "raise max_len, or use fewer options"
-                    % (qid, n_opts, len(seq), max_len, head_max_len))
+                    "question %r: only %d of its %d options fit in max_len=%d once "
+                    "head_max_len=%d is spent on them; lower head_max_len, raise max_len, or use "
+                    "fewer options"
+                    % (qid, len(markers), n_opts, max_len, head_max_len))
             items.append({"ids": seq, "markers": markers, "qtype": QTYPES[q["t"]], "options": stats})
         return items
 
