@@ -2,7 +2,7 @@
 title: Real checkpoints on an Apple M4 Max
 description: The branch's consistency, decision-memory and speed claims re-measured on the published checkpoints against main, and the benchmarks the first round left out.
 type: report
-specificity: "Branch claude/blissful-keller-kuw2r7 at 8f4fd31 against main at 4066d5d. The published checkpoints convaiinnovations/laya (english, revision 55cf4c4e) and its multilingual subfolder, in float32 unless a row says otherwise. Apple M4 Max (10 performance and 4 efficiency cores, 36 GB), macOS 26.3.1, Python 3.11.16, PyTorch 2.14.0 (10 threads), ONNX Runtime 1.30.0, SQLite 3.53.1. 841 requests: the 13 English scenarios, the 128 Feishu requests and 700 MASSIVE intent cases in 11 languages."
+specificity: "Branch claude/blissful-keller-kuw2r7 at 8f4fd31 against main at 4066d5d; the merge section, branch merge/upstream-0.3.21 against upstream v0.3.21 (9d95567). The published checkpoints convaiinnovations/laya (english, revision 55cf4c4e) and its multilingual subfolder, in float32 unless a row says otherwise. Apple M4 Max (10 performance and 4 efficiency cores, 36 GB), macOS 26.3.1, Python 3.11.16, PyTorch 2.14.0 (10 threads), ONNX Runtime 1.30.0, SQLite 3.53.1. 841 requests: the 13 English scenarios, the 128 Feishu requests and 700 MASSIVE intent cases in 11 languages."
 credibility: "Answers, agreement, accuracy, retention and restart results are counts, and do not depend on timing. Timings were taken while other work on the machine held the load average between 25 and 60 (headless browsers running other projects' test suites, which also used the GPU), so every latency comparison alternates the two sides and carries a 95% bootstrap interval. An A/A run of main against itself put the noise floor of separate-process comparisons at about 15%; the same-model test, which runs both sides around one model in one process, resolves new-request differences to 1-5%. No GPU and no x86 runs."
 ---
 
@@ -86,9 +86,9 @@ What this says:
   on 407 MASSIVE cases) while changing 131 of those 407 decisions. The first round's "every
   changed answer had an fp32 margin of at most 0.0006" was an artefact of random weights.
 - **Per-channel weights cut int8's damage by 70%.** Quantizing the ONNX weights per channel
-  instead of per tensor, one argument in `scripts/export_onnx.py` (`per_channel=True`), changed 10
-  decisions instead of 35, at the same file size (581 MB) and accuracy. A few confident answers
-  still flip.
+  instead of per tensor changed 10 decisions instead of 35, at the same file size (581 MB) and
+  accuracy. A few confident answers still flip. Laya 0.3.21's `--quantize` does exactly this, and
+  since the merge `scripts/export_onnx.py` uses it (`--int8` is kept as another name for it).
 
 ### Margins as a review filter
 
@@ -384,7 +384,10 @@ This is the largest source of changing answers measured here, far larger than ha
 precision, and the cache cannot help: each variant is a new request. Nearly all of it is in long
 option lists (the 20-option MASSIVE questions) and hard questions (Feishu, where fp32 is right
 31% of the time); the 3- to 5-option questions of the English scenarios did not flip on reordering.
-The flips are confident ones, so margins do not flag them either.
+The flips are confident ones, so margins do not flag them either. Laya 0.3.21's new
+`usage["options"]` report shows part of why: on 147 of the 841 requests, every one a 20-option
+MASSIVE question, the head budget leaves fewer distinct option spans than options (18 of 20), so
+which options merge depends on their order.
 
 Two things would remove most of it:
 
@@ -396,6 +399,44 @@ Two things would remove most of it:
 - **Normalise whitespace before the model and the key.** A hook placed before the cache that
   collapses runs of whitespace and strips the ends of string states makes the model see, and the
   cache key, one canonical text. Trailing spaces and doubled spaces then become exact repeats.
+
+## Merging Laya 0.3.21
+
+Laya-Pro then merged the original's release
+[0.3.21](https://github.com/NandhaKishorM/laya/releases/tag/v0.3.21) (114 pull requests). Where
+upstream had changed what the fork changed, the merged code was measured against Laya 0.3.21 as
+released, on the same machine (`research/results/upstream0321_*_m4max_20260929.json`):
+
+| check | result |
+|---|---|
+| Answers against 0.3.21, 841 requests | byte-identical on CPU and on MPS: 841 of 841 |
+| Language detection against 0.3.21, 179,214 inputs (upstream's #531 and the fork's shortcuts together) | identical, and 1.11-1.20x faster |
+| Tokenizing the state and question rows (0.3.21 reuses them within a call, #615; the fork keeps the question head across calls) | 1.4-6.8x faster on CPU: 0.83 → 0.12 ms for 10 questions, 9.3 → 2.2 ms for a batch of 32 |
+| A new request around one model, against 0.3.21 | MPS: 0.4-2.7% faster in all seven requests, five with intervals clear of 1. CPU: level; a batch of 32 is 1% faster |
+| MPS consistency after #559 changed the decision head's attention | unchanged: 0 decisions changed in fp32, the same 4 of 1,076 in fp16, 841 of 841 replayed |
+| Upstream's per-channel int8 export (#498) | 10 of 349 decisions changed, as the per-channel test above found, against 35 per tensor; accuracy 64.5%; 600 MB |
+| A `DecisionCache` hit after upstream's hook changes | 31 µs in memory, 36 µs on SQLite: no slower |
+| Answers against Laya-Pro before the merge (MPS) | 694 of 841 byte-identical. The other 147 differ only by 0.3.21's new `usage["options"]` report, which says that a 20-option MASSIVE question kept 18 distinct option spans under the head budget. No probability changed. |
+
+The merge needed four fixes, each with tests:
+
+- **`build_sequence` would have failed every prediction.** Git kept upstream's new `return_stats`
+  parameter but the fork's cached body, which ignored it, while `Agent` and `ONNXAgent` ask for
+  three values. The cached question head now carries upstream's option statistics.
+- **Abstention marks.** `min_confidence` marks answers before end hooks run, so the cache stored one
+  call's `low_confidence` marks and replayed them to calls with another threshold or none, and a
+  partial hit's replays went unmarked. The cache now stores answers unmarked, and the engine marks
+  again after its end hooks.
+- **`Agent.predict_long`** raised `ValueError` once every window of a document was cached, and lost
+  the deciding window's attribution when some were. A cache answering one result per window is now
+  aggregated as the scan it is.
+- **`Router.predict_long`** and `Router.predict` shared a cache entry for the same state, so each
+  replayed the other's answer. `PredictContext.scan` now tells the cache which it is answering.
+
+Upstream's `test_question_token_reuse` counts tokenizer calls for its reuse within one call, so it
+runs with the fork's cache across calls switched off, and a new test checks the two together. The
+version moved to 0.3.21, which is part of the cache's fingerprint: decisions stored before the
+merge are not replayed after it.
 
 ## What this changes in the other reports
 

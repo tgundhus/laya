@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.11.16",
+    "dataset": "mteb/amazon_massive_intent",
+    "inputs": {
+      "utterances": 151674,
+      "long texts": 2040,
+      "dict states": 25500
+    },
+    "rounds": 3
+  },
+  "compared": 179214,
+  "identical": 179214,
+  "differ": [],
+  "digest_base": "a2ae64f42026cd09",
+  "digest_head": "a2ae64f42026cd09",
+  "cpu_s_best_of_rounds": {
+    "base": {
+      "utterances": 3.847,
+      "long texts": 2.67,
+      "dict states": 0.663
+    },
+    "head": {
+      "utterances": 3.263,
+      "long texts": 2.4,
+      "dict states": 0.555
+    }
+  },
+  "speedup": {
+    "utterances": 1.179,
+    "long texts": 1.113,
+    "dict states": 1.195
+  },
+  "us_per_input": {
+    "base": {
+      "utterances": 25.36,
+      "long texts": 1308.82,
+      "dict states": 26.0
+    },
+    "head": {
+      "utterances": 21.51,
+      "long texts": 1176.47,
+      "dict states": 21.76
+    }
+  }
+}
