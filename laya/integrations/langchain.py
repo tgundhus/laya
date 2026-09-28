@@ -346,10 +346,15 @@ class _BatchedRunnable:
         """The async entry point, on the same batched call (`batch` is synchronous torch work)."""
         from langchain_core.runnables.config import run_in_executor
 
+        inputs = list(inputs)
+        if not inputs:
+            # As `batch` does. An empty fan-out can arrive with an empty list of configs, which
+            # has no first config to take the executor settings from.
+            return []
         # `batch` is blocking torch work, so it goes to the executor like any other sync
         # Runnable; the first config carries the executor settings (`RunnableSequence`
         # hands a step a list of per-input configs, not one).
-        executor_config = _per_input_config(config, max(len(inputs), 1))[0]
+        executor_config = _per_input_config(config, len(inputs))[0]
         return await run_in_executor(
             executor_config, self.batch, inputs, config,
             return_exceptions=return_exceptions, **kwargs

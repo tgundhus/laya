@@ -392,7 +392,8 @@ class Router(HookRegistry):
     is no Router-wide equivalent of `revision` because digests, unlike a commit SHA, are not
     shareable: the bundled repository ships a separate `model.safetensors` for each of
     `english`, `multilingual` and `typed-decisions`, so one flat map can only ever match one
-    of them. A model listed with `None` or `{}` is loaded unverified.
+    of them. A model listed with `None` or `{}` is loaded unverified, unless `agent_kwargs`
+    carries an `expected_sha256` map: an empty entry never removes a pin.
 
     The same split is available to a process configured only by environment: when
     `LAYA_SHA256_DIGESTS` holds a model-keyed map (`{"english": {...}, "multilingual": {...}}`)
@@ -505,10 +506,14 @@ class Router(HookRegistry):
                 kwargs["revision"] = model_revision
             # Safe to merge last: the names this method just set are refused in `agent_kwargs`.
             kwargs.update(self.agent_kwargs)
-            if key in self.sha256_digests:
+            pinned = self.sha256_digests.get(key)
+            if key in self.sha256_digests and (pinned or "expected_sha256" not in self.agent_kwargs):
                 # `or {}` is deliberate: an explicit None still has to reach Agent as a map, or
-                # `verify_digests` would fall back to the environment default it is masking.
-                kwargs["expected_sha256"] = self.sha256_digests[key] or {}
+                # `verify_digests` would fall back to the environment default it is masking. An
+                # empty entry -- including the `{}` a model-keyed LAYA_SHA256_DIGESTS gives every
+                # model it leaves out -- never replaces a map passed in `agent_kwargs`, or that
+                # pin would be dropped and the weights loaded unverified without a word.
+                kwargs["expected_sha256"] = pinned or {}
             agent = Agent(repo, **kwargs)
             self._agents[key] = agent
             self._order.append(key)
@@ -1168,30 +1173,28 @@ class Router(HookRegistry):
                         batch_kwargs["sort_by_length"] = True
                     skip = _SKIP_DEFAULTS.set(True)
                     try:
-                        batch_results = agent.predict_batch(
-                            [ctx.states[0] for _, ctx in items],
-                            group["questions"],
-                            batch_size=batch_size,
-                            **batch_kwargs,
-                        )
-                    except TypeError as e:
-                        # Same tolerance `predict` has for an Agent-like object whose
-                        # `predict_batch` predates the `lang` (or `sort_by_length`) argument.
-                        retried = False
-                        for kwarg in ("lang", "sort_by_length"):
-                            if batch_kwargs.get(kwarg) is not None and \
-                                    "unexpected keyword argument '%s'" % kwarg in str(e):
-                                batch_kwargs.pop(kwarg)
-                                retried = True
-                        if retried:
-                            batch_results = agent.predict_batch(
-                                [ctx.states[0] for _, ctx in items],
-                                group["questions"],
-                                batch_size=batch_size,
-                                **batch_kwargs,
-                            )
-                        else:
-                            raise
+                        while True:
+                            try:
+                                batch_results = agent.predict_batch(
+                                    [ctx.states[0] for _, ctx in items],
+                                    group["questions"],
+                                    batch_size=batch_size,
+                                    **batch_kwargs,
+                                )
+                                break
+                            except TypeError as e:
+                                # Same tolerance `predict` has for an Agent-like object whose
+                                # `predict_batch` predates the `lang` (or `sort_by_length`)
+                                # argument. Python names one unexpected keyword per TypeError,
+                                # so an agent that predates both is retried once per keyword.
+                                dropped = next(
+                                    (kwarg for kwarg in ("lang", "sort_by_length")
+                                     if batch_kwargs.get(kwarg) is not None
+                                     and "unexpected keyword argument '%s'" % kwarg in str(e)),
+                                    None)
+                                if dropped is None:
+                                    raise
+                                batch_kwargs.pop(dropped)
                     finally:
                         _SKIP_DEFAULTS.reset(skip)
 

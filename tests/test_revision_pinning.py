@@ -498,6 +498,20 @@ class RouterEnvDigestTests(unittest.TestCase):
         with self._env(json.dumps({"en": self.ENGLISH})):
             self.assertEqual(Router().sha256_digests["english"], self.ENGLISH)
 
+    def test_an_empty_entry_never_drops_a_pin_passed_in_agent_kwargs(self):
+        # The model-keyed map gives every checkpoint it leaves out `{}`, and that `{}` replaced
+        # the caller's own map, so `typed-decisions` below loaded with no digest check at all.
+        pin = {"model.safetensors": "d" * 64}
+        with self._env(json.dumps({"english": self.ENGLISH})):
+            router = Router(agent_kwargs={"expected_sha256": pin}, sha256_digests={"multilingual": None})
+            capture, captured = self._capture()
+            with capture:
+                for name in ("english", "multilingual", "typed-decisions"):
+                    router.load(name)
+        # A map named for the checkpoint still wins over the Router-wide one; an empty entry,
+        # given or implied, leaves the pin in place rather than turning verification off.
+        self.assertEqual([c["expected_sha256"] for c in captured], [self.ENGLISH, pin, pin])
+
     def test_argument_wins_for_the_checkpoint_it_names(self):
         with self._env(json.dumps({"english": self.ENGLISH, "multilingual": self.MULTI})):
             router = Router(sha256_digests={"english": {"model.safetensors": "c" * 64}})

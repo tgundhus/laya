@@ -566,6 +566,10 @@ if _RUNNABLE_AVAILABLE:
     check("batch/abatch per-input configs",
           asyncio.run(ab_node.abatch(ROUTER_INPUTS, [{"tags": ["a"]}, {"tags": ["b"]},
                                                      {"tags": ["c"]}])), ab_outputs)
+    # An empty fan-out brings an empty list of configs, which has no first one to read.
+    before = len(ab_agent.batch_calls)
+    check("batch/abatch empty input with list config", asyncio.run(ab_node.abatch([], [])), [])
+    check("batch/abatch empty input runs nothing", len(ab_agent.batch_calls), before)
     # The way LCEL actually reaches it: a step inside a chain, sync and async.
     from langchain_core.runnables import RunnableLambda
 

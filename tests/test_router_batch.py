@@ -557,3 +557,28 @@ def test_sort_by_length_is_dropped_for_agents_that_predate_it(monkeypatch):
     assert len(results) == 2
     assert [c["sort"] for c in calls] == ["unsupported"]  # one group, retry without the knob
     assert [r["routing"]["model"] for r in results] == ["english", "english"]
+
+
+def test_an_agent_that_predates_both_lang_and_sort_by_length_still_serves(monkeypatch):
+    """Python names one unexpected keyword per TypeError, so the single retry dropped only the
+    one the first error named and then raised on the other, out of a batch it meant to serve."""
+    import laya.agent
+
+    calls = []
+
+    class Agent:
+        lang_temperatures = {"de": [1.5, 1.5, 1.5]}  # so the batch forwards `lang`
+
+        def __init__(self, repo, *, device, token, subfolder):
+            pass
+
+        def predict_batch(self, states, questions, batch_size=None):
+            calls.append(len(states))
+            return [{"model": "fake", "answers": {}, "usage": {}} for _ in states]
+
+    monkeypatch.setattr(laya.agent, "Agent", Agent)
+    router = Router(max_loaded=1, default="english")
+    results = router.predict_batch([request("a", model="english", lang="de"),
+                                    request("b", model="english", lang="de")], sort_by_length=True)
+    assert [r["routing"]["model"] for r in results] == ["english", "english"]
+    assert calls == [2]  # both keywords dropped, then one call for the group
