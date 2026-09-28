@@ -123,10 +123,11 @@ The same pair works on a single [LangChain](../langchain.md) node via its `hooks
 is the way to cache one hot step in a graph without changing what every other caller of that agent
 sees.
 
-This sketch keeps every decision forever, keys option orders together although the model reads
-them positionally, and hands the stored object to every caller. `laya.DecisionCache` is the
-shipped version: bounded, expiring, optionally persistent, and keyed on the model that answered;
-see [Decision consistency](../consistency.md).
+This sketch keeps every decision forever, answers from the cache only when every state of a call
+hits, keys on the checkpoint's name rather than the model that answered (so a new revision or
+calibration replays old decisions), and hands the stored object to every caller.
+`laya.DecisionCache` is the shipped version: bounded, expiring, optionally persistent, keyed on the
+model that answered, and it replays per state; see [Decision consistency](../consistency.md).
 
 ### Metrics
 
