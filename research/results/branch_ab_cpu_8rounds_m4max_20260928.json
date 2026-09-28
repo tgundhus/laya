@@ -1,0 +1,329 @@
+{
+  "meta": {
+    "base": {
+      "root": "../laya-main",
+      "laya": "0.3.20",
+      "import_laya_s": 0.025,
+      "torch": "2.14.0",
+      "device": "cpu",
+      "torch_threads": 10,
+      "rss_mb_loaded": 3620.0,
+      "rss_mb_end": 2935.8
+    },
+    "head": {
+      "root": ".",
+      "laya": "0.3.20",
+      "import_laya_s": 0.036,
+      "torch": "2.14.0",
+      "device": "cpu",
+      "torch_threads": 10,
+      "rss_mb_loaded": 3619.4,
+      "rss_mb_end": 3066.2
+    },
+    "device": "cpu",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "load_average_at_end": [
+      46.7158203125,
+      50.29833984375,
+      51.1884765625
+    ],
+    "rounds": 8,
+    "repeats": 8,
+    "warmup": 2,
+    "requests": "req_smoke.jsonl"
+  },
+  "answers_repeatable_across_rounds": {
+    "base": true,
+    "head": true
+  },
+  "answer_runs_per_checkout": 2,
+  "latency": {
+    "english ticket, 1 question": {
+      "base_median_ms": 82.603,
+      "head_median_ms": 94.086,
+      "saved_ms": -11.483,
+      "speedup_ci95": [
+        0.878,
+        0.8282,
+        0.9782
+      ],
+      "speedup_ci95_by_round": [
+        0.8864,
+        0.8315,
+        1.0176
+      ],
+      "samples": 64
+    },
+    "english ticket, 3 questions": {
+      "base_median_ms": 151.221,
+      "head_median_ms": 174.176,
+      "saved_ms": -22.955,
+      "speedup_ci95": [
+        0.8682,
+        0.8021,
+        0.9361
+      ],
+      "speedup_ci95_by_round": [
+        0.8686,
+        0.7574,
+        0.9704
+      ],
+      "samples": 64
+    },
+    "multilingual ticket, 3 questions": {
+      "base_median_ms": 68.396,
+      "head_median_ms": 75.357,
+      "saved_ms": -6.961,
+      "speedup_ci95": [
+        0.9076,
+        0.8825,
+        0.9759
+      ],
+      "speedup_ci95_by_round": [
+        0.9184,
+        0.8518,
+        1.0019
+      ],
+      "samples": 64
+    },
+    "english email, 3 questions": {
+      "base_median_ms": 508.479,
+      "head_median_ms": 523.521,
+      "saved_ms": -15.042,
+      "speedup_ci95": [
+        0.9713,
+        0.9404,
+        1.0165
+      ],
+      "speedup_ci95_by_round": [
+        0.9855,
+        0.9192,
+        1.0415
+      ],
+      "samples": 64
+    }
+  },
+  "prep": {
+    "english ticket, 1 question": {
+      "routing": {
+        "base_median_ms": 0.039,
+        "head_median_ms": 0.026,
+        "saved_ms": 0.013,
+        "speedup_ci95": [
+          1.5308,
+          1.472,
+          1.5827
+        ],
+        "speedup_ci95_by_round": [
+          1.5553,
+          1.4008,
+          1.6276
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.128,
+        "head_median_ms": 0.05,
+        "saved_ms": 0.078,
+        "speedup_ci95": [
+          2.5638,
+          2.4712,
+          2.6217
+        ],
+        "speedup_ci95_by_round": [
+          2.5807,
+          2.4401,
+          2.8696
+        ]
+      }
+    },
+    "english ticket, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.039,
+        "head_median_ms": 0.025,
+        "saved_ms": 0.014,
+        "speedup_ci95": [
+          1.5717,
+          1.4646,
+          1.6432
+        ],
+        "speedup_ci95_by_round": [
+          1.5328,
+          1.3154,
+          1.7493
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.322,
+        "head_median_ms": 0.063,
+        "saved_ms": 0.259,
+        "speedup_ci95": [
+          5.1133,
+          5.0029,
+          5.3613
+        ],
+        "speedup_ci95_by_round": [
+          5.0265,
+          4.026,
+          5.4545
+        ]
+      }
+    },
+    "multilingual ticket, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.038,
+        "head_median_ms": 0.024,
+        "saved_ms": 0.014,
+        "speedup_ci95": [
+          1.5568,
+          1.4671,
+          1.6091
+        ],
+        "speedup_ci95_by_round": [
+          1.5804,
+          1.3899,
+          1.6601
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.285,
+        "head_median_ms": 0.052,
+        "saved_ms": 0.233,
+        "speedup_ci95": [
+          5.5406,
+          5.2812,
+          5.7577
+        ],
+        "speedup_ci95_by_round": [
+          5.5687,
+          4.9385,
+          5.9155
+        ]
+      }
+    },
+    "english email, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.565,
+        "head_median_ms": 0.333,
+        "saved_ms": 0.232,
+        "speedup_ci95": [
+          1.6955,
+          1.6343,
+          1.7347
+        ],
+        "speedup_ci95_by_round": [
+          1.6998,
+          1.6358,
+          1.7564
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.572,
+        "head_median_ms": 0.317,
+        "saved_ms": 0.255,
+        "speedup_ci95": [
+          1.8083,
+          1.7677,
+          1.8763
+        ],
+        "speedup_ci95_by_round": [
+          1.8612,
+          1.7792,
+          1.9453
+        ]
+      }
+    }
+  },
+  "import_laya_s": {
+    "base": [
+      0.025,
+      0.034,
+      0.03,
+      0.032,
+      0.039,
+      0.036,
+      0.032,
+      0.025
+    ],
+    "head": [
+      0.036,
+      0.035,
+      0.035,
+      0.033,
+      0.036,
+      0.039,
+      0.04,
+      0.035
+    ]
+  },
+  "rss_mb": {
+    "base": [
+      [
+        3620.0,
+        2935.8
+      ],
+      [
+        3616.4,
+        4003.8
+      ],
+      [
+        3619.4,
+        3976.5
+      ],
+      [
+        3616.9,
+        4002.3
+      ],
+      [
+        3617.7,
+        4006.7
+      ],
+      [
+        3616.6,
+        4006.8
+      ],
+      [
+        3617.7,
+        4003.5
+      ],
+      [
+        3620.5,
+        4008.2
+      ]
+    ],
+    "head": [
+      [
+        3619.4,
+        3066.2
+      ],
+      [
+        3618.9,
+        2286.7
+      ],
+      [
+        3615.9,
+        4003.1
+      ],
+      [
+        3619.0,
+        4003.2
+      ],
+      [
+        3616.5,
+        4003.1
+      ],
+      [
+        3615.8,
+        4003.8
+      ],
+      [
+        3622.3,
+        2485.7
+      ],
+      [
+        3622.1,
+        3422.4
+      ]
+    ]
+  }
+}

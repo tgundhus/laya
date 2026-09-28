@@ -1,0 +1,397 @@
+{
+  "meta": {
+    "laya": "0.3.20",
+    "python": "3.11.16",
+    "machine": "arm64",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "sqlite": "3.53.1",
+    "renew_fraction": 0.0625
+  },
+  "exactness": {
+    "memory": {
+      "fixed ttl 1 h": {
+        "events": 40000,
+        "hits": 34312,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 0,
+        "renewal_writes_per_key_per_ttl_max": 0.0,
+        "store_writes_per_hit": 0.0
+      },
+      "fixed ttl 30 days": {
+        "events": 40000,
+        "hits": 34312,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 0,
+        "renewal_writes_per_key_per_ttl_max": 0.0,
+        "store_writes_per_hit": 0.0
+      },
+      "ttl 1 h, renew_on_hit": {
+        "events": 40000,
+        "hits": 37844,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 19522,
+        "renewal_writes_per_key_per_ttl_max": 15.67,
+        "store_writes_per_hit": 0.5159
+      },
+      "ttl function (per question set, 5 min for borderline answers)": {
+        "events": 40000,
+        "hits": 19569,
+        "outcome_disagreements": 0,
+        "per_question_set": {
+          "billing": {
+            "requests": 9871,
+            "hits": 9271
+          },
+          "urgency": {
+            "requests": 9975,
+            "hits": 567
+          },
+          "spam": {
+            "requests": 10123,
+            "hits": 0
+          },
+          "policy": {
+            "requests": 10031,
+            "hits": 9731
+          }
+        }
+      },
+      "maxsize 1,000, no ttl": {
+        "maxsize": 1000,
+        "stored": 14002,
+        "held_at_end": 1000,
+        "held_max_seen": 1000,
+        "held_not_newest": 0
+      }
+    },
+    "sqlite": {
+      "fixed ttl 1 h": {
+        "events": 40000,
+        "hits": 34312,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 0,
+        "renewal_writes_per_key_per_ttl_max": 0.0,
+        "store_writes_per_hit": 0.0
+      },
+      "fixed ttl 30 days": {
+        "events": 40000,
+        "hits": 34312,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 0,
+        "renewal_writes_per_key_per_ttl_max": 0.0,
+        "store_writes_per_hit": 0.0
+      },
+      "ttl 1 h, renew_on_hit": {
+        "events": 40000,
+        "hits": 37844,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 19522,
+        "renewal_writes_per_key_per_ttl_max": 15.67,
+        "store_writes_per_hit": 0.5159
+      },
+      "ttl function (per question set, 5 min for borderline answers)": {
+        "events": 40000,
+        "hits": 19569,
+        "outcome_disagreements": 0,
+        "per_question_set": {
+          "billing": {
+            "requests": 9871,
+            "hits": 9271
+          },
+          "urgency": {
+            "requests": 9975,
+            "hits": 567
+          },
+          "spam": {
+            "requests": 10123,
+            "hits": 0
+          },
+          "policy": {
+            "requests": 10031,
+            "hits": 9731
+          }
+        }
+      },
+      "maxsize 1,000, no ttl": {
+        "maxsize": 1000,
+        "stored": 14002,
+        "held_at_end": 1002,
+        "held_max_seen": 1099,
+        "held_not_newest": 0
+      }
+    }
+  },
+  "simulate": {
+    "trace": {
+      "requests": 300000,
+      "days": 30,
+      "recurring_universe": 60000,
+      "zipf_s": 1.0,
+      "one_off_share": 0.3,
+      "distinct": 121837
+    },
+    "runs": {
+      "memory, ttl 1 h": {
+        "requests": 300000,
+        "replayed": 69359,
+        "replayed_share": 0.2312,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 69359,
+        "repeats_given_earlier_decision_share": 0.3893,
+        "forward_passes": 230641,
+        "re_decisions": 108804,
+        "held_max": 3546,
+        "held_end": 1452,
+        "store_writes": 230641,
+        "renewal_writes": 0,
+        "wall_s": 44.8
+      },
+      "memory, ttl 1 h, renew_on_hit": {
+        "requests": 300000,
+        "replayed": 79499,
+        "replayed_share": 0.265,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 79499,
+        "repeats_given_earlier_decision_share": 0.4462,
+        "forward_passes": 220501,
+        "re_decisions": 98664,
+        "held_max": 3715,
+        "held_end": 3317,
+        "store_writes": 276144,
+        "renewal_writes": 55643,
+        "wall_s": 132.2
+      },
+      "memory, ttl 1 day": {
+        "requests": 300000,
+        "replayed": 126123,
+        "replayed_share": 0.4204,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 126123,
+        "repeats_given_earlier_decision_share": 0.7079,
+        "forward_passes": 173877,
+        "re_decisions": 52040,
+        "held_max": 9581,
+        "held_end": 7633,
+        "store_writes": 173877,
+        "renewal_writes": 0,
+        "wall_s": 21.0
+      },
+      "memory, ttl 1 day, renew_on_hit": {
+        "requests": 300000,
+        "replayed": 136256,
+        "replayed_share": 0.4542,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 136256,
+        "repeats_given_earlier_decision_share": 0.7648,
+        "forward_passes": 163744,
+        "re_decisions": 41907,
+        "held_max": 9987,
+        "held_end": 9955,
+        "store_writes": 223357,
+        "renewal_writes": 59613,
+        "wall_s": 102.1
+      },
+      "memory, ttl 7 days": {
+        "requests": 300000,
+        "replayed": 158659,
+        "replayed_share": 0.5289,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 158659,
+        "repeats_given_earlier_decision_share": 0.8905,
+        "forward_passes": 141341,
+        "re_decisions": 19504,
+        "held_max": 40392,
+        "held_end": 36327,
+        "store_writes": 141341,
+        "renewal_writes": 0,
+        "wall_s": 147.2
+      },
+      "memory, ttl 7 days, renew_on_hit": {
+        "requests": 300000,
+        "replayed": 166972,
+        "replayed_share": 0.5566,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 166972,
+        "repeats_given_earlier_decision_share": 0.9372,
+        "forward_passes": 133028,
+        "re_decisions": 11191,
+        "held_max": 41821,
+        "held_end": 41821,
+        "store_writes": 188560,
+        "renewal_writes": 55532,
+        "wall_s": 199.5
+      },
+      "memory, ttl 30 days": {
+        "requests": 300000,
+        "replayed": 175032,
+        "replayed_share": 0.5834,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 175032,
+        "repeats_given_earlier_decision_share": 0.9824,
+        "forward_passes": 124968,
+        "re_decisions": 3131,
+        "held_max": 100000,
+        "held_end": 100000,
+        "store_writes": 124968,
+        "renewal_writes": 0,
+        "wall_s": 65.8
+      },
+      "memory, ttl 30 days, renew_on_hit": {
+        "requests": 300000,
+        "replayed": 177829,
+        "replayed_share": 0.5928,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 177829,
+        "repeats_given_earlier_decision_share": 0.9981,
+        "forward_passes": 122171,
+        "re_decisions": 334,
+        "held_max": 100000,
+        "held_end": 100000,
+        "store_writes": 162874,
+        "renewal_writes": 40703,
+        "wall_s": 18.8
+      },
+      "memory, ttl none": {
+        "requests": 300000,
+        "replayed": 175032,
+        "replayed_share": 0.5834,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 175032,
+        "repeats_given_earlier_decision_share": 0.9824,
+        "forward_passes": 124968,
+        "re_decisions": 3131,
+        "held_max": 100000,
+        "held_end": 100000,
+        "store_writes": 124968,
+        "renewal_writes": 0,
+        "wall_s": 12.0
+      },
+      "memory, ttl 7 days, renew_on_hit, maxsize 10000": {
+        "requests": 300000,
+        "replayed": 145491,
+        "replayed_share": 0.485,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 145491,
+        "repeats_given_earlier_decision_share": 0.8166,
+        "forward_passes": 154509,
+        "re_decisions": 32672,
+        "held_max": 10000,
+        "held_end": 10000,
+        "store_writes": 188560,
+        "renewal_writes": 34051,
+        "wall_s": 17.9
+      },
+      "memory, ttl 7 days, renew_on_hit, maxsize 30000": {
+        "requests": 300000,
+        "replayed": 164976,
+        "replayed_share": 0.5499,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 164976,
+        "repeats_given_earlier_decision_share": 0.926,
+        "forward_passes": 135024,
+        "re_decisions": 13187,
+        "held_max": 30000,
+        "held_end": 30000,
+        "store_writes": 188560,
+        "renewal_writes": 53536,
+        "wall_s": 17.4
+      },
+      "memory, ttl 7 days, renew_on_hit, maxsize None": {
+        "requests": 300000,
+        "replayed": 166972,
+        "replayed_share": 0.5566,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 166972,
+        "repeats_given_earlier_decision_share": 0.9372,
+        "forward_passes": 133028,
+        "re_decisions": 11191,
+        "held_max": 41821,
+        "held_end": 41821,
+        "store_writes": 188560,
+        "renewal_writes": 55532,
+        "wall_s": 13.9
+      },
+      "memory, ttl 7 days, renew_on_hit, restarted daily": {
+        "requests": 300000,
+        "replayed": 118846,
+        "replayed_share": 0.3962,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 118846,
+        "repeats_given_earlier_decision_share": 0.6671,
+        "forward_passes": 181154,
+        "re_decisions": 59317,
+        "held_max": 6162,
+        "held_end": 6077,
+        "store_writes": 192337,
+        "renewal_writes": 11183,
+        "wall_s": 15.6
+      },
+      "sqlite, ttl 7 days, renew_on_hit (survives restarts)": {
+        "requests": 300000,
+        "replayed": 166972,
+        "replayed_share": 0.5566,
+        "repeats": 178163,
+        "repeats_given_earlier_decision": 166972,
+        "repeats_given_earlier_decision_share": 0.9372,
+        "forward_passes": 133028,
+        "re_decisions": 11191,
+        "held_max": 35241,
+        "held_end": 34319,
+        "store_writes": 188560,
+        "renewal_writes": 55532,
+        "wall_s": 96.2
+      }
+    }
+  },
+  "restart": {
+    "decisions": 20000,
+    "1. first process computes and stores": {
+      "open_ms": 1.954,
+      "first_request_ms": 0.326,
+      "median_request_us": 89.92,
+      "p99_request_us": 671.58,
+      "replayed": 0,
+      "replayed_first_decision": 0,
+      "computed": 20000,
+      "held": 20000
+    },
+    "2. a fresh process, same model": {
+      "open_ms": 0.763,
+      "first_request_ms": 0.135,
+      "median_request_us": 24.67,
+      "p99_request_us": 140.42,
+      "replayed": 20000,
+      "replayed_first_decision": 20000,
+      "computed": 0,
+      "held": 20000
+    },
+    "3. a fresh process after a model upgrade (new fingerprint)": {
+      "open_ms": 2.516,
+      "first_request_ms": 0.917,
+      "median_request_us": 97.13,
+      "p99_request_us": 682.83,
+      "replayed": 0,
+      "replayed_first_decision": 0,
+      "computed": 20000,
+      "held": 40000
+    },
+    "4. a fresh process 31 days later, same model": {
+      "open_ms": 0.815,
+      "first_request_ms": 0.622,
+      "median_request_us": 91.25,
+      "p99_request_us": 878.12,
+      "replayed": 0,
+      "replayed_first_decision": 0,
+      "computed": 20000,
+      "held": 40000
+    },
+    "file_bytes": 13844480,
+    "rows": 40000
+  }
+}

@@ -1,0 +1,333 @@
+{
+  "meta": {
+    "base": {
+      "root": "../laya-main",
+      "laya": "0.3.20",
+      "import_laya_s": 0.029,
+      "torch": "2.14.0",
+      "device": "mps",
+      "torch_threads": 10,
+      "rss_mb_loaded": 1047.0,
+      "rss_mb_end": 1152.5
+    },
+    "head": {
+      "root": ".",
+      "laya": "0.3.20",
+      "import_laya_s": 0.031,
+      "torch": "2.14.0",
+      "device": "mps",
+      "torch_threads": 10,
+      "rss_mb_loaded": 1043.0,
+      "rss_mb_end": 1307.2
+    },
+    "device": "mps",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "load_average_at_end": [
+      56.19580078125,
+      46.2060546875,
+      44.5146484375
+    ],
+    "rounds": 4,
+    "repeats": 12,
+    "warmup": 3,
+    "requests": "requests.jsonl"
+  },
+  "answers_base_vs_head": {
+    "identical": 841,
+    "requests": 841,
+    "differ": []
+  },
+  "answers_repeatable_across_rounds": {
+    "base": true,
+    "head": true
+  },
+  "answer_runs_per_checkout": 2,
+  "latency": {
+    "english ticket, 1 question": {
+      "base_median_ms": 38.327,
+      "head_median_ms": 34.479,
+      "saved_ms": 3.848,
+      "speedup_ci95": [
+        1.1116,
+        1.0112,
+        1.2025
+      ],
+      "samples": 48
+    },
+    "english ticket, 3 questions": {
+      "base_median_ms": 65.074,
+      "head_median_ms": 59.825,
+      "saved_ms": 5.249,
+      "speedup_ci95": [
+        1.0877,
+        0.9965,
+        1.2015
+      ],
+      "samples": 48
+    },
+    "english ticket, 10 questions": {
+      "base_median_ms": 131.369,
+      "head_median_ms": 136.582,
+      "saved_ms": -5.213,
+      "speedup_ci95": [
+        0.9618,
+        0.8795,
+        1.1093
+      ],
+      "samples": 48
+    },
+    "english email, 3 questions": {
+      "base_median_ms": 197.149,
+      "head_median_ms": 195.226,
+      "saved_ms": 1.923,
+      "speedup_ci95": [
+        1.0099,
+        0.9171,
+        1.1283
+      ],
+      "samples": 48
+    },
+    "english batch of 32 tickets, 3 questions": {
+      "base_median_ms": 994.509,
+      "head_median_ms": 937.375,
+      "saved_ms": 57.134,
+      "speedup_ci95": [
+        1.061,
+        1.024,
+        1.095
+      ],
+      "samples": 48
+    },
+    "multilingual ticket, 3 questions": {
+      "base_median_ms": 38.665,
+      "head_median_ms": 39.51,
+      "saved_ms": -0.845,
+      "speedup_ci95": [
+        0.9786,
+        0.8045,
+        1.1098
+      ],
+      "samples": 48
+    },
+    "multilingual email, 3 questions": {
+      "base_median_ms": 39.373,
+      "head_median_ms": 42.166,
+      "saved_ms": -2.793,
+      "speedup_ci95": [
+        0.9337,
+        0.829,
+        1.0153
+      ],
+      "samples": 48
+    }
+  },
+  "prep": {
+    "english ticket, 1 question": {
+      "routing": {
+        "base_median_ms": 0.103,
+        "head_median_ms": 0.066,
+        "saved_ms": 0.037,
+        "speedup_ci95": [
+          1.5663,
+          1.3251,
+          1.8297
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.319,
+        "head_median_ms": 0.135,
+        "saved_ms": 0.184,
+        "speedup_ci95": [
+          2.3568,
+          1.9068,
+          2.8398
+        ]
+      }
+    },
+    "english ticket, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.082,
+        "head_median_ms": 0.059,
+        "saved_ms": 0.023,
+        "speedup_ci95": [
+          1.3916,
+          1.1757,
+          1.6525
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.675,
+        "head_median_ms": 0.162,
+        "saved_ms": 0.513,
+        "speedup_ci95": [
+          4.1566,
+          3.1525,
+          4.9726
+        ]
+      }
+    },
+    "english ticket, 10 questions": {
+      "routing": {
+        "base_median_ms": 0.062,
+        "head_median_ms": 0.057,
+        "saved_ms": 0.005,
+        "speedup_ci95": [
+          1.0872,
+          0.999,
+          1.1911
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 1.382,
+        "head_median_ms": 0.25,
+        "saved_ms": 1.132,
+        "speedup_ci95": [
+          5.5301,
+          4.9236,
+          6.2675
+        ]
+      }
+    },
+    "english email, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.696,
+        "head_median_ms": 0.65,
+        "saved_ms": 0.046,
+        "speedup_ci95": [
+          1.0702,
+          1.0014,
+          1.137
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.638,
+        "head_median_ms": 0.511,
+        "saved_ms": 0.127,
+        "speedup_ci95": [
+          1.2493,
+          1.1504,
+          1.4457
+        ]
+      }
+    },
+    "english batch of 32 tickets, 3 questions": {
+      "routing": {
+        "base_median_ms": 1.257,
+        "head_median_ms": 0.995,
+        "saved_ms": 0.262,
+        "speedup_ci95": [
+          1.2631,
+          1.2296,
+          1.4126
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 10.709,
+        "head_median_ms": 2.306,
+        "saved_ms": 8.403,
+        "speedup_ci95": [
+          4.6443,
+          4.5219,
+          5.1713
+        ]
+      }
+    },
+    "multilingual ticket, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.039,
+        "head_median_ms": 0.024,
+        "saved_ms": 0.015,
+        "speedup_ci95": [
+          1.5903,
+          1.4617,
+          1.7627
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.272,
+        "head_median_ms": 0.055,
+        "saved_ms": 0.217,
+        "speedup_ci95": [
+          4.9612,
+          4.7258,
+          6.0593
+        ]
+      }
+    },
+    "multilingual email, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.183,
+        "head_median_ms": 0.109,
+        "saved_ms": 0.074,
+        "speedup_ci95": [
+          1.6845,
+          1.6249,
+          1.8497
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.39,
+        "head_median_ms": 0.157,
+        "saved_ms": 0.233,
+        "speedup_ci95": [
+          2.4823,
+          2.2949,
+          2.5825
+        ]
+      }
+    }
+  },
+  "import_laya_s": {
+    "base": [
+      0.029,
+      0.036,
+      0.037,
+      0.036
+    ],
+    "head": [
+      0.031,
+      0.028,
+      0.036,
+      0.045
+    ]
+  },
+  "rss_mb": {
+    "base": [
+      [
+        1047.0,
+        1152.5
+      ],
+      [
+        1046.7,
+        252.3
+      ],
+      [
+        288.8,
+        377.3
+      ],
+      [
+        1047.1,
+        365.7
+      ]
+    ],
+    "head": [
+      [
+        1043.0,
+        1307.2
+      ],
+      [
+        1043.4,
+        1105.7
+      ],
+      [
+        788.8,
+        358.8
+      ],
+      [
+        1000.4,
+        352.6
+      ]
+    ]
+  }
+}

@@ -1,0 +1,329 @@
+{
+  "meta": {
+    "base": {
+      "root": "../laya-main",
+      "laya": "0.3.20",
+      "import_laya_s": 0.025,
+      "torch": "2.14.0",
+      "device": "cpu",
+      "torch_threads": 10,
+      "rss_mb_loaded": 1977.0,
+      "rss_mb_end": 2756.4
+    },
+    "head": {
+      "root": "../laya-main",
+      "laya": "0.3.20",
+      "import_laya_s": 0.034,
+      "torch": "2.14.0",
+      "device": "cpu",
+      "torch_threads": 10,
+      "rss_mb_loaded": 3616.7,
+      "rss_mb_end": 2493.5
+    },
+    "device": "cpu",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "load_average_at_end": [
+      46.7158203125,
+      50.29833984375,
+      51.1884765625
+    ],
+    "rounds": 8,
+    "repeats": 8,
+    "warmup": 2,
+    "requests": "req_smoke.jsonl"
+  },
+  "answers_repeatable_across_rounds": {
+    "base": true,
+    "head": true
+  },
+  "answer_runs_per_checkout": 2,
+  "latency": {
+    "english ticket, 1 question": {
+      "base_median_ms": 94.603,
+      "head_median_ms": 87.951,
+      "saved_ms": 6.652,
+      "speedup_ci95": [
+        1.0756,
+        0.944,
+        1.193
+      ],
+      "speedup_ci95_by_round": [
+        0.9831,
+        0.8658,
+        1.228
+      ],
+      "samples": 64
+    },
+    "english ticket, 3 questions": {
+      "base_median_ms": 197.683,
+      "head_median_ms": 169.942,
+      "saved_ms": 27.741,
+      "speedup_ci95": [
+        1.1632,
+        1.034,
+        1.2633
+      ],
+      "speedup_ci95_by_round": [
+        1.1696,
+        0.9634,
+        1.3268
+      ],
+      "samples": 64
+    },
+    "multilingual ticket, 3 questions": {
+      "base_median_ms": 83.175,
+      "head_median_ms": 73.668,
+      "saved_ms": 9.507,
+      "speedup_ci95": [
+        1.1291,
+        0.9648,
+        1.227
+      ],
+      "speedup_ci95_by_round": [
+        1.126,
+        0.921,
+        1.3204
+      ],
+      "samples": 64
+    },
+    "english email, 3 questions": {
+      "base_median_ms": 586.537,
+      "head_median_ms": 568.305,
+      "saved_ms": 18.232,
+      "speedup_ci95": [
+        1.0321,
+        0.982,
+        1.1005
+      ],
+      "speedup_ci95_by_round": [
+        0.9966,
+        0.9219,
+        1.1827
+      ],
+      "samples": 64
+    }
+  },
+  "prep": {
+    "english ticket, 1 question": {
+      "routing": {
+        "base_median_ms": 0.041,
+        "head_median_ms": 0.04,
+        "saved_ms": 0.001,
+        "speedup_ci95": [
+          1.0415,
+          0.9974,
+          1.1499
+        ],
+        "speedup_ci95_by_round": [
+          1.0562,
+          0.9861,
+          1.187
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.131,
+        "head_median_ms": 0.126,
+        "saved_ms": 0.005,
+        "speedup_ci95": [
+          1.0434,
+          0.9827,
+          1.0974
+        ],
+        "speedup_ci95_by_round": [
+          1.0284,
+          0.8719,
+          1.1514
+        ]
+      }
+    },
+    "english ticket, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.04,
+        "head_median_ms": 0.037,
+        "saved_ms": 0.003,
+        "speedup_ci95": [
+          1.0669,
+          0.9875,
+          1.188
+        ],
+        "speedup_ci95_by_round": [
+          1.0384,
+          0.893,
+          1.3138
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.342,
+        "head_median_ms": 0.331,
+        "saved_ms": 0.011,
+        "speedup_ci95": [
+          1.0334,
+          0.9605,
+          1.0979
+        ],
+        "speedup_ci95_by_round": [
+          1.0532,
+          0.966,
+          1.1297
+        ]
+      }
+    },
+    "multilingual ticket, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.038,
+        "head_median_ms": 0.038,
+        "saved_ms": 0.0,
+        "speedup_ci95": [
+          0.9952,
+          0.9394,
+          1.0474
+        ],
+        "speedup_ci95_by_round": [
+          1.0065,
+          0.8239,
+          1.1351
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.29,
+        "head_median_ms": 0.293,
+        "saved_ms": -0.003,
+        "speedup_ci95": [
+          0.9884,
+          0.9389,
+          1.0508
+        ],
+        "speedup_ci95_by_round": [
+          0.977,
+          0.8816,
+          1.113
+        ]
+      }
+    },
+    "english email, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.626,
+        "head_median_ms": 0.591,
+        "saved_ms": 0.035,
+        "speedup_ci95": [
+          1.0578,
+          1.0076,
+          1.1173
+        ],
+        "speedup_ci95_by_round": [
+          1.0431,
+          0.9076,
+          1.17
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.634,
+        "head_median_ms": 0.598,
+        "saved_ms": 0.036,
+        "speedup_ci95": [
+          1.0593,
+          1.0087,
+          1.1432
+        ],
+        "speedup_ci95_by_round": [
+          1.031,
+          0.9274,
+          1.1714
+        ]
+      }
+    }
+  },
+  "import_laya_s": {
+    "base": [
+      0.025,
+      0.03,
+      0.034,
+      0.033,
+      0.042,
+      0.032,
+      0.037,
+      0.039
+    ],
+    "head": [
+      0.034,
+      0.038,
+      0.032,
+      0.033,
+      0.057,
+      0.033,
+      0.035,
+      0.033
+    ]
+  },
+  "rss_mb": {
+    "base": [
+      [
+        1977.0,
+        2756.4
+      ],
+      [
+        3621.4,
+        4009.7
+      ],
+      [
+        3616.2,
+        2599.6
+      ],
+      [
+        3619.9,
+        2621.4
+      ],
+      [
+        742.8,
+        2551.7
+      ],
+      [
+        914.9,
+        2132.0
+      ],
+      [
+        763.1,
+        2663.8
+      ],
+      [
+        3616.4,
+        1442.8
+      ]
+    ],
+    "head": [
+      [
+        3616.7,
+        2493.5
+      ],
+      [
+        3618.0,
+        4004.4
+      ],
+      [
+        898.2,
+        2501.8
+      ],
+      [
+        3618.0,
+        3066.6
+      ],
+      [
+        1178.8,
+        2517.6
+      ],
+      [
+        1163.4,
+        2553.8
+      ],
+      [
+        3621.0,
+        2404.1
+      ],
+      [
+        1467.8,
+        2706.2
+      ]
+    ]
+  }
+}
