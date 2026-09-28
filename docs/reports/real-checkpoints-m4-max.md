@@ -425,13 +425,35 @@ The merge needed four fixes, each with tests:
   three values. The cached question head now carries upstream's option statistics.
 - **Abstention marks.** `min_confidence` marks answers before end hooks run, so the cache stored one
   call's `low_confidence` marks and replayed them to calls with another threshold or none, and a
-  partial hit's replays went unmarked. The cache now stores answers unmarked, and the engine marks
-  again after its end hooks.
-- **`Agent.predict_long`** raised `ValueError` once every window of a document was cached, and lost
-  the deciding window's attribution when some were. A cache answering one result per window is now
-  aggregated as the scan it is.
+  partial hit's replays went unmarked. The cache now stores answers unmarked, and `Agent`,
+  `ONNXAgent` and `Router` mark again after their end hooks.
+- **`Agent.predict_long` and `ONNXAgent.predict_long`** raised `ValueError` once every window of a
+  document was cached, and lost the deciding window's attribution when some were. A cache answering
+  one result per window is now aggregated as the scan it is.
 - **`Router.predict_long`** and `Router.predict` shared a cache entry for the same state, so each
   replayed the other's answer. `PredictContext.scan` now tells the cache which it is answering.
+
+A PR-Agent review of the merge found the `ONNXAgent` half of those two fixes missing, and four
+faults in code that came from upstream. Each is now fixed, with a test that fails without the fix:
+
+- `Router` dropped an `expected_sha256` pin passed in `agent_kwargs` whenever its own digest map
+  had an empty entry for the checkpoint, including the `{}` that a model-keyed digest map in the
+  environment gives every model it leaves out, and so loaded the weights unverified. An empty entry
+  no longer removes a pin.
+- `Router.predict_batch` retried an agent that predates both `lang` and `sort_by_length` once,
+  dropping one of them, and then raised on the other.
+- The LangChain runnables' `abatch` raised `IndexError` on an empty batch that came with an empty
+  list of configs.
+- `ONNXAgent`'s option-overflow error printed the already-truncated sequence length as what the
+  question needed ("need 40 tokens, more than max_len=40"). It now says how many options fit.
+
+The review's other findings are not bugs. The guardrail's score probabilities are keyed by level
+index on both backends; `normalise_name` passes any value through `str()`; and `Agent` lowercases
+noul criteria keys. The rest are upstream's choices, kept as released:
+
+- `ONNXAgent`'s new `token` parameter comes before `subfolder`, as it does on `Agent`.
+- `LayaGuardrail(threshold=)` is now a probability.
+- Batch MCP requests check `task` only as a string.
 
 Upstream's `test_question_token_reuse` counts tokenizer calls for its reuse within one call, so it
 runs with the fork's cache across calls switched off, and a new test checks the two together. The
