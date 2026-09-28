@@ -2,7 +2,7 @@
 title: Decision cache engineering
 description: How DecisionCache keys, stores, expires and replays decisions, what each step costs, how it behaves under concurrency, and how one cache serves fp32, int8 and ONNX.
 type: report
-specificity: "laya/consistency.py as of commit 5f014de (Laya 0.3.20). Costs measured on a 4-core Intel Xeon at 2.8 GHz with Python 3.11 and SQLite from the standard library, 100,000 decisions held. The backend check ran on a synthetic english checkpoint: the published architecture with random weights."
+specificity: "laya/consistency.py as of commit 470f87e (Laya 0.3.20). Costs measured on a 4-core Intel Xeon at 2.8 GHz with Python 3.11 and SQLite from the standard library, 100,000 decisions held. The backend check ran on a synthetic english checkpoint: the published architecture with random weights."
 credibility: "Costs come from research/scripts/bench_decision_cache.py (research/results/decision_cache_cpu_xeon4_20260926.json). Behaviour is pinned by tests/test_consistency.py (143 checks, stable over 20 repeated runs) and by the API contract in tests/test_hooks_api.py. Cross-backend replay was checked with research/scripts/check_backend_sharing.py. The Redis store was checked against fakeredis, not a live server."
 ---
 

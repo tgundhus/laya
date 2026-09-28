@@ -2,7 +2,7 @@
 title: Consistency and speed work, September 2026
 description: What was measured and changed to make Laya's decisions repeatable and its requests faster, how it compares with Jev, and what is still open.
 type: report
-specificity: "Laya 0.3.20, branch claude/blissful-keller-kuw2r7 (commits 52ec7bb to 689f1e5, on top of 4066d5d). Consistency figures come from the archived Feishu run (64 cases x 3 repeats, Jev 1.13.0 against laya-multilingual on an Apple M4). Timings come from a 4-core Intel Xeon at 2.8 GHz, on CPU with 4 threads."
+specificity: "Laya 0.3.20, branch claude/blissful-keller-kuw2r7 (commits b5376a0 to e544f92, on top of 4066d5d). Consistency figures come from the archived Feishu run (64 cases x 3 repeats, Jev 1.13.0 against laya-multilingual on an Apple M4). Timings come from a 4-core Intel Xeon at 2.8 GHz, on CPU with 4 threads."
 credibility: "Every number links to a script and a raw result in research/, or to a test that recomputes it. The CPU timings used checkpoints with the published architectures and random weights, because the machine could not reach Hugging Face: they are right about where time goes, and say nothing about accuracy. No GPU or Apple-silicon timings were taken."
 ---
 
@@ -61,18 +61,18 @@ It is better on consistency, and no worse on anything else measured:
 
 | commit | change |
 |---|---|
-| 52ec7bb | `decision_margins`, and `DecisionCache` replaying decisions per request |
-| fac34cb | faster language detection, with identical output over 267,449 comparisons |
-| 73d4884 | tokenize each question's head once per tokenizer: 0.71 → 0.13 ms for three questions |
-| 97adef3 | cache docs: what a hit and a miss store |
-| ea30082, 4a81761 | stage profiler, cache benchmark and question-head timings, with results |
-| 5f752fb | docs: decision consistency, and where a request's time goes |
-| dff9f08 | the Router remembers recent language detections: a hit went from 121 to 73 µs |
-| 17b1229 | per-decision retention, renewal on use, and a pluggable `DecisionStore` |
-| d237a9e | ONNX export strips redundant attention NaN guards, and gains `--int8` |
-| ad3a5c0, de5732b | CPU fast-path harness and encode-once spike, with results and docs |
-| 5f014de | concurrent identical requests share one forward pass |
-| 689f1e5 | docs: coalescing, one cache across backends, pre-warming, trimming |
+| b5376a0 | `decision_margins`, and `DecisionCache` replaying decisions per request |
+| dd3c694 | faster language detection, with identical output over 267,449 comparisons |
+| 2e0289b | tokenize each question's head once per tokenizer: 0.71 → 0.13 ms for three questions |
+| 59931c5 | cache docs: what a hit and a miss store |
+| a043d62, b35b693 | stage profiler, cache benchmark and question-head timings, with results |
+| 09276b1 | docs: decision consistency, and where a request's time goes |
+| 9d471f8 | the Router remembers recent language detections: a hit went from 121 to 73 µs |
+| e00ee8d | per-decision retention, renewal on use, and a pluggable `DecisionStore` |
+| a543856 | ONNX export strips redundant attention NaN guards, and gains `--int8` |
+| 74420d2, dcca178 | CPU fast-path harness and encode-once spike, with results and docs |
+| 470f87e | concurrent identical requests share one forward pass |
+| e544f92 | docs: coalescing, one cache across backends, pre-warming, trimming |
 
 ## Open items
 
