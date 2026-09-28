@@ -86,7 +86,14 @@ python -m pip install "laya @ git+https://github.com/tgundhus/laya.git"
 Guides: [Decision consistency](docs/consistency.md) and [Where a request's time goes](docs/performance.md).
 Reports: [consistency and speed work](docs/reports/index.md).
 
-## Benchmarks: Laya-Pro against Laya
+## Benchmarks: Laya-Pro against Laya and Jev
+
+<p align="center">
+  <img src="assets/laya_pro_vs_laya_vs_jev.png" alt="Laya-Pro against Laya against TypeSafe Jev: the same request gives the same answer (Jev 22.7% identical across three runs, Laya 100% on one setup but 72-99.6% of decisions unchanged across precisions, Laya-Pro 100%); a repeated request takes 0.04-0.06 ms on Laya-Pro against 34-144 ms on Laya and 236-276 ms on Jev; accuracy where Jev numbers exist; 3.6 times the requests served at 70% repeats; decision memory by retention period; decisions changed when the setup changes" width="100%" />
+</p>
+
+The figure comes from [`research/scripts/make_laya_pro_plot.py`](research/scripts/make_laya_pro_plot.py), which
+reads the committed results. The tables below hold the same measurements.
 
 Measured on an Apple M4 Max with the published checkpoints, the original Laya against Laya-Pro, over 841
 requests in 11 languages. Rows marked *cache* need `DecisionCache` installed; the rest are the default
