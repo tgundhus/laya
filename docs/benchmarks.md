@@ -60,7 +60,7 @@ or option count.
 - **Latency:** The T4 figures do not predict CPU or cold-load time. Measure warm and cold calls
   with your own checkpoint, device, input lengths and number of questions.
 
-The [README's Honest limits section](https://github.com/NandhaKishorM/laya#honest-limits)
+[Known limits](limits.md#known-limits)
 has examples and current workarounds. The benchmark tables give the dataset and hardware
 behind each of the limits above.
 

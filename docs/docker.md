@@ -68,7 +68,7 @@ work with `docker run -e`; Compose-only settings are identified below.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `LAYA_DEVICE` | `cpu` / `cuda` | Device selected by the base / GPU configuration |
-| `LAYA_CUDA_AMP` | unset (checkpoint's `amp_dtype`) | `fp16` or `bf16` for the CUDA forward. Not cosmetic: the README's threshold section measures bf16 flipping 3 of 864 argmaxes on the parity set where fp16 flips none |
+| `LAYA_CUDA_AMP` | unset (checkpoint's `amp_dtype`) | `fp16` or `bf16` for the CUDA forward. Not cosmetic: the [confidence section](guide.md#confidence-and-abstention) measures bf16 flipping 3 of 864 argmaxes on the parity set where fp16 flips none |
 | `LAYA_CPU_AMP` | unset | `bf16` opts the CPU forward into bf16; anything else leaves it fp32 |
 | `LAYA_MODEL` | `auto` | Router alias: `auto`, `english`, `multilingual`, `typed-decisions` |
 | `LAYA_MODEL_PATH` | unset | Compatible checkpoint path inside the container |

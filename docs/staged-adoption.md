@@ -78,8 +78,8 @@ owner with the policy. Re-evaluate it when those inputs change. Confidence order
 not establish that a decision is correct, and high confidence is never execution permission by
 itself.
 
-The README's [Automated Confidence Gating](https://github.com/NandhaKishorM/laya#automated-confidence-gating),
-[Calibration](https://github.com/NandhaKishorM/laya#calibration), and [Honest limits](https://github.com/NandhaKishorM/laya#honest-limits) sections
+[Confidence and abstention](guide.md#confidence-and-abstention),
+[Calibration](limits.md#calibration), and [Known limits](limits.md#known-limits)
 give the existing calibration and confidence context. Keep irreversible or high-cost actions behind
 an explicit review boundary even when their confidence is high.
 
@@ -130,6 +130,6 @@ real request
 - [Prediction hooks](hooks/index.md) — the extension seam for audit, metrics and gating.
 - [Hook API reference](hooks/api.md) — `PredictContext` fields and lifecycle events.
 - [Tracing](hooks/tracing.md) — `run_id` and span correlation.
-- [README: Automated Confidence Gating](https://github.com/NandhaKishorM/laya#automated-confidence-gating) — confidence is a
+- [Confidence and abstention](guide.md#confidence-and-abstention) — confidence is a
   policy input, not a correctness guarantee.
-- [README: Calibration](https://github.com/NandhaKishorM/laya#calibration) and [Honest limits](https://github.com/NandhaKishorM/laya#honest-limits).
+- [Calibration](limits.md#calibration) and [Known limits](limits.md#known-limits).
