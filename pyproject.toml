@@ -72,8 +72,10 @@ llamaindex = [
 ]
 
 # `pip install laya[crewai]` adds the CrewAI multi-agent delegation router (laya.integrations).
+# 1.15.6 is the first CrewAI that pins a patched json-repair (GHSA-xf7x-x43h-rpqh). Those releases
+# also pin mcp~=1.28, so this extra cannot share an install with the `mcp` extra (mcp>=2.2).
 crewai = [
-    "crewai>=0.28.0",
+    "crewai>=1.15.6",
 ]
 
 [project.scripts]

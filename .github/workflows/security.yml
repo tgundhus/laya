@@ -83,7 +83,28 @@ jobs:
           PY
           cat requirements-audit.txt
           echo "auditing $(wc -l < requirements-audit.txt) declared names: the core plus every extra"
-          pip-audit --strict --desc -r requirements-audit.txt
+          # No single install holds every extra: the crewai releases that pin a patched json-repair
+          # also pin mcp~=1.28, while the mcp extra needs mcp>=2.2. Resolved together, the list
+          # audits a crewai old enough to accept both, which nobody installs. So it is audited as
+          # the two largest installs that can exist, one without crewai and one without mcp.
+          grep -v '^crewai' requirements-audit.txt > requirements-audit-without-crewai.txt
+          grep -v '^mcp' requirements-audit.txt > requirements-audit-without-mcp.txt
+          # pip-audit's verdict is every advisory it finds; scripts/pip_audit_policy.py gives this
+          # repository's. It fails on an advisory nobody accepted, on an accepted one once a fix
+          # exists, and on a dependency that could not be audited, and passes the reviewed,
+          # unfixable ones in .github/accepted-advisories.toml with a warning.
+          status=0
+          for req in requirements-audit-without-crewai.txt requirements-audit-without-mcp.txt; do
+            report="${req%.txt}.json"
+            pip-audit --strict --desc -r "$req" -f json -o "$report" || true
+            if [ ! -s "$report" ]; then
+              echo "::error::pip-audit wrote no report for $req: it could not resolve or audit it"
+              status=1
+            fi
+          done
+          python scripts/pip_audit_policy.py --accepted .github/accepted-advisories.toml \
+            requirements-audit-without-crewai.json requirements-audit-without-mcp.json || status=1
+          exit $status
 
   codeql:
     name: CodeQL

@@ -1,7 +1,8 @@
 """The CVE audit job must see every name the package declares, not just the core five.
 
 `.github/workflows/security.yml` builds `requirements-audit.txt` from `pyproject.toml` and hands it
-to `pip-audit`. For a while it did that with a regex anchored on `dependencies = [`, which matches
+to `pip-audit`, as the two installs that can exist (one without `crewai`, one without `mcp`).
+For a while it built the list with a regex anchored on `dependencies = [`, which matches
 the `[project]` array and none of `[project.optional-dependencies]` -- so the ten names behind the
 `serve`, `fast`, `mcp`, `structured`, `onnx`, `langchain` and `langgraph` extras, and the 57
 transitive names they pull in, were outside the audit. `Dockerfile` ends with
@@ -115,8 +116,12 @@ check_true("extractor/walks optional-dependencies",
 check_true("extractor/keeps the declared-not-installed reason",
            "local version" in deps_job and "+cpu" in deps_job,
            "auditing an install would trip --strict on torch's 2.14.0+cpu")
-check_true("extractor/still audits the file strictly",
-           re.search(r"pip-audit --strict[^\n]*-r requirements-audit\.txt", deps_job) is not None,
+# No install holds every extra (crewai and mcp pin incompatible mcp versions), so the list is
+# audited as the two largest installs that can exist, each cut from it and audited strictly.
+check_true("extractor/still audits the list strictly, as the installs that can exist",
+           re.search(r"pip-audit --strict[^\n]*-r \"\$req\"", deps_job) is not None
+           and all(re.search(r"grep -v '\^%s' requirements-audit\.txt > requirements-audit-without-%s\.txt"
+                             % (name, name), deps_job) for name in ("crewai", "mcp")),
            deps_job[:120])
 check_true("extractor/prints the scope it audited",
            re.search(r'echo "[^"]*requirements-audit\.txt', deps_job) is not None,
