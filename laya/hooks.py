@@ -44,9 +44,17 @@ class PredictContext:
     started_at: float = field(default_factory=time.perf_counter)
     elapsed_ms: Optional[float] = None
     error: Optional[BaseException] = None
+    # Router.predict_long: the window scan it runs (`window`, `stride`, `aggregate`), which answers
+    # differently from the single window `predict` reads; None for every other call.
+    scan: Optional[Dict[str, Any]] = None
 
     def skip(self, results: List[Dict[str, Any]]) -> None:
-        """Set cached results from a start hook; inference is skipped, end hooks still run."""
+        """Set cached results from a start hook; inference is skipped, end hooks still run.
+
+        `results` replaces the whole call, so it carries one entry per state in `ctx.states` --
+        the shape `predict_batch` returns -- in that order. A hook fires once per call, and a
+        call can carry many states.
+        """
         self.results = results
 
 

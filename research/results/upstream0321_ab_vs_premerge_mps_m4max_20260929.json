@@ -1,0 +1,1003 @@
+{
+  "meta": {
+    "base": {
+      "root": "../laya-pro-premerge",
+      "laya": "0.3.20",
+      "import_laya_s": 0.035,
+      "torch": "2.14.0",
+      "device": "mps",
+      "torch_threads": 10,
+      "rss_mb_loaded": 1046.8,
+      "rss_mb_end": 1303.7
+    },
+    "head": {
+      "root": ".",
+      "laya": "0.3.21",
+      "import_laya_s": 0.039,
+      "torch": "2.14.0",
+      "device": "mps",
+      "torch_threads": 10,
+      "rss_mb_loaded": 1044.5,
+      "rss_mb_end": 1415.1
+    },
+    "device": "mps",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "load_average_at_end": [
+      16.193359375,
+      19.265625,
+      22.525390625
+    ],
+    "rounds": 1,
+    "repeats": 3,
+    "warmup": 1,
+    "requests": "requests.jsonl"
+  },
+  "answers_base_vs_head": {
+    "identical": 694,
+    "requests": 841,
+    "differ": [
+      {
+        "request": "massive/en/002",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/004",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/005",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/006",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/007",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/008",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/010",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/011",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/014",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/015",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/023",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/025",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/026",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/027",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/028",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/029",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/031",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/037",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/038",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/044",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/045",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/046",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/048",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/050",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/051",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/053",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/054",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/057",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/059",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/060",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/063",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/070",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/071",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/072",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/074",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/076",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/078",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/081",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/084",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/085",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/086",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/087",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/089",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/090",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/091",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/092",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/094",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/096",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/098",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/099",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/101",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/103",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/104",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/107",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/108",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/111",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/112",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/113",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/117",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/120",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/123",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/129",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/131",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/132",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/134",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/135",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/137",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/138",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/139",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/142",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/144",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/146",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/147",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/149",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/150",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/153",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/154",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/155",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/159",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/160",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/161",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/162",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/165",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/167",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/168",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/170",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/172",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/174",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/176",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/178",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/186",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/187",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/188",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/192",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/193",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/en/197",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/002",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/006",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/008",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/014",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/025",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/027",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/028",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/029",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/de/048",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/006",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/008",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/023",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/025",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/027",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/028",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/029",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/031",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/038",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/045",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/046",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/es/048",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/fr/008",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/fr/010",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/fr/014",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/fr/023",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/fr/026",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/fr/027",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/fr/038",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/002",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/004",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/005",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/006",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/007",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/008",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/010",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/011",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/014",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/015",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/023",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/025",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/026",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/027",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/028",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/029",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/031",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/037",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/038",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/044",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/045",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/046",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      },
+      {
+        "request": "massive/sw/048",
+        "max_abs_prob_diff": 0.0,
+        "changed_decisions": [],
+        "routing_same": true
+      }
+    ]
+  },
+  "answers_repeatable_across_rounds": {
+    "base": true,
+    "head": true
+  },
+  "answer_runs_per_checkout": 1,
+  "latency": {
+    "english ticket, 3 questions": {
+      "base_median_ms": 41.278,
+      "head_median_ms": 40.395,
+      "saved_ms": 0.883,
+      "speedup_ci95": [
+        1.0219,
+        0.9943,
+        1.0917
+      ],
+      "speedup_ci95_by_round": [
+        1.0219,
+        1.0219,
+        1.0219
+      ],
+      "samples": 3
+    }
+  },
+  "prep": {
+    "english ticket, 3 questions": {
+      "routing": {
+        "base_median_ms": 0.047,
+        "head_median_ms": 0.042,
+        "saved_ms": 0.005,
+        "speedup_ci95": [
+          1.1116,
+          0.9726,
+          1.2117
+        ],
+        "speedup_ci95_by_round": [
+          1.1116,
+          1.1116,
+          1.1116
+        ]
+      },
+      "tokenize state and rows": {
+        "base_median_ms": 0.109,
+        "head_median_ms": 0.107,
+        "saved_ms": 0.002,
+        "speedup_ci95": [
+          1.018,
+          0.8926,
+          1.1241
+        ],
+        "speedup_ci95_by_round": [
+          1.018,
+          1.018,
+          1.018
+        ]
+      }
+    }
+  },
+  "import_laya_s": {
+    "base": [
+      0.035
+    ],
+    "head": [
+      0.039
+    ]
+  },
+  "rss_mb": {
+    "base": [
+      [
+        1046.8,
+        1303.7
+      ]
+    ],
+    "head": [
+      [
+        1044.5,
+        1415.1
+      ]
+    ]
+  }
+}

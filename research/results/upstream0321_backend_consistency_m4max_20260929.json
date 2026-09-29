@@ -1,0 +1,835 @@
+{
+  "meta": {
+    "laya": "0.3.21",
+    "torch": "2.14.0",
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpus": 14,
+    "torch_threads": 10,
+    "mps": true,
+    "requests": "requests.jsonl",
+    "batch_company": 4,
+    "load_average": [
+      16.42529296875,
+      15.76708984375,
+      24.2099609375
+    ],
+    "routed": {
+      "english": 306,
+      "multilingual": 535
+    }
+  },
+  "models": {
+    "english": {
+      "requests": 306,
+      "seconds": {
+        "cpu-fp32": 50.7,
+        "cpu-fp32-again": 58.5,
+        "mps-default": 15.9,
+        "mps-default-again": 14.2,
+        "mps-default-batched": 52.7,
+        "mps-fp32": 14.5,
+        "mps-fp16": 17.3
+      },
+      "accuracy": {
+        "cpu-fp32": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "cpu-fp32-again": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-default": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-default-again": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-default-batched": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-fp32": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        },
+        "mps-fp16": {
+          "right": 188,
+          "n": 293,
+          "accuracy": 0.6416
+        }
+      },
+      "vs_cpu_fp32": {
+        "cpu-fp32-again": {
+          "requests": 306,
+          "identical_payloads": 306,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0,
+          "mean_abs_prob_diff": 0.0,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default": {
+          "requests": 306,
+          "identical_payloads": 293,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0031,
+          "mean_abs_prob_diff": 2.7e-06,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default-again": {
+          "requests": 306,
+          "identical_payloads": 293,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0031,
+          "mean_abs_prob_diff": 2.7e-06,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default-batched": {
+          "requests": 306,
+          "identical_payloads": 139,
+          "answers": 349,
+          "same_decision": 348,
+          "changed_decisions": 1,
+          "changed_share": 0.00287,
+          "max_abs_prob_diff": 0.0742,
+          "mean_abs_prob_diff": 0.0003449,
+          "changed_ref_margin_max": 0.0176,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 1
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 1
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 1
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 1
+            }
+          },
+          "changed": [
+            {
+              "request": "massive/sw/038",
+              "question": "intent",
+              "ref_margin": 0.0176,
+              "ref": "iot_wemo_off",
+              "other": "audio_volume_down"
+            }
+          ]
+        },
+        "mps-fp32": {
+          "requests": 306,
+          "identical_payloads": 295,
+          "answers": 349,
+          "same_decision": 349,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-fp16": {
+          "requests": 306,
+          "identical_payloads": 139,
+          "answers": 349,
+          "same_decision": 348,
+          "changed_decisions": 1,
+          "changed_share": 0.00287,
+          "max_abs_prob_diff": 0.0742,
+          "mean_abs_prob_diff": 0.0003449,
+          "changed_ref_margin_max": 0.0176,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 0,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 1,
+              "changed_caught": 1
+            },
+            "0.05": {
+              "answers_below": 4,
+              "changed_caught": 1
+            },
+            "0.1": {
+              "answers_below": 9,
+              "changed_caught": 1
+            },
+            "0.2": {
+              "answers_below": 18,
+              "changed_caught": 1
+            }
+          },
+          "changed": [
+            {
+              "request": "massive/sw/038",
+              "question": "intent",
+              "ref_margin": 0.0176,
+              "ref": "iot_wemo_off",
+              "other": "audio_volume_down"
+            }
+          ]
+        }
+      },
+      "by_set": {
+        "english13": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-default-batched": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          },
+          "mps-fp16": {
+            "changed": 0,
+            "answers": 56,
+            "accuracy": null
+          }
+        },
+        "massive_en": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-default-batched": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          },
+          "mps-fp16": {
+            "changed": 0,
+            "answers": 200,
+            "accuracy": 0.795
+          }
+        },
+        "massive_ml": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-default-batched": {
+            "changed": 1,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 93,
+            "accuracy": 0.3118
+          },
+          "mps-fp16": {
+            "changed": 1,
+            "answers": 93,
+            "accuracy": 0.3118
+          }
+        }
+      },
+      "decision_cache_replay": {
+        "fill_s": 65.17,
+        "setups": {
+          "cpu-int8": {
+            "identical_to_first_decision": 306,
+            "requests": 306,
+            "misses": 0,
+            "seconds": 0.016,
+            "ms_per_request": 0.051
+          },
+          "mps-default": {
+            "identical_to_first_decision": 306,
+            "requests": 306,
+            "misses": 0,
+            "seconds": 0.016,
+            "ms_per_request": 0.051
+          },
+          "mps-default-batched": {
+            "identical_to_first_decision": 306,
+            "requests": 306,
+            "misses_incl_batch_company": 1190,
+            "seconds": 44.222,
+            "ms_per_request": 144.515
+          }
+        }
+      }
+    },
+    "multilingual": {
+      "requests": 535,
+      "seconds": {
+        "cpu-fp32": 60.3,
+        "cpu-fp32-again": 57.5,
+        "mps-default": 16.6,
+        "mps-default-again": 17.6,
+        "mps-default-batched": 59.5,
+        "mps-fp32": 17.4,
+        "mps-fp16": 19.6
+      },
+      "accuracy": {
+        "cpu-fp32": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "cpu-fp32-again": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "mps-default": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "mps-default-again": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "mps-default-batched": {
+          "right": 246,
+          "n": 471,
+          "accuracy": 0.5223
+        },
+        "mps-fp32": {
+          "right": 247,
+          "n": 471,
+          "accuracy": 0.5244
+        },
+        "mps-fp16": {
+          "right": 246,
+          "n": 471,
+          "accuracy": 0.5223
+        }
+      },
+      "vs_cpu_fp32": {
+        "cpu-fp32-again": {
+          "requests": 535,
+          "identical_payloads": 535,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0,
+          "mean_abs_prob_diff": 0.0,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default": {
+          "requests": 535,
+          "identical_payloads": 517,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default-again": {
+          "requests": 535,
+          "identical_payloads": 517,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-default-batched": {
+          "requests": 535,
+          "identical_payloads": 50,
+          "answers": 727,
+          "same_decision": 724,
+          "changed_decisions": 3,
+          "changed_share": 0.00413,
+          "max_abs_prob_diff": 0.103,
+          "mean_abs_prob_diff": 0.000937,
+          "changed_ref_margin_max": 0.0229,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 2
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 3
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 3
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 3
+            }
+          },
+          "changed": [
+            {
+              "request": "feishu/conditional-03/choice",
+              "question": "category",
+              "ref_margin": 0.0229,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "massive/ar/028",
+              "question": "intent",
+              "ref_margin": 0.0135,
+              "ref": "takeaway_query",
+              "other": "general_joke"
+            },
+            {
+              "request": "massive/hi/027",
+              "question": "intent",
+              "ref_margin": 0.0151,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_cleaning"
+            }
+          ]
+        },
+        "mps-fp32": {
+          "requests": 535,
+          "identical_payloads": 517,
+          "answers": 727,
+          "same_decision": 727,
+          "changed_decisions": 0,
+          "changed_share": 0.0,
+          "max_abs_prob_diff": 0.0001,
+          "mean_abs_prob_diff": 2e-07,
+          "changed_ref_margin_max": null,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 0
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 0
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 0
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 0
+            }
+          },
+          "changed": []
+        },
+        "mps-fp16": {
+          "requests": 535,
+          "identical_payloads": 50,
+          "answers": 727,
+          "same_decision": 724,
+          "changed_decisions": 3,
+          "changed_share": 0.00413,
+          "max_abs_prob_diff": 0.103,
+          "mean_abs_prob_diff": 0.000937,
+          "changed_ref_margin_max": 0.0229,
+          "review_at_threshold": {
+            "0.01": {
+              "answers_below": 3,
+              "changed_caught": 0
+            },
+            "0.02": {
+              "answers_below": 9,
+              "changed_caught": 2
+            },
+            "0.05": {
+              "answers_below": 23,
+              "changed_caught": 3
+            },
+            "0.1": {
+              "answers_below": 44,
+              "changed_caught": 3
+            },
+            "0.2": {
+              "answers_below": 72,
+              "changed_caught": 3
+            }
+          },
+          "changed": [
+            {
+              "request": "feishu/conditional-03/choice",
+              "question": "category",
+              "ref_margin": 0.0229,
+              "ref": "todo",
+              "other": "valuable"
+            },
+            {
+              "request": "massive/ar/028",
+              "question": "intent",
+              "ref_margin": 0.0135,
+              "ref": "takeaway_query",
+              "other": "general_joke"
+            },
+            {
+              "request": "massive/hi/027",
+              "question": "intent",
+              "ref_margin": 0.0151,
+              "ref": "iot_hue_lightoff",
+              "other": "iot_cleaning"
+            }
+          ]
+        }
+      },
+      "by_set": {
+        "feishu": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "mps-default-batched": {
+            "changed": 1,
+            "answers": 320,
+            "accuracy": 0.2969
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 320,
+            "accuracy": 0.3125
+          },
+          "mps-fp16": {
+            "changed": 1,
+            "answers": 320,
+            "accuracy": 0.2969
+          }
+        },
+        "massive_ml": {
+          "cpu-fp32": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "cpu-fp32-again": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-default": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-default-again": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-default-batched": {
+            "changed": 2,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-fp32": {
+            "changed": 0,
+            "answers": 407,
+            "accuracy": 0.5577
+          },
+          "mps-fp16": {
+            "changed": 2,
+            "answers": 407,
+            "accuracy": 0.5577
+          }
+        }
+      },
+      "decision_cache_replay": {
+        "fill_s": 58.42,
+        "setups": {
+          "cpu-int8": {
+            "identical_to_first_decision": 535,
+            "requests": 535,
+            "misses": 0,
+            "seconds": 0.025,
+            "ms_per_request": 0.047
+          },
+          "mps-default": {
+            "identical_to_first_decision": 535,
+            "requests": 535,
+            "misses": 0,
+            "seconds": 0.025,
+            "ms_per_request": 0.046
+          },
+          "mps-default-batched": {
+            "identical_to_first_decision": 535,
+            "requests": 535,
+            "misses_incl_batch_company": 1634,
+            "seconds": 28.143,
+            "ms_per_request": 52.604
+          }
+        }
+      }
+    }
+  }
+}
