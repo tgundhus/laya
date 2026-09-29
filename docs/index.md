@@ -9,10 +9,11 @@ hardware, reads 100+ languages, and its `Router` picks the checkpoint for each r
 
 ## Start here
 
-Install Laya and make a first decision with the README's
-[Installation](https://github.com/NandhaKishorM/laya#installation) and
-[Quickstart](https://github.com/NandhaKishorM/laya#quickstart). They stay in the README so there
-is one copy to keep current.
+Install Laya-Pro and make a first decision with the README's
+[Install](https://github.com/tgundhus/laya#install) and
+[Quickstart](https://github.com/tgundhus/laya#quickstart). They stay in the README so there
+is one copy to keep current. [Using Laya-Pro](guide.md) has the engine in detail, and
+[Limits](limits.md) what the models do not do well.
 
 ## Find a guide
 
@@ -30,5 +31,5 @@ is one copy to keep current.
 | look up a class, function or parameter | [Python API reference](reference/index.md) |
 | score a labelled dataset, compare to a baseline, or gate a build on it | [Evaluation harness](evals.md) |
 
-Routing, the HTTP API, the command line, the MCP server and confidence gating are in the
-[README](https://github.com/NandhaKishorM/laya#readme) for now.
+Routing, the command line, the MCP server and confidence gating are in
+[Using Laya-Pro](guide.md).

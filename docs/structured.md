@@ -137,7 +137,13 @@ On a `Router` each state is still routed on its own, so one call can span checkp
 arguments reach `predict_batch`, so `batch_size=`, `model=` and hooks work as they do for `decide`.
 `Agent`, `ONNXAgent` and `Router` all have it; a runner without `predict_batch` raises
 `TypeError` rather than silently falling back to a loop — call `decide` per state there. Batching can shift borderline argmaxes the
-same way `predict_batch` does; the README records the measured speedups for both devices.
+same way `predict_batch` does.
+
+Measured on an Apple M-series GPU (MPS), 8 English tickets through one checkpoint took 2624 ms
+one by one against 723 ms batched (**3.6x**), and 16 mixed English and German states through a
+`Router` 2977 ms against 1903 ms (**1.6x**). On CPU the same workloads gave **1.6x** and **2.0x**.
+The projected values matched the one-by-one loop, 8 of 8 and 16 of 16 on both devices, as expected
+wherever an argmax is not at a threshold; check your own decision boundaries.
 
 ## Confidence and probabilities
 

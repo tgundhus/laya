@@ -195,7 +195,7 @@ def main() -> int:
     # the two rows this suite was written for, pinned to the page that carries them, so a
     # later edit that deletes one fails by name rather than only as a set difference
     anchors = {"LAYA_MAX_CONCURRENT": "docs/docker.md",
-               "LAYA_MPS_AMP_MIN_ROWS": "README.md"}
+               "LAYA_MPS_AMP_MIN_ROWS": "docs/guide.md"}
     for name, page in sorted(anchors.items()):
         check_true("%s is documented on %s" % (name, page),
                    page in docs.get(name, set()), sorted(docs.get(name, set())))

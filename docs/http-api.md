@@ -172,4 +172,4 @@ admission slot but never an inference slot.
 This server speaks one protocol on purpose. There is no OpenAI-compatible endpoint and no batch
 endpoint; run several questions in one request instead, since they share a single forward pass per
 question set. The `laya` CLI and MCP server cover local use -- see the
-[README](https://github.com/NandhaKishorM/laya#readme).
+[command line](guide.md#command-line) and the [MCP server](guide.md#mcp-server).

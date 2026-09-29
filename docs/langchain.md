@@ -310,11 +310,11 @@ Every runnable takes `max_len` and `head_max_len`, the two per-request knobs the
 A choice question's options share the checkpoint's *option* budget -- `head_max_len`, 192 tokens on
 `laya` and 256 on `laya-multilingual` -- and each option carries its own description, so past
 roughly 20 options every label is trimmed to fit and similar labels start reaching the model as the
-same text. See the README's [Honest limits](https://github.com/NandhaKishorM/laya#honest-limits)
+same text. See [Known limits](limits.md#known-limits)
 for the same effect measured on Banking77.
 
 Two situations call for it. A routing node with many branches overflows the *option* budget, and
-a long document overflows the *state* budget -- the README's own long-document guidance is literally
+a long document overflows the *state* budget -- the [long-document guidance](guide.md#long-documents) is literally
 `router.predict(long_document, questions, model="multilingual", max_len=8192)`, which until now was
 unspeakable from a chain step. Both go through the same two arguments:
 

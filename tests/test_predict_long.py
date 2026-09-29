@@ -473,19 +473,20 @@ check("total/0 separates a hook answer from a single-window one",
       (0, 1))
 
 
-# 11. the page that teaches this key teaches the value the code actually writes
-README = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                           "README.md"), encoding="utf-8").read()
-bullet = README[README.index("A state that already fits one window"):][:600]
-check("docs/README pins the single-window value", 'usage["windows"] = 1' in bullet, True)
-check("docs/README states the key is total", "The key is total" in bullet, True)
-check("docs/README documents all three counts", sorted(set(re.findall(r"`([0-9N])`", bullet))),
+# 11. the page that teaches this key teaches the value the code actually writes (the guide's
+# long-document section, which the README links to)
+GUIDE = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "docs", "guide.md"), encoding="utf-8").read()
+bullet = GUIDE[GUIDE.index("A state that already fits one window"):][:600]
+check("docs/guide pins the single-window value", 'usage["windows"] = 1' in bullet, True)
+check("docs/guide states the key is total", "The key is total" in bullet, True)
+check("docs/guide documents all three counts", sorted(set(re.findall(r"`([0-9N])`", bullet))),
       ["0", "1", "N"])
 # The two rules this branch added, pinned where they are taught rather than in the code comment
-hooks_bullet = README[README.index("Hooks wrap the inference that answers the state"):][:900]
-check("docs/README says attribution survives only an unchanged scan",
+hooks_bullet = GUIDE[GUIDE.index("Hooks wrap the inference that answers the state"):][:900]
+check("docs/guide says attribution survives only an unchanged scan",
       "reported when the scan reached inference unchanged" in hooks_bullet, True)
-check("docs/README names ctx.skip as the way to answer", "ctx.skip(...)" in hooks_bullet, True)
+check("docs/guide names ctx.skip as the way to answer", "ctx.skip(...)" in hooks_bullet, True)
 API = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "docs", "hooks", "api.md"), encoding="utf-8").read()
 api_para = API[API.index("On `predict_long` the hooks wrap"):][:1600]
