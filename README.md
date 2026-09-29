@@ -243,8 +243,14 @@ The shipped checkpoints work zero-shot, but fine-tuning on decisions from your o
   [0.3.21](https://github.com/NandhaKishorM/laya/releases/tag/v0.3.21) is merged in: ONNX batch and
   long-document parity, per-channel INT8, opt-in abstention with `min_confidence`, batch calls on
   every surface, per-request token budgets and the new operations settings. The cache works with
-  all of it: abstention marks follow each call's threshold, and `predict_long` scans are cached
-  apart from single-window answers.
+  all of it, on `Agent`, `ONNXAgent` and `Router` alike: abstention marks follow each call's
+  threshold, a long document whose windows are cached is answered from them, and `predict_long`
+  scans are cached apart from single-window answers.
+* **Fixes to the merged code.** `Router` keeps an `expected_sha256` pin passed in `agent_kwargs`
+  (an empty per-model digest entry used to drop it and load the weights unverified),
+  `Router.predict_batch` serves an attached agent that predates both `lang` and `sort_by_length`,
+  LangChain's `abatch` accepts an empty batch, and the ONNX option-overflow error says how many
+  options fit. Details: [Merging Laya 0.3.21](docs/reports/real-checkpoints-m4-max.md#merging-laya-0321).
 
 ---
 
