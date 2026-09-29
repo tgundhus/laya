@@ -105,7 +105,7 @@ python research/scripts/bench_length_batching.py MODEL_DIR --count 64 --batch-si
 | `results/t4_colab_benchmark.json` | 17,416 questions on one T4, both checkpoints, identical questions per model |
 | `results/long_context_multilingual.json` | the long-document run behind `assets/long_context_8192.png`: every prediction, with device and library versions |
 | `results/cpu_51_language_sweep.json` | 51 languages x 2 checkpoints, MASSIVE intent, 20 options |
-| `results/cpu_51_language_sweep_clamped.json` | the same 51 languages and 5,100 cases re-run after the temperature clamp, raw temperatures and served temperatures side by side ([#208](https://github.com/NandhaKishorM/laya/issues/208)) |
+| `results/cpu_51_language_sweep_clamped.json` | the same 51 languages and 5,100 cases re-run after the temperature clamp, raw temperatures and served temperatures side by side (Laya issue #208) |
 
 ## Headline findings
 

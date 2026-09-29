@@ -17,7 +17,7 @@
   "files": ["dist", "scripts"],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NandhaKishorM/laya.git",
+    "url": "git+https://github.com/tgundhus/laya.git",
     "directory": "laya-ts"
   },
   "keywords": [
@@ -32,9 +32,9 @@
   "author": "Convai Innovations",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/NandhaKishorM/laya/issues"
+    "url": "https://github.com/tgundhus/laya/issues"
   },
-  "homepage": "https://nandhakishorm.github.io/laya/",
+  "homepage": "https://github.com/tgundhus/laya#readme",
   "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0" },
   "optionalDependencies": { "onnxruntime-node": "^1.20.0", "onnxruntime-web": "^1.20.0" }
 }

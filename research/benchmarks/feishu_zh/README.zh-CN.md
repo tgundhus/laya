@@ -2,7 +2,7 @@
 
 [English](README.md) · [完整原项目](https://github.com/Adkid-Zephyr/chinese-workflow-decision-bench)
 
-按 [issue #154](https://github.com/NandhaKishorM/laya/issues/154) 的讨论，提供一套可直接核验和复测的小型诊断：**64 个中文合成场景、8 类情境、4 个均衡标签**。
+按 Laya issue #154 的讨论，提供一套可直接核验和复测的小型诊断：**64 个中文合成场景、8 类情境、4 个均衡标签**。
 
 **输入是 AI 辅助编写的合成场景，不是真实飞书聊天提取；输出与耗时是模型实际调用记录。** 不含中文后训练权重，不宣称通用模型排名或真实业务准确率。
 

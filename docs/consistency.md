@@ -40,7 +40,7 @@ Laya returned the same bytes every time. What can still move one of its answers:
 - **The model.** A new revision, a refitted temperature, or a `max_len` change is a different
   model.
 - **The request.** Option order is positional, so reordered options are a different request
-  ([#166](https://github.com/NandhaKishorM/laya/issues/166)); on 20 options the answer changed
+  (Laya issue #166); on 20 options the answer changed
   for 15-23% of permutations ([option-order robustness](benchmarks.md)).
 
 Each of these only flips an answer that sits close to its decision boundary.
@@ -192,7 +192,7 @@ differed, and over one SQLite file int8 and ONNX replayed the fp32 decision in 0
 against 589 ms to compute it:
 
 ```bash
-python research/scripts/check_backend_sharing.py --model NandhaKishorM/laya-english --onnx english.onnx
+python research/scripts/check_backend_sharing.py --model convaiinnovations/laya --onnx english.onnx
 ```
 
 Loading one backend from a local path and another from the Hub id gives two fingerprints. Pass

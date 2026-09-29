@@ -1,8 +1,8 @@
 # 中文短指令路由
 
-[English](README.md) · [同类基准：中文职场决策](../feishu_zh/README.zh-CN.md) · [Issue #218](https://github.com/NandhaKishorM/laya/issues/218)
+[English](README.md) · [同类基准：中文职场决策](../feishu_zh/README.zh-CN.md) · Laya issue #218
 
-18 条冻结的中文清洁机器人语音指令、6 个标签，以及针对仓库自身提示词建议的 7 档消融阶梯。一个 checkpoint、一次运行、逐条决策全部归档——目的是把 [#218](https://github.com/NandhaKishorM/laya/issues/218) 的一次性报告（"加上 criteria、场景描述和结构化 JSON state 之后，中文决策反而更糟"）变成任何人都能复算的工件，并且说清它究竟对哪个原语成立。
+18 条冻结的中文清洁机器人语音指令、6 个标签，以及针对仓库自身提示词建议的 7 档消融阶梯。一个 checkpoint、一次运行、逐条决策全部归档——目的是把 Laya issue #218 的一次性报告（"加上 criteria、场景描述和结构化 JSON state 之后，中文决策反而更糟"）变成任何人都能复算的工件，并且说清它究竟对哪个原语成立。
 
 **这 18 条是手写夹具，标签策略在任何模型运行之前就已固定。它不是留出测试集，不是独立标注语料，也不是官方评测。** 下面的数字只是一个 checkpoint 在这些夹具上的决策。
 
@@ -59,7 +59,7 @@ python -m unittest discover -s research/benchmarks/zh_short_commands/tests -v
 
 所以准确率的下降是答案分布的属性，不是建议真的教给了模型什么中文知识。置信度离散度从另一侧印证同一件事：最高档 72 个置信度全部落在 0.750–0.995，而 `noul_plain` 覆盖 0.504–1.000。
 
-**任务 A 没有这个问题。** 三个 choice 档都没有塌缩：0.7222 → 0.7778 → 0.6667，场景句多对了 1 条，JSON state 少对了 2 条。`choice` 问题不需要回答 "是/否"——criteria 的键就是它的选项，答案无法退化成常数。这正是 [#218](https://github.com/NandhaKishorM/laya/issues/218) 看不到的差别：它测的那套建议对 `noul` 路径有害、对 `choice` 路径无害，两者不能平均成一个"中文准确率"。
+**任务 A 没有这个问题。** 三个 choice 档都没有塌缩：0.7222 → 0.7778 → 0.6667，场景句多对了 1 条，JSON state 少对了 2 条。`choice` 问题不需要回答 "是/否"——criteria 的键就是它的选项，答案无法退化成常数。这正是 Laya issue #218 看不到的差别：它测的那套建议对 `noul` 路径有害、对 `choice` 路径无害，两者不能平均成一个"中文准确率"。
 
 ## 阶梯改变不了的部分
 
@@ -144,7 +144,7 @@ runner 会把用例、`prompts.py` 和 checkpoint 的 `model.safetensors` 哈希
 
 - 18 条用例，由贡献者手写，没有独立标注，也没有标注者一致性。family 不平衡（速度 9、停止 4、方向 4、闲聊 1），标签也不平衡（每个 1–5 条），这正是 `noul` 的基率比档位排序更重要的原因。
 - 单一 checkpoint、单一语言、单一设备，固定温度、不做采样。这里没有任何结论适用于英文或 typed-decisions checkpoint。
-- 本对比复现的是 [#218](https://github.com/NandhaKishorM/laya/issues/218) 的**形态**，不是它的提示词：那份报告的原文从未公开，因此它的约 50% 与上面的 0.4167–0.6667 不能直接比较。
+- 本对比复现的是 Laya issue #218 的**形态**，不是它的提示词：那份报告的原文从未公开，因此它的约 50% 与上面的 0.4167–0.6667 不能直接比较。
 - 这些夹具是回归诊断。不要在上面调参，再把结果当作留出集报告。
 - 中文后训练仍是开放的研究问题；这份文件没有解决中文短指令路由，它只是把它测量出来。
 

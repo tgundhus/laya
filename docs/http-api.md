@@ -6,7 +6,7 @@ keep working: Laya's `predict()` output is already schema-compatible, and the se
 HTTP surface: one decision route, a health probe, an optional bearer check and request limits.
 
 ```bash
-pip install "laya[serve]"
+pip install "laya[serve] @ git+https://github.com/tgundhus/laya.git"
 laya-serve            # http://0.0.0.0:8000
 ```
 

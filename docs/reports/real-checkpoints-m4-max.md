@@ -403,7 +403,7 @@ Two things would remove most of it:
 ## Merging Laya 0.3.21
 
 Laya-Pro then merged the original's release
-[0.3.21](https://github.com/NandhaKishorM/laya/releases/tag/v0.3.21) (114 pull requests). Where
+0.3.21 (114 pull requests). Where
 upstream had changed what the fork changed, the merged code was measured against Laya 0.3.21 as
 released, on the same machine (`research/results/upstream0321_*_m4max_20260929.json`):
 

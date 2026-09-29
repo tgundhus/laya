@@ -9,8 +9,8 @@ caller-supplied ``embed_fn``, keeps the top ``k``, and runs a single ``predict``
 they are given. This module does not change ``DecisionModel.forward`` and does not add a
 second decision-model pass.
 
-The coarse-to-fine pattern is the one the README recommends and the one reported in
-https://github.com/NandhaKishorM/laya/issues/102. Ranking here is cosine similarity on
+The coarse-to-fine pattern is the one docs/limits.md recommends and the one reported in
+Laya issue #102. Ranking here is cosine similarity on
 whatever vectors ``embed_fn`` returns. Issue #102's BANKING77 figures belong to that
 report; this module does not measure them.
 """

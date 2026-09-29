@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md) · [Original project](https://github.com/Adkid-Zephyr/chinese-workflow-decision-bench)
 
-A small, self-contained contribution following [#154](https://github.com/NandhaKishorM/laya/issues/154): **64 synthetic Chinese scenarios, 8 families, 4 balanced labels**, with frozen prompts and real per-request Laya/Jev responses. It tests ownership, cancellation, urgency, knowledge sharing, conditions, thread context, cross-chat interference, and quoted instructions.
+A small, self-contained contribution following Laya issue #154: **64 synthetic Chinese scenarios, 8 families, 4 balanced labels**, with frozen prompts and real per-request Laya/Jev responses. It tests ownership, cancellation, urgency, knowledge sharing, conditions, thread context, cross-chat interference, and quoted instructions.
 
 **The scenarios and reference labels are AI-assisted synthetic fixtures, not extracted private Feishu chats. The outputs and timings are actual recorded model calls.** This is a diagnostic, not a general model ranking, an official Feishu evaluation, or an independently annotated blind test. No fine-tuned models or training data are included.
 

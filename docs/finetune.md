@@ -102,9 +102,8 @@ are fixed:
 The Laya row of your own run is computed the same way — the notebook rebuilds the table from
 the run's own numbers. Two habits worth copying: keep the slices you care about (a language, a
 workflow) inside held-out data, and report calibration next to accuracy, because the training
-signal is a distribution, not just a label. When you have numbers, a post in the repository's
-[Discussions](https://github.com/NandhaKishorM/laya/discussions) is the place to share them;
-benchmarks and known limits live in `BENCHMARKS.md` at the repository root.
+signal is a distribution, not just a label. Benchmarks live in `BENCHMARKS.md` at the repository
+root, and what the models do not do well in [Limits](limits.md).
 
 ## Pushing to the Hub
 
@@ -139,7 +138,7 @@ costs one epoch rather than the run.
   per-type scalars, not enough to validate against. Hold out your own evaluation data.
 - **Your labels must fit the three primitives.** If your decision is not a choice, a scale or a
   yes/no probability, shape it into one first. Two sharp edges are already documented: high
-  option counts degrade confidence selection ([#394](https://github.com/NandhaKishorM/laya/issues/394)),
-  and forced-choice negation can follow the question over the state ([#377](https://github.com/NandhaKishorM/laya/issues/377)).
+  option counts degrade confidence selection (Laya issue #394),
+  and forced-choice negation can follow the question over the state (Laya issue #377).
 - **Ship the config, not just the weights.** The removed `temperature_by_options` is the part
   that silently un-fits a calibration if it survives in a copied config.
