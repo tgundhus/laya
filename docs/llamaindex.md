@@ -13,7 +13,7 @@ Supports both **local in-process inference** (`Agent` or `Router`) and **remote 
 ## Installation
 
 ```bash
-pip install "laya[llamaindex]"
+pip install "laya[llamaindex] @ git+https://github.com/tgundhus/laya.git"
 ```
 
 ---

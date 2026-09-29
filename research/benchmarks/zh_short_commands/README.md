@@ -1,8 +1,8 @@
 # Chinese short-command routing
 
-[简体中文](README.zh-CN.md) · [Sibling benchmark: Chinese workplace decisions](../feishu_zh/README.md) · [Issue #218](https://github.com/NandhaKishorM/laya/issues/218)
+[简体中文](README.zh-CN.md) · [Sibling benchmark: Chinese workplace decisions](../feishu_zh/README.md) · Laya issue #218
 
-18 frozen Chinese voice commands for a cleaning robot, six labels, and a seven-rung ablation over the repository's own prompt guidance. One checkpoint, one run, every decision archived — the point is to turn [#218](https://github.com/NandhaKishorM/laya/issues/218)'s one-off report ("adding criteria, a scenario and a structured JSON state made Chinese decisions *worse*") into an artifact anyone can re-derive, and to say which primitive it is actually true of.
+18 frozen Chinese voice commands for a cleaning robot, six labels, and a seven-rung ablation over the repository's own prompt guidance. One checkpoint, one run, every decision archived — the point is to turn Laya issue #218's one-off report ("adding criteria, a scenario and a structured JSON state made Chinese decisions *worse*") into an artifact anyone can re-derive, and to say which primitive it is actually true of.
 
 **These are 18 hand-written fixtures with a label policy fixed before any model was run. They are not a held-out test set, not an independently annotated corpus, and not an official evaluation.** The numbers below are one checkpoint's decisions on those fixtures.
 
@@ -59,7 +59,7 @@ Once criteria are present, `wants_stop` answers "true" for all 18 commands — i
 
 So the accuracy loss is a property of the answer distribution, not of the guidance teaching the model anything about Chinese. The confidence spread says the same thing from the other side: the top rung's 72 confidences sit in 0.750–0.995 while `noul_plain` spans 0.504–1.000.
 
-**Task A does not show this.** No choice rung collapses: 0.7222 → 0.7778 → 0.6667, with the scenario helping by one case and the JSON state costing two. A `choice` question is not asked to return "yes" or "no" — the criteria keys are its options, so the answer cannot degenerate into a constant. That is the difference [#218](https://github.com/NandhaKishorM/laya/issues/218) could not see: the guidance it tested is harmful on the `noul` path and not on the `choice` path, and the two must not be averaged into one "Chinese accuracy".
+**Task A does not show this.** No choice rung collapses: 0.7222 → 0.7778 → 0.6667, with the scenario helping by one case and the JSON state costing two. A `choice` question is not asked to return "yes" or "no" — the criteria keys are its options, so the answer cannot degenerate into a constant. That is the difference Laya issue #218 could not see: the guidance it tested is harmful on the `noul` path and not on the `choice` path, and the two must not be averaged into one "Chinese accuracy".
 
 ## What the ladder does not change
 
@@ -144,7 +144,7 @@ The three parts of the archive are the same three parts `research/eval/laya_eval
 
 - 18 cases, hand-written by the contributor, no independent annotation and no inter-annotator agreement. Families are unbalanced (9 speed, 4 stop, 4 direction, 1 chit-chat) and so are the labels (1 to 5 per label), which is why the `noul` base rate matters more than the rung ordering.
 - One checkpoint, one language, one device, fixed temperatures, no sampling. Nothing here characterizes the English or typed-decisions checkpoints.
-- The comparison reproduces the *shape* of [#218](https://github.com/NandhaKishorM/laya/issues/218), not its prompts: that report's exact text was never published, so its ~50% figure is not directly comparable with the 0.4167–0.6667 above.
+- The comparison reproduces the *shape* of Laya issue #218, not its prompts: that report's exact text was never published, so its ~50% figure is not directly comparable with the 0.4167–0.6667 above.
 - These fixtures are a regression diagnostic. Do not tune on them and then report them as held-out.
 - Chinese post-training remains an open research question; 中文 short-command routing is not solved by this file, it is measured by it.
 

@@ -72,8 +72,7 @@ python -m compileall -q laya/ tests/
 
 ## Documentation
 
-The site at [nandhakishorm.github.io/laya](https://nandhakishorm.github.io/laya/) builds from
-`docs/` with Zensical, and its API reference builds from the docstrings in `laya/`. A new page
+The documentation site builds from `docs/` with Zensical, and its API reference builds from the docstrings in `laya/`. A new page
 appears under Guides without a config change; to put it somewhere else, add it to
 [`docs/.nav.yml`](docs/.nav.yml). For a docs or docstring change, build the site the way the CI
 does:

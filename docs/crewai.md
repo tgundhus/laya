@@ -12,7 +12,7 @@ Supports both **local in-process inference** (`Agent` or `Router`) and **remote 
 ## Installation
 
 ```bash
-pip install "laya[crewai]"
+pip install "laya[crewai] @ git+https://github.com/tgundhus/laya.git"
 ```
 
 ---

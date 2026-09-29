@@ -91,6 +91,6 @@ CUDA stack is not covered by the Spark override.
 Apple GPU acceleration needs native macOS PyTorch with MPS. Docker Desktop runs
 a Linux container, which has no MPS backend, so the container uses CPU. Laya
 already has an MPS device path, and
-[PR #51](https://github.com/NandhaKishorM/laya/pull/51) and
-[PR #109](https://github.com/NandhaKishorM/laya/pull/109) address MPS
+Laya PRs #51 and
+#109 address MPS
 compatibility and performance outside Docker.

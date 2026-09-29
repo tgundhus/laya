@@ -11,7 +11,7 @@ record behind the published numbers, so they could not be re-derived without a G
 and the original environment.
 
 This addresses the ask in
-[#35](https://github.com/NandhaKishorM/laya/issues/35):
+Laya issue #35:
 
 > A fixed prompt format plus a per-language ECE report is exactly what the repo
 > lacks ... Per-case JSON would be very welcome too.
@@ -21,7 +21,7 @@ This addresses the ask in
 Nothing beyond a normal Laya install, plus `datasets`:
 
 ```bash
-pip install laya datasets
+pip install "laya @ git+https://github.com/tgundhus/laya.git" datasets
 ```
 
 The harness is deliberately not part of the `laya` package: it is evaluation code,
@@ -114,7 +114,7 @@ sampling, prompt text, option construction and inference path are all identical 
 the committed run.
 
 The `macro_ece` gap on english is the temperature clamp — `choice:11+` is `0.1006`
-raw and `0.5` as served ([#208](https://github.com/NandhaKishorM/laya/issues/208)).
+raw and `0.5` as served (Laya issue #208).
 `--unclamped` exists so both regimes can be produced from one tool. The single-language
 view is the same result in miniature (`--langs en --unclamped`):
 
@@ -186,7 +186,7 @@ not just against this harness's own arithmetic.
   low score in one language is not by itself evidence of a misroute — check
   `laya.lang.analyse` for the script before concluding which checkpoint was used.
 * The `confidence == 0.0` bin boundary is the one
-  [#39](https://github.com/NandhaKishorM/laya/pull/39) settled: the first bin is closed
+  Laya PR #39 settled: the first bin is closed
   at the bottom, so `0.0` is counted. This harness used `conf > lo` for every bin until
   the divergence was found, which made it the only one of the four implementations that
   binned differently. It now matches `laya.common.ece_score`,
@@ -323,7 +323,7 @@ checks, and an order-invariant model scores exactly 1/3.
 ## Metamorphic option-order robustness (experimental)
 
 `metamorphic.py` adds the initial scope of
-[#244](https://github.com/NandhaKishorM/laya/issues/244): **choice option order robustness**, and the label-renaming transformation from [#512](https://github.com/NandhaKishorM/laya/issues/512), without changing model/runtime behavior. Paraphrases, structured-state permutations, `score` and `noul` perturbations are intentionally deferred. Run from the repository root after installing Laya and `datasets`:
+Laya issue #244: **choice option order robustness**, and the label-renaming transformation from Laya issue #512, without changing model/runtime behavior. Paraphrases, structured-state permutations, `score` and `noul` perturbations are intentionally deferred. Run from the repository root after installing Laya and `datasets`:
 
 ```bash
 python -m research.eval.metamorphic --model convaiinnovations/laya \

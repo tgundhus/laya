@@ -30,7 +30,7 @@ RUN pip install ".[serve]" && pip check
 FROM ${PYTHON_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="Laya Docker quickstart" \
-      org.opencontainers.image.source="https://github.com/NandhaKishorM/laya" \
+      org.opencontainers.image.source="https://github.com/tgundhus/laya" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 # torch 2.14 swaps some eager CUDA ops (bmm, topk, sum, norms) for Triton kernels that it

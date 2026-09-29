@@ -9,7 +9,7 @@ The check loads the three backends, prints whether their own answers match, then
 turn over one SQLite file and asserts that the second and third replay the first one's decision
 without running their model.
 
-    python research/scripts/check_backend_sharing.py --model NandhaKishorM/laya-english \\
+    python research/scripts/check_backend_sharing.py --model convaiinnovations/laya \\
         --onnx english.onnx          # from scripts/export_onnx.py; its .int8.onnx works too
 """
 import argparse
