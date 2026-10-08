@@ -8,7 +8,7 @@ function expect(condition: unknown, field: string): asserts condition {
 const number = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const count = (value: unknown): value is number => Number.isInteger(value);
 const probability = (value: unknown) => number(value) && value >= 0 && value <= 1;
-const model = (value: unknown) => typeof value === 'string' && ['english', 'multilingual', 'typed-decisions'].includes(value);
+const model = (value: unknown) => typeof value === 'string' && /^[a-z0-9_.-]+$/.test(value) && value !== 'auto';
 
 export function validateRoute(value: unknown): void {
   expect(isRecord(value), 'routing');

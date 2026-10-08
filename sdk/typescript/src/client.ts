@@ -2,7 +2,8 @@ import {
   LayaAbortError, LayaAPIError, LayaConnectionError, LayaError, LayaResponseError,
   LayaTimeoutError, LayaValidationError,
 } from './errors.js';
-import type { Health, Prediction, PredictOptions, Questions, RequestOptions, State } from './types.js';
+import type { BatchPrediction, Health, Prediction, PredictBatchOptions, PredictOptions, Questions, RequestOptions, State } from './types.js';
+import { isMinConfidenceKey } from './buckets.js';
 import { isRecord, validateJson, validateQuestions, validateTimeout } from './validation.js';
 import { validateHealth, validatePrediction } from './response.js';
 
@@ -11,12 +12,22 @@ function isThreshold(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
+function validateState(state: unknown): void {
+  if (typeof state !== 'string' && !Array.isArray(state) && !isRecord(state)) {
+    throw new LayaValidationError('state must be text, a JSON object, or an array');
+  }
+  validateJson(state);
+}
+
 /** Mirror core's `check_min_confidence`: one threshold for every answer, or a non-empty
- *  per-bucket map whose values are all thresholds. Anything else is refused before the
- *  request goes out, so a caller cannot pay for inference with a gate the server would 422. */
+ *  per-bucket map whose keys core can produce and whose values are all thresholds. Anything else
+ *  is refused before the request goes out, so a caller cannot pay for inference with a gate the
+ *  server would 422. */
 function validateMinConfidence(value: unknown): asserts value is number | Record<string, number> {
   if (isThreshold(value)) return;
-  if (isRecord(value) && Object.keys(value).length > 0 && Object.values(value).every(isThreshold)) return;
+  if (isRecord(value) && Object.keys(value).length > 0
+      && Object.keys(value).every(isMinConfidenceKey)
+      && Object.values(value).every(isThreshold)) return;
   throw new LayaValidationError(
     'minConfidence must be a number between 0 and 1, or a non-empty map of bucket to threshold');
 }
@@ -70,6 +81,35 @@ export class Laya {
     return result;
   }
 
+  /** Answer states sharing one question set in input order through the server's batch endpoint. */
+  async predictBatch<const Q extends Questions>(states: readonly State[], questions: Q,
+    options: PredictBatchOptions = {}): Promise<BatchPrediction<Q>> {
+    if (!Array.isArray(states) || states.length === 0) throw new LayaValidationError('states must be a nonempty array');
+    validateQuestions(questions);
+    for (const state of states) validateState(state);
+    const body = JSON.parse(this.body(states[0], questions, options));
+    delete body.state;
+    body.states = states;
+    if (options.batchSize !== undefined) {
+      if (!Number.isInteger(options.batchSize) || options.batchSize < 1) {
+        throw new LayaValidationError('batchSize must be a positive integer');
+      }
+      body.batch_size = options.batchSize;
+    }
+    if (options.sortByLength !== undefined) {
+      if (typeof options.sortByLength !== 'boolean') throw new LayaValidationError('sortByLength must be boolean');
+      body.sort_by_length = options.sortByLength;
+    }
+    const result = await this.request<BatchPrediction<Q>>('/v1/systemone/batch', JSON.stringify(body), options);
+    if (!Array.isArray(result.results) || result.results.length !== states.length ||
+        !isRecord(result.total_usage) || !Number.isInteger(result.total_usage.input_tokens) ||
+        !Number.isInteger(result.total_usage.output_tokens)) {
+      throw new LayaResponseError('Invalid Laya batch response');
+    }
+    for (const prediction of result.results) validatePrediction(prediction, questions);
+    return result;
+  }
+
   /** Query the self-hosted Laya server's health probe. */
   async health(options: RequestOptions = {}): Promise<Health> {
     const result = await this.request<Health>('/health', undefined, options);
@@ -78,9 +118,7 @@ export class Laya {
   }
 
   private body(state: State, questions: Questions, options: PredictOptions): string {
-    if (state !== null && typeof state !== 'string' && !Array.isArray(state) && !isRecord(state)) {
-      throw new LayaValidationError('state must be text, a JSON object, an array, or null');
-    }
+    validateState(state);
     if (options.task !== undefined && (typeof options.task !== 'string' || !options.task.trim())) {
       throw new LayaValidationError('task must be a nonempty string');
     }
@@ -140,7 +178,8 @@ export class Laya {
       controller.signal.throwIfAborted();
       const headers = new Headers(this.headers);
       if (body !== undefined) headers.set('Content-Type', 'application/json');
-      const init: RequestInit = { method: body === undefined ? 'GET' : 'POST', headers, signal: controller.signal };
+      const init: RequestInit = { method: body === undefined ? 'GET' : 'POST', headers, signal: controller.signal,
+        redirect: 'error' };
       if (body !== undefined) init.body = body;
       // Never retry automatically: repeating an expensive inference request is surprising.
       const response = await this.fetcher.call(globalThis, this.baseURL + path, init);

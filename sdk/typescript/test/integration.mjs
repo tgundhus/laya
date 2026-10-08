@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
-import { Laya, LayaAPIError, triageQuestions, emailQuestions, guardQuestions, moderationQuestions, routerQuestions } from 'laya-client';
+import { Laya, LayaAPIError, triageQuestions, emailQuestions, guardQuestions, moderationQuestions, routerQuestions } from 'laya-pro-client';
 
 test('JavaScript → HTTP → Python Router → real offline Agent inference', { timeout: 90_000 }, async t => {
   const script = fileURLToPath(new URL('../../../tests/sdk_server_fixture.py', import.meta.url));
@@ -49,6 +49,12 @@ test('JavaScript → HTTP → Python Router → real offline Agent inference', {
   assert.equal(result.answers.single.probabilities.only, 1);
   assert.ok(result.usage.input_tokens > 0);
   assert.equal(result.usage.output_tokens, 0);
+  const batch = await client.predictBatch([fixture.state, fixture.state], fixture.questions,
+    { model: 'english', batchSize: 1 });
+  assert.equal(batch.results.length, 2);
+  assert.deepEqual(batch.results[0].answers, result.answers);
+  assert.deepEqual(batch.results[1].answers, result.answers);
+  assert.equal(batch.total_usage.output_tokens, 0);
   assert.equal((await client.predict({ text: 'मुझे पैसे वापस चाहिए' }, fixture.questions)).routing.model, 'multilingual');
   assert.equal((await client.predict('hello', fixture.questions, { model: 'typed_decisions' })).routing.model, 'typed-decisions');
 

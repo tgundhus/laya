@@ -1,21 +1,29 @@
+import type { MinConfidenceKey } from './buckets.js';
+
+export type { MinConfidenceBucket, MinConfidenceKey } from './buckets.js';
+
 /** Values that survive the JSON transport without being changed or discarded. */
 export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
-export type State = string | readonly JsonValue[] | { readonly [key: string]: JsonValue } | null;
+export type State = string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 export interface ChoiceQuestion {
   readonly type: 'choice';
   readonly instructions: JsonValue;
   readonly criteria: readonly string[] | Readonly<Record<string, JsonValue>>;
+  readonly option_order?: readonly number[];
 }
 export interface ScoreQuestion {
   readonly type: 'score';
   readonly instructions: JsonValue;
   readonly criteria: readonly JsonValue[];
+  readonly option_order?: readonly number[];
 }
 export interface NoulQuestion {
   readonly type: 'noul';
   readonly instructions: JsonValue;
   readonly criteria?: Readonly<{ true?: JsonValue; false?: JsonValue }> | null;
+  readonly labels?: Readonly<{ false: string; true: string }> | null;
+  readonly option_order?: readonly number[];
 }
 export type Question = ChoiceQuestion | ScoreQuestion | NoulQuestion;
 export type Questions = Readonly<Record<string, Question>>;
@@ -27,8 +35,10 @@ export type ModelAlias = ModelName | 'en' | 'laya' | 'default' | 'multi' | 'ml' 
  *  spelling (`"choice:2"`, `"choice:3-5"`, `"score:6-10"`, `"noul:2"`, ...) plus an optional
  *  `"default"` for buckets the map does not name. One threshold does not transfer across option
  *  counts, so each bucket is gated at the level its own calibration earns; fit one with
- *  `laya.calibrate.fit_abstention_thresholds`. Every value is a threshold in `[0, 1]`. */
-export type MinConfidenceMap = Record<string, number>;
+ *  `laya.calibrate.fit_abstention_thresholds`. Every value is a threshold in `[0, 1]`. Only keys
+ *  core can produce type-check, so a map like `{ "choice:2-5": 0.9 }` is refused here as well as
+ *  by the client's runtime validation (#1002). */
+export type MinConfidenceMap = { [K in MinConfidenceKey]?: number };
 /** The abstention gate: one threshold for every answer, or a per-bucket map. */
 export type MinConfidence = number | MinConfidenceMap;
 
@@ -59,6 +69,18 @@ export interface PredictOptions extends RequestOptions {
    *  An answer whose `answer_confidence` falls below its threshold comes back marked
    *  `low_confidence`, with the answer itself kept. */
   minConfidence?: MinConfidence;
+}
+
+export interface PredictBatchOptions extends PredictOptions {
+  /** Maximum states per forward pass. */
+  batchSize?: number;
+  /** Reduce padding by grouping states of similar token lengths. */
+  sortByLength?: boolean;
+}
+
+export interface BatchPrediction<Q extends Questions = Questions> {
+  results: Prediction<Q>[];
+  total_usage: Pick<Usage, 'input_tokens' | 'output_tokens'>;
 }
 
 interface AnswerBase {
@@ -120,7 +142,7 @@ export interface LanguageDetection {
   mixed_segment: string | null;
 }
 export interface RouteDecision {
-  model: ModelName;
+  model: string;
   repo: string;
   reason: string;
   detection: LanguageDetection | null;
@@ -175,7 +197,7 @@ export interface Prediction<Q extends Questions = Questions> {
  */
 export interface Health {
   status: 'ok';
-  loaded?: ModelName[];
+  loaded?: string[];
   device?: string;
 }
 

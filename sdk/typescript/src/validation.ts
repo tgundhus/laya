@@ -34,9 +34,10 @@ export function validateQuestions(questions: unknown): void {
     if (!isRecord(q)) invalid('expected a question object');
     const question = q as Record<string, unknown>;
     if (!Object.hasOwn(question, 'instructions')) invalid('instructions is required');
-    if (Object.keys(question).some(key => !['type', 'instructions', 'criteria'].includes(key))) {
+    if (Object.keys(question).some(key => !['type', 'instructions', 'criteria', 'labels', 'option_order'].includes(key))) {
       invalid('unknown question field');
     }
+    if (Object.hasOwn(question, 'labels') && question.type !== 'noul') invalid('labels require a noul question');
     const criteria = question.criteria;
     switch (question.type) {
       case 'choice':
@@ -50,14 +51,34 @@ export function validateQuestions(questions: unknown): void {
         break;
       case 'score':
         if (!Array.isArray(criteria) || !criteria.length) invalid('score requires a nonempty criteria array');
+        if ((criteria as unknown[]).some(level => level === null || level === undefined)) {
+          invalid('score criteria cannot contain null levels');
+        }
         break;
       case 'noul':
         if (criteria !== undefined && criteria !== null &&
             (!isRecord(criteria) || Object.keys(criteria).some(k => k !== 'true' && k !== 'false'))) {
           invalid('noul criteria may only describe true and false');
         }
+        if (question.labels !== undefined && question.labels !== null) {
+          const labels = question.labels;
+          if (!isRecord(labels) || Object.keys(labels).length !== 2 ||
+              typeof labels.false !== 'string' || typeof labels.true !== 'string' ||
+              !labels.false.trim() || !labels.true.trim() || labels.false === labels.true) {
+            invalid('labels must contain distinct nonempty false and true strings');
+          }
+        }
         break;
       default: invalid('type must be choice, score, or noul');
+    }
+    if (question.option_order !== undefined && question.option_order !== null) {
+      const count = question.type === 'noul' ? 2 : Array.isArray(criteria) ? criteria.length
+        : Object.keys(criteria as object).length;
+      const order = question.option_order;
+      if (!Array.isArray(order) || order.length !== count || new Set(order).size !== count ||
+          order.some(index => !Number.isInteger(index) || index < 0 || index >= count)) {
+        invalid('option_order must be a permutation of the option indices');
+      }
     }
   }
 }

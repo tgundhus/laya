@@ -1,7 +1,11 @@
 import { Laya, defineQuestions, emailQuestions, triageQuestions, type Questions, type Answer,
-  type Usage, type LanguageDetection, type ChoiceAnswer } from 'laya-client';
+  type Usage, type LanguageDetection, type ChoiceAnswer, type MinConfidenceMap } from 'laya-pro-client';
 
 const client = new Laya();
+client.predictBatch(['first', { message: 'second' }], { q: { type: 'noul', instructions: '?',
+  labels: { false: 'Reject', true: 'Approve' } } }, { batchSize: 4, sortByLength: true });
+// @ts-expect-error The HTTP server requires a state; null is not a request.
+client.predict(null, { q: { type: 'noul', instructions: '?' } });
 const questions = defineQuestions({
   team: { type: 'choice', instructions: 'Team?', criteria: { billing: null, support: { description: 'help' } } },
   priority: { type: 'score', instructions: 'Urgency?', criteria: ['low', 'high'] },
@@ -73,6 +77,13 @@ client.predict('hello', questions, { task: 'typed', lang: 'de', langGuess: 'fr',
 client.predict('hello', questions, { minConfidence: { 'choice:2': 0.9, default: 0.3 } });
 // @ts-expect-error A threshold map with a non-threshold value is not a gate.
 client.predict('hello', questions, { minConfidence: { 'choice:2': 'high' } });
+// @ts-expect-error "choice:2-5" matches core's bucket pattern but is not a bucket it can produce.
+client.predict('hello', questions, { minConfidence: { 'choice:2-5': 0.9 } });
+// @ts-expect-error "foo:2" names no option type core can produce.
+client.predict('hello', questions, { minConfidence: { 'foo:2': 0.9 } });
+// A map assembled at run time is still accepted: Record<string, number> stays assignable.
+const dynamicThresholds: MinConfidenceMap = Object.fromEntries([['choice:2', 0.4]]);
+client.predict('hello', questions, { minConfidence: dynamicThresholds });
 new Laya({ model: 'english' });
 // @ts-expect-error A score answer has no choice field.
 result.answers.priority.choice;

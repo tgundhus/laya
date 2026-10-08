@@ -4,9 +4,67 @@ import { test } from 'node:test';
 import {
   Laya, LayaAPIError, LayaAbortError, LayaConnectionError, LayaTimeoutError,
   LayaValidationError, LayaResponseError, emailQuestions, triageQuestions,
-} from 'laya-client';
+} from 'laya-pro-client';
 
 const questions = { refund: { type: 'noul', instructions: 'Refund?' } };
+
+test('batch uses one HTTP call and validates every result in order', async () => {
+  let calls = 0;
+  const client = new Laya({ fetch: async (url, init) => {
+    calls++;
+    assert.equal(new URL(url).pathname, '/v1/systemone/batch');
+    assert.equal(init.redirect, 'error');
+    assert.deepEqual(JSON.parse(init.body), { states: ['first', 'second'], questions,
+      lang: 'en', batch_size: 8, sort_by_length: true });
+    return json({ results: [prediction, prediction], total_usage: { input_tokens: 20, output_tokens: 0 } });
+  } });
+  const result = await client.predictBatch(['first', 'second'], questions,
+    { lang: 'en', batchSize: 8, sortByLength: true });
+  assert.equal(result.results.length, 2);
+  assert.equal(calls, 1);
+  const malformed = new Laya({ fetch: async () => json({ results: [], total_usage: {} }) });
+  await assert.rejects(malformed.predictBatch(['first'], questions), LayaResponseError);
+  const unsent = new Laya({ fetch: async () => { assert.fail('must not send'); } });
+  for (const states of [[], [null], ['first', undefined]]) {
+    await assert.rejects(unsent.predictBatch(states, questions), LayaValidationError);
+  }
+  for (const options of [{ batchSize: 0 }, { batchSize: true }, { sortByLength: 'yes' }]) {
+    await assert.rejects(unsent.predictBatch(['first'], questions, options), LayaValidationError);
+  }
+});
+
+test('custom checkpoint responses and noul labels work through the HTTP SDK', async () => {
+  const custom = structuredClone(prediction);
+  custom.routing.model = 'refund-v2';
+  const labelled = { refund: { type: 'noul', instructions: 'Refund?', labels: { false: 'Reject', true: 'Approve' },
+    option_order: [1, 0] } };
+  const client = new Laya({ model: 'refund-v2', fetch: async (_url, init) => {
+    const body = init.body === undefined ? undefined : JSON.parse(init.body);
+    if (body) {
+      assert.deepEqual(body.questions, labelled);
+      return json(custom);
+    }
+    return json({ status: 'ok', loaded: ['refund-v2'] });
+  } });
+  assert.equal((await client.predict('request', labelled)).routing.model, 'refund-v2');
+  assert.deepEqual((await client.health()).loaded, ['refund-v2']);
+  const unsent = new Laya({ fetch: async () => { assert.fail('must not send'); } });
+  await assert.rejects(unsent.predict(null, questions), LayaValidationError);
+  for (const labels of [{ false: 'No' }, { false: 'Yes', true: 'Yes' }, { false: 0, true: 1 }]) {
+    await assert.rejects(unsent.predict('state', { refund: { ...questions.refund, labels } }), LayaValidationError);
+  }
+  for (const option_order of [[0, 0], [2, 1], [0], [true, false]]) {
+    await assert.rejects(unsent.predict('state', { refund: { ...questions.refund, option_order } }), LayaValidationError);
+  }
+});
+
+test('credentials are sent only to the configured endpoint without following redirects', async () => {
+  const client = new Laya({ apiKey: 'private-key', fetch: async (_url, init) => {
+    assert.equal(init.redirect, 'error');
+    return json({ detail: 'Moved' }, 302);
+  } });
+  await assert.rejects(client.health(), error => error instanceof LayaAPIError && error.status === 302);
+});
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status });
 const health = { status: 'ok', loaded: [], device: 'auto' };
 const route = { model: 'english', repo: 'convaiinnovations/laya', reason: 'test', detection: null, workflow: null };
@@ -14,7 +72,7 @@ const prediction = { model: 'laya-rl-agent', routing: route, usage: { input_toke
   answers: { refund: { type: 'noul', noul: 0.9, confidence: 0.9, action: { act_probability: 0.8 } } } };
 
 test('ESM and CommonJS exports can be consumed by ordinary JavaScript', () => {
-  const cjs = createRequire(import.meta.url)('laya-client');
+  const cjs = createRequire(import.meta.url)('laya-pro-client');
   assert.equal(typeof cjs.Laya, 'function');
   assert.deepEqual(cjs.triageQuestions(), triageQuestions());
 });
@@ -44,7 +102,7 @@ test('health accepts the liveness-only answer a locked-down server gives an anon
   assert.deepEqual(await client.health(), { status: 'ok' });
 
   // the detail is still validated whenever the server does send it
-  const bad = new Laya({ fetch: async () => json({ status: 'ok', loaded: ['nope'], device: 'cpu' }) });
+  const bad = new Laya({ fetch: async () => json({ status: 'ok', loaded: ['not/a/name'], device: 'cpu' }) });
   await assert.rejects(bad.health(), LayaResponseError);
   const badDevice = new Laya({ fetch: async () => json({ status: 'ok', device: 7 }) });
   await assert.rejects(badDevice.health(), LayaResponseError);
@@ -115,6 +173,8 @@ test('invalid model and control values fail before sending a request', async () 
     { minConfidence: true }, { minConfidence: [] }, { minConfidence: {} },
     { minConfidence: { 'choice:2': 1.5 } }, { minConfidence: { 'choice:2': 'high' } },
     { minConfidence: { 'choice:2': NaN } },
+    { minConfidence: { 'choice:2-5': 0.9 } }, { minConfidence: { 'foo:2': 0.9 } },
+    { minConfidence: { 'choice:2': 0.9, 'score:1': 0.5 } },
   ]) {
     await assert.rejects(client.predict('hello', questions, options), LayaValidationError, JSON.stringify(options));
   }

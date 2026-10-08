@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { Laya } from 'laya-client';
+import { Laya } from 'laya-pro-client';
 
 const PAGE = fileURLToPath(new URL('../../../docs/typescript-sdk.md', import.meta.url));
 const DECLARATION = new URL('../dist/esm/client.d.ts', import.meta.url);
@@ -49,12 +49,13 @@ const OPTION_VALUES = { model: 'english', task: 'typed', lang: 'de', langGuess: 
   maxLen: 512, headMaxLen: 24, minConfidence: 0.8 };
 
 function controlTable(page) {
-  const lines = page.split('\n');
+  const lines = page.split(/\r?\n/);
   const start = lines.indexOf('| option | request field |');
   assert.notEqual(start, -1, 'the design page has no "| option | request field |" table; retarget this');
   const rows = new Map();
-  for (const line of lines.slice(start + 2)
-      .filter(line => line.startsWith('| `'))) {
+  for (const line of lines.slice(start + 2)) {
+    if (!line.startsWith('|')) break;
+    if (!line.startsWith('| `')) continue;
     const cells = line.split('|').slice(1, -1).map(cell => cell.trim().replace(/^`|`$/g, ''));
     assert.equal(cells.length, 2, `table row ${line} does not name exactly one option and one field`);
     rows.set(cells[0], cells[1]);
@@ -117,8 +118,8 @@ test('the endpoint surface the page describes is the one the client declares',
     // A member is public if it is spelled out as a signature; `private body;` collapses to the keyword.
     const declared = [...declaration.matchAll(/^ {4}(?!constructor)(\w+)[<(]/gm)]
       .map(([, name]) => name).sort();
-    assert.deepEqual(declared, ['health', 'predict'],
-      'the client gained or lost a public method; the page describes exactly these two');
+    assert.deepEqual(declared, ['health', 'predict', 'predictBatch'],
+      'the client gained or lost a public method; update the documented endpoint surface');
     for (const name of declared) {
       assert.ok(page.includes('`' + name + '`'),
         `the page never names the ${name}() method the client declares`);
