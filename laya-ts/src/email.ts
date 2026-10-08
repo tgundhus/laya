@@ -2,8 +2,11 @@ const QUOTE_HEADERS: RegExp[] = [
   /^\s*On .{0,300}wrote:\s*$/i,
   /^\s*Em (?=.*\d).{0,300}escreveu:\s*$/i,
   /^\s*El (?=.*\d).{0,300}escribi[óo]:\s*$/i,
+  // Gmail's French attribution carries a date like the others ("Le lun. ... a écrit :"), and
+  // French typography puts a space before the colon, so the verb allows one
+  /^\s*Le (?=.*\d).{0,300}a [eé]crit\s*:\s*$/i,
   /^\s*-{2,}\s*(Original|Forwarded) Message\s*-{2,}/i,
-  /^\s*-{2,}\s*(Mensagem (original|encaminhada)|Mensaje (original|reenviado))\s*-{2,}/i,
+  /^\s*-{2,}\s*(Mensagem (original|encaminhada)|Mensaje (original|reenviado)|Message d'origine)\s*-{2,}/i,
   /^\s*_{8,}\s*$/,
   // `From:` opens ordinary prose too ("From: my side the integration works, but please
   // refund..."), and a reply header always carries the sender, so the header is only recognised
@@ -12,11 +15,12 @@ const QUOTE_HEADERS: RegExp[] = [
   // line to tell it apart from a sentence.
   /^\s*From:\s.*[@<]/i,
   // `De:` also opens ordinary Portuguese/Spanish lines ("De: 10/09 a 15/09"), so the Outlook
-  // header is only recognised when it carries an address
-  /^\s*De:\s.*[@<]/i,
+  // header is only recognised when it carries an address. French Outlook writes `De :` with a
+  // space, so the marker allows one; the address rule is unchanged
+  /^\s*De\s*:\s.*[@<]/i,
 ];
-const ATTRIBUTION_TAIL = /^.{0,120}\S@\S+\s+(wrote|escreveu|escribi[óo]):\s*$/i;
-const ATTRIBUTION_HEAD = /^\s*(On|Em|El) (?=.*\d)/i;
+const ATTRIBUTION_TAIL = /^.{0,120}\S@\S+\s+(wrote|escreveu|escribi[óo]|a [eé]crit)\s*:\s*$/i;
+const ATTRIBUTION_HEAD = /^\s*(On|Em|El|Le) (?=.*\d)/i;
 // Exchange often leaves the address out of Outlook's reply header ("De: Maria Souza"), so a bare
 // `De:` only cuts when the header's own `Enviado:` line, or a dated `Data:`/`Fecha:` line, follows
 // it. `Para:` is not enough: "De: 10/09 / Para: 15/09" is how a leave request reads.
@@ -24,9 +28,11 @@ const ATTRIBUTION_HEAD = /^\s*(On|Em|El) (?=.*\d)/i;
 // The same is true of a bare English `From: Maria Souza`, which is why the marker above needs
 // this rule: the English client lines are the translations of the two `De:` neighbours. A line
 // that only looks like prose still has to be told apart from a header by its neighbours, so the
-// English pair is "From: <name>" followed by "Sent:"/"Date:".
-const HEADER_FROM_NAME = /^\s*(De|From):\s+\S/i;
-const HEADER_NEXT = /^\s*(Enviad[oa]( em| el)?:\s|Sent:\s|(Data|Fecha|Date):\s.*\d{4})/i;
+// English pair is "From: <name>" followed by "Sent:"/"Date:". French Outlook writes the same
+// header as `De : Marie Dupont` with `Envoyé :` underneath, so both allow the spaced colon.
+const HEADER_FROM_NAME = /^\s*(De|From)\s*:\s+\S/i;
+const HEADER_NEXT =
+  /^\s*(Enviad[oa]( em| el)?:\s|Envoy[ée]( le)?\s*:\s|Sent:\s|(Data|Fecha|Date):\s.*\d{4})/i;
 // A closing line is the closing word plus punctuation and at most a name. Anything else on
 // the line is a sentence, and the case of the next word is what separates the two: a name is
 // capitalised, "for" in "Thanks for the quick reply." is not. JS regexes have no scoped
@@ -45,18 +51,19 @@ function isEnglishSignoff(line: string): boolean {
 const SIGNATURE_MARKERS: Array<(line: string) => boolean> = [
   (l) => /^\s*--\s*$/.test(l),
   isEnglishSignoff,
-  (l) => /^\s*sent from my (iphone|android|mobile|ipad)/i.test(l),
   (l) =>
-    /^\s*(atenciosamente|att|abraços?|abs|um abraço|cordialmente|grat[oa]|(muito )?obrigad[oa]s?( desde já| pela atenção)?|(com os melhores )?cumprimentos|saudações|(un )?saludos?( cordiales)?|atentamente|(muchas )?gracias( de antemano)?)[\s,!.]*$/i.test(
+    /^\s*(atenciosamente|att|abraços?|abs|um abraço|cordialmente|grat[oa]|(muito )?obrigad[oa]s?( desde já| pela atenção)?|(com os melhores )?cumprimentos|saudações|(un )?saludos?( cordiales)?|atentamente|(muchas )?gracias( de antemano)?|(bien )?cordialement|salutations( distinguées)?|bien à vous|merci( d'avance)?|bonne journée)[\s,!.]*$/i.test(
       l,
     ),
 ];
 const DEVICE =
-  "iphone|ipad|android|ios|celular|telemóvel|móvil|galaxy|smartphone|samsung|tablet|" +
+  "iphone|ipad|android|ios|mobile|celular|telemóvel|móvil|galaxy|smartphone|samsung|tablet|" +
   "outlook|yahoo|mail|e-?mail|gmail|windows";
 const DEVICE_FOOTER = new RegExp(
-  "^\\s*((enviad[oa] (do|pelo|pela|via|desde|a partir do)( meu| minha| mi)?|sent from( my)?)" +
-    ` (${DEVICE})( (${DEVICE}|para|for|no|na|\\d+))*|(obter o|get) outlook (para|for) (ios|android))[\\s.!]*$`,
+  "^\\s*((enviad[oa] (do|pelo|pela|via|desde|a partir do)( meu| minha| mi)?|sent from( my)?|" +
+    "envoy[ée] (depuis|de)( mon| ma| mes)?)" +
+    ` (${DEVICE})( (${DEVICE}|para|for|no|na|\\d+|phone|device|pro|max|mini|plus|using [a-z][\\w.+-]*))*` +
+    "|(obter o|get) outlook (para|for) (ios|android))[\\s.!]*$",
   "i",
 );
 const DISCLAIMER = new RegExp(
@@ -76,7 +83,12 @@ const DISCLAIMER = new RegExp(
     "\\b(recebeu|recebido|receber) (esta|este) (mensagem|e-?mail)\\b[^.]{0,20} por (engano|erro)|" +
     "\\b(ha recibido|recibió|recibe) (este|esta) (mensaje|correo)\\b[^.]{0,20} por error|" +
     "\\bantes de imprimir\\b[^.]{0,100}(meio ambiente|medio ambiente|natureza|planeta|realmente necess)|" +
-    "\\b(meio|medio) ambiente\\b[^.]{0,30}antes de imprimir)",
+    "\\b(meio|medio) ambiente\\b[^.]{0,30}antes de imprimir|" +
+    // French is tied to "ce message/cet e-mail" rather than the bare word `confidentiel`, which a
+    // sender's own request ("le contrat confidentiel") uses just as often
+    "\\b(ce|cet|cette) (message|e-?mail|mail|courriel)\\b[^.]{0,80}(confidentiel|privil[eé]gi)|" +
+    "\\bavez re[çc]u (ce|cet|cette) (message|e-?mail|mail)\\b[^.]{0,20} par erreur|" +
+    "\\b(usage exclusif|exclusivement|uniquement)\\b[^.]{0,30}destinataire)",
   "i",
 );
 const SENTENCE = /(?<=[.!?])\s+/;
@@ -165,10 +177,13 @@ export function emailState(
   sender?: string | null,
   clean = true,
   extra: Record<string, unknown> = {},
+  // The budget cleanEmailBody cuts the body to, as Python's email_state(max_chars=) (#589).
+  // Last, so existing positional calls keep their meaning. Ignored when clean is false.
+  maxChars = 3000,
 ): Record<string, unknown> {
   const state: Record<string, unknown> = {
     subject: (subject ?? "").trim(),
-    body: clean ? cleanEmailBody(body ?? "") : (body ?? ""),
+    body: clean ? cleanEmailBody(body ?? "", maxChars) : (body ?? ""),
   };
   if (sender) state["from"] = sender;
   for (const [k, v] of Object.entries(extra ?? {})) {

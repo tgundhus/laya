@@ -122,6 +122,27 @@ class DownloadTests(unittest.TestCase):
             with self.subTest(subfolder=subfolder):
                 self.check_download("test/bundled-models", subfolder)
 
+    def test_a_checkpoint_name_or_alias_reaches_the_same_download_as_a_repo_id(self):
+        # #780: `Router` resolved `english` / `typed-decisions` / `ml`, but `load()` forwarded the
+        # same word to the Hub as a repo id, so `laya.load("typed-decisions")` 404'd. One registry
+        # now serves both, and this asserts the transport the name produces is the one the spelled
+        # -out `repo_id` + `subfolder` pair already produces.
+        for name, repo_id, subfolder in [("english", "convaiinnovations/laya", None),
+                                         ("laya", "convaiinnovations/laya", None),
+                                         ("typed-decisions", "convaiinnovations/laya", "typed-decisions"),
+                                         ("typed", "convaiinnovations/laya", "typed-decisions"),
+                                         ("ml", "convaiinnovations/laya", "multilingual"),
+                                         ("ML", "convaiinnovations/laya", "multilingual")]:
+            with self.subTest(name=name):
+                with patch("huggingface_hub.snapshot_download",
+                           return_value=str(self.repo)) as download:
+                    agent = load(name, device="cpu", token="test-token")
+                self.assertEqual(download.call_args.args[0], repo_id)
+                patterns = download.call_args.kwargs["allow_patterns"]
+                prefix = subfolder + "/" if subfolder else ""
+                self.assertIn(prefix + "model.safetensors", patterns)
+                self.assertEqual(agent.predict("hello", self.questions), self.expected)
+
     def test_local_paths_do_not_download(self):
         with patch("huggingface_hub.snapshot_download") as download:
             for subfolder in (None, "multilingual", "variants/english"):
@@ -299,6 +320,24 @@ class DownloadTests(unittest.TestCase):
         self.assertIsInstance(compiled.model, OptimizedModule)
         self.assertIsInstance(compiled.model._orig_mod, DecisionModel)
 
+    def test_backend_selection_preserves_legacy_compile_and_can_replace_it(self):
+        compiled = load(str(self.repo), device="cpu", compile=True)
+        self.assertEqual(compiled.backend, "compile")
+        self.assertIsNone(compiled.backend_object)
+        self.assertEqual(compiled.set_backend("eager"), "eager")
+        self.assertNotIsInstance(compiled.model, OptimizedModule)
+        self.assertFalse(compiled.model.encoder.config.reference_compile)
+        self.assertEqual(compiled.predict("hello", self.questions)["answers"], self.expected["answers"])
+
+    def test_explicit_backend_takes_precedence_over_legacy_flags(self):
+        agent = load(str(self.repo), device="cpu", backend="eager", fast=True, compile=True)
+        self.assertEqual(agent.backend, "eager")
+        self.assertIsNotNone(agent.backend_object)
+        self.assertNotIsInstance(agent.model, OptimizedModule)
+        self.assertFalse(agent.model.encoder.config.reference_compile)
+        self.assertIsNone(agent._fast)
+        self.assertEqual(agent.predict("hello", self.questions)["answers"], self.expected["answers"])
+
     def test_onnx_agent_accepts_every_hub_option_the_agent_does(self):
         # Both runtimes download the same checkpoint from the same place, so an option that
         # selects *which* checkpoint, or *how* to authenticate for it, has to exist on both.
@@ -306,10 +345,14 @@ class DownloadTests(unittest.TestCase):
         # copied across rather than silently diverging again.
         #   fast/compile -- the TileLang path and torch.compile, neither of which exists
         #                    inside onnxruntime.
+        #   backend      -- selects a PyTorch forward; load() routes ONNX to ONNXAgent.
+        #   compile_warmup/compile_cache/compile_mode -- configure torch.compile, which
+        #                    does not exist inside onnxruntime either.
         #   device       -- ONNXAgent picks an execution provider from what onnxruntime
         #                    reports and takes no override; a different asymmetry, with its
         #                    own fix.
-        not_for_onnxruntime = {"fast", "compile", "device"}
+        not_for_onnxruntime = {"fast", "compile", "device", "backend",
+                               "compile_warmup", "compile_cache", "compile_mode"}
         agent_side = (set(inspect.signature(Agent.__init__).parameters)
                       - {"self", "model_id_or_path"} - not_for_onnxruntime)
         onnx_side = set(inspect.signature(ONNXAgent.__init__).parameters) - {"self"}

@@ -175,6 +175,25 @@ check_raises("empty/bare dict rejected", TypeError,
              lambda: _bare_onnx().predict_batch({"body": "x"}, QUESTIONS))
 check_raises("empty/invalid question rejected before any run", ValueError,
              lambda: _bare_onnx().predict_batch(STATES, {"bad": {"type": "nope", "instructions": "?"}}))
+for bad_type in ([], {}):
+    invalid = _bare_onnx()
+    name = "invalid/question type %r" % (bad_type,)
+    try:
+        invalid.predict_batch(STATES, {"refund": {"type": bad_type, "instructions": "Refund requested?"}})
+        FAIL.append("%s: no error raised" % name)
+    except ValueError as e:
+        check(name, str(e), "question 'refund': unknown type %r; use one of ['choice', 'noul', 'score']"
+              % (bad_type,))
+    except Exception as e:
+        FAIL.append("%s: %s instead of ValueError: %s" % (name, type(e).__name__, e))
+    check("%s does not run the session" % name, invalid.session.calls, [])
+for bad_ins in (None, "", "   ", []):
+    check_raises("invalid/instructions %r rejected" % (bad_ins,), ValueError,
+                 lambda bi=bad_ins: _bare_onnx().predict_batch(STATES, {"q": {"type": "noul", "instructions": bi}}))
+check_raises("invalid/questions not a dict", TypeError,
+             lambda: _bare_onnx().predict_batch(STATES, ["not", "a", "dict"]))
+check_raises("invalid/state is None in batch", TypeError,
+             lambda: _bare_onnx().predict_batch([None], QUESTIONS))
 check("budget/max_len and head_max_len forward through the batch path",
       _bare_onnx().predict_batch(STATES, QUESTIONS, max_len=32, head_max_len=16),
       [_bare_onnx().system_one(s, QUESTIONS, max_len=32, head_max_len=16) for s in STATES])
@@ -189,7 +208,7 @@ try:
 except ValueError as e:
     _overflow = str(e)
 check_true("budget/an option overflow counts the options that fit",
-           "only 1 of its 6 options fit in max_len=40" in _overflow, _overflow)
+           "only 1 of its 6 option markers fit in max_len=40" in _overflow, _overflow)
 
 # ---------------------------------------------------------------- hooks
 seen, events = [], []
@@ -299,6 +318,60 @@ check("router/one routed result per request", len(routed), 2)
 check("router/results carry the routing key", [sorted(r) for r in routed],
       [["answers", "model", "routing", "usage"]] * 2)
 check("router/two states share one session run", router_agent.session.calls, [2 * 2])
+
+
+# ---------------------------------------------------------------- single-option questions
+# The exported graph traces the decision head's `topk(2)` (the eager forward's one-option branch is
+# a Python `if` on the marker count, which the trace bakes in), so ONNX Runtime refused a run whose
+# questions all had one option -- "k argument [2] should not be greater than specified axis dim
+# value [1]" -- while the PyTorch Agent answered it. This stub enforces the same rule, and scores a
+# masked slot -1e4 the way the graph's `masked_fill` does.
+class _ExportedGraphSession:
+    def __init__(self):
+        self.marker_widths = []
+        self.masks = []
+
+    def run(self, names, inputs):
+        mask = inputs["marker_mask"]
+        self.marker_widths.append(mask.shape[1])
+        self.masks.append(mask.tolist())
+        if mask.shape[1] < 2:
+            raise RuntimeError("[ONNXRuntimeError] : 1 : FAIL : Non-zero status code returned while "
+                               "running TopK node. Status Message: k argument [2] should not be "
+                               "greater than specified axis dim value [%d]" % mask.shape[1])
+        logits = np.where(mask, 1.0 + np.arange(mask.shape[1], dtype=np.float32), -1e4).astype(np.float32)
+        act = np.tile(np.array([[0.25, 0.75]], dtype=np.float32), (len(mask), 1))
+        return [logits, act]
+
+
+ONE_OPTION = {"dept": {"type": "choice", "instructions": "Which team?", "criteria": {"billing": "money"}}}
+ONE_LEVEL = {"level": {"type": "score", "instructions": "How urgent?", "criteria": ["not urgent"]}}
+
+for label, questions, key, want in (("choice", ONE_OPTION, "dept", {"billing": 1.0}),
+                                    ("score", ONE_LEVEL, "level", {"0": 1.0})):
+    single = _bare_onnx()
+    single.session = _ExportedGraphSession()
+    try:
+        got = single.predict("aa", questions)["answers"][key]["probabilities"]
+    except RuntimeError as e:
+        got = str(e)[:80]
+    check("single option/a one-option %s is answered, not refused by the graph" % label, got, want)
+    check("single option/%s: the extra slot is padded and masked" % label, single.session.masks, [[[True, False]]])
+
+single = _bare_onnx()
+single.session = _ExportedGraphSession()
+try:
+    got = [r["answers"]["dept"]["probabilities"] for r in single.predict_batch(STATES, ONE_OPTION)]
+except RuntimeError as e:
+    got = str(e)[:80]
+check("single option/the batch path answers too, in one run", (got, single.session.marker_widths),
+      ([{"billing": 1.0}] * len(STATES), [2]))
+
+wide = _bare_onnx()
+wide.session = _ExportedGraphSession()
+wide.predict("aa", QUESTIONS)
+check("single option/a run that already has two or more slots is sent as before",
+      wide.session.marker_widths, [3])
 
 
 # --------------------------------------------------------------------------- report

@@ -225,6 +225,50 @@ check_true("guard/annotated", hasattr(annotated_task, "guardrail"))
 check("guard/annotated_passed", annotated_task.guardrail["passed"], True)
 
 
+# A `score` answer is gated on the probability of the upper half of its scale, the same rule
+# LayaGuardrail applies, not on the expected level in `score`.
+def score_answer(p):
+    """A harm_severity answer shaped the way Agent._decode_answers returns one."""
+    return {
+        "type": "score",
+        "score": round(sum(i * v for i, v in enumerate(p)), 4),
+        "probabilities": {str(i): v for i, v in enumerate(p)},
+        "confidence": 0.5,
+    }
+
+
+def harm_result(harm, threshold=0.5):
+    agent = MockLayaAgent(lambda state, questions: {"model": "mock", "answers": {"harm_severity": harm}})
+    guard = LayaTaskGuard(agent=agent, action="annotate", threshold=threshold)
+    return guard.screen({"description": "Summarize the annual shareholder meeting"})["guardrail"]
+
+
+check_true("guard/score_60pct_none_passes", harm_result(score_answer([0.60, 0.30, 0.07, 0.03]))["passed"])
+check_true("guard/score_55pct_none_passes", harm_result(score_answer([0.55, 0.25, 0.15, 0.05]))["passed"])
+check_true("guard/score_likely_minor_passes", harm_result(score_answer([0.40, 0.60, 0.00, 0.00]))["passed"])
+
+serious = score_answer([0.30, 0.15, 0.55, 0.00])
+flagged = harm_result(serious)
+check_true("guard/score_likely_serious_flagged", flagged["passed"] is False)
+check("guard/score_violation_probability", flagged["violations"].get("harm_severity", {}).get("probability"), 0.55)
+check("guard/score_violation_keeps_score", flagged["violations"].get("harm_severity", {}).get("score"), 1.25)
+check_true("guard/score_likely_serious_passes_higher_threshold", harm_result(serious, threshold=0.6)["passed"])
+
+# Without `probabilities`, fall back to score / (k - 1), k taken from the question's criteria.
+check_true("guard/score_fallback_flagged",
+           harm_result({"type": "score", "score": 1.5, "confidence": 0.5})["passed"] is False)
+check_true("guard/score_fallback_passes", harm_result({"type": "score", "score": 0.53, "confidence": 0.5})["passed"])
+
+# `threshold` is a probability: above 1 no question could ever be flagged, so reject it.
+for bad in (1.5, -0.1):
+    rejected = False
+    try:
+        LayaTaskGuard(agent=mock_guard_agent, threshold=bad)
+    except ValueError:
+        rejected = True
+    check_true("guard/threshold_%r_rejected" % bad, rejected)
+
+
 # Async task guard
 async def run_async_guard():
     res_safe = await guard_raise.ascreen(safe_task)
@@ -281,6 +325,278 @@ with patch("urllib.request.build_opener") as mock_build_opener:
     req = call_args[0][0]
     check("remote/url", req.full_url, "http://localhost:8000/v1/systemone")
     check("remote/auth", req.headers.get("Authorization"), "Bearer sk-crew-key")
+
+
+# --------------------------------------------------------------- 5. Per-call decision controls
+#
+# `laya.integrations.langchain` has forwarded `max_len` / `head_max_len` and the five hook
+# arguments since #530 / #532; this surface forwarded only `model`, so a crew with more candidate
+# agents than the default head budget fits could not widen its own window. The rule now lives in
+# one module the three integrations import, and the lists below are read out of it rather than
+# written out again here -- a control added to `._controls` without reaching this file fails here.
+import inspect
+from laya.agent import Agent
+from laya.integrations import _controls
+from laya.integrations import crewai as crewai_module
+from laya.integrations import langchain as langchain_module
+from laya.integrations import llamaindex as llamaindex_module
+from laya.router import Router
+
+CONTROLS = (tuple(_controls.PREDICT_CONTROLS) + tuple(_controls.DECISION_CONTROLS)
+            + tuple(_controls.HOOK_CONTROLS))
+
+
+def _params(fn):
+    return set(inspect.signature(fn).parameters)
+
+
+# The shared tuples name the arguments the shared builders accept, in both directions.
+check("controls/budget tuple names budget_kwargs",
+      set(_params(_controls.budget_kwargs)), set(_controls.PREDICT_CONTROLS))
+check("controls/decision tuple names decision_kwargs",
+      set(_params(_controls.decision_kwargs)), set(_controls.DECISION_CONTROLS))
+check("controls/hook tuple names hook_kwargs",
+      set(_params(_controls.hook_kwargs)), set(_controls.HOOK_CONTROLS))
+
+# Everything this file calls a control is an argument a real runner accepts, or a chain would fail
+# with a TypeError deep inside core instead of at the call site.
+_agent_params = _params(Agent.system_one)
+_router_params = _params(Router.predict)
+for _c in CONTROLS:
+    check_true("controls/%s accepted by Agent" % _c, _c in _agent_params)
+    check_true("controls/%s accepted by Router.predict" % _c, _c in _router_params)
+
+# Both classes and the shared executor must accept all of them. Two classes, two call sites --
+# a third of them missing is exactly the bug this section exists to keep shut.
+for cls in (LayaCrewRouter, LayaTaskGuard):
+    for _c in CONTROLS:
+        check_true("controls/%s takes %s" % (cls.__name__, _c), _c in _params(cls.__init__))
+check("controls/_execute_decision takes every control",
+      set(_params(crewai_module._execute_decision)) - {"state", "questions", "agent",
+                                                       "base_url", "api_key", "model"},
+      set(CONTROLS))
+
+# The three wrappers end at the same runner call, so they must accept the same controls.
+for _mod in (langchain_module, llamaindex_module):
+    check("controls/%s agrees with crewai" % _mod.__name__.rsplit(".", 1)[-1],
+          set(_params(_mod._execute_decision)), set(_params(crewai_module._execute_decision)))
+
+
+class RecordingAgent:
+    """A runner that keeps the kwargs of every call, the way a chain would have to be debugged."""
+
+    device = "cpu"
+
+    def __init__(self):
+        self.calls = []
+
+    def predict(self, state, questions, **kwargs):
+        self.calls.append(kwargs)
+        return {
+            "answers": {
+                "delegation": {"choice": "agent_0", "confidence": 0.9, "answer_confidence": 0.9},
+                "injection_risk": {"type": "noul", "noul": 0.1, "confidence": 0.9},
+            },
+            "routing": {"model": "english", "repo": None, "reason": "explicit model"},
+        }
+
+
+ALL_CONTROLS = {"max_len": 1024, "head_max_len": 512, "lang": "fr", "min_confidence": 0.4,
+                "hooks": ["H"], "on_predict_start": "S",
+                "on_predict_end": "E", "hooks_raise": True, "hooks_timeout": 0.5}
+
+
+def _kwargs(build, run):
+    """Run one decision on a fresh surface, or report the surface's own refusal.
+
+    The broad except is deliberate: a wrapper that cannot even be built or that drops an attribute
+    has to show up as a named mismatch, not as a traceback that hides every later check.
+    """
+    agent = RecordingAgent()
+    try:
+        run(build(agent))
+    except Exception as exc:
+        return "%s: %s" % (type(exc).__name__, exc)
+    return agent.calls[0]
+
+
+def crew_call(**controls):
+    return _kwargs(lambda agent: LayaCrewRouter(agent=agent, **controls),
+                   lambda surface: surface.route("Analyze Q3 sales", agents))
+
+
+def guard_call(**controls):
+    return _kwargs(lambda agent: LayaTaskGuard(agent=agent, **controls),
+                   lambda surface: surface.screen("Summarize this report"))
+
+
+for label, call in (("router", crew_call), ("guard", guard_call)):
+    check("controls/%s with nothing set sends nothing" % label, call(), {})
+    check("controls/%s forwards every control" % label, call(**ALL_CONTROLS), ALL_CONTROLS)
+    check("controls/%s forwards one budget alone" % label, call(head_max_len=256),
+          {"head_max_len": 256})
+    check("controls/%s forwards lang alone" % label, call(lang="fr"), {"lang": "fr"})
+    check("controls/%s forwards min_confidence alone" % label, call(min_confidence=0.4),
+          {"min_confidence": 0.4})
+    # 0 and [] are decisions, not absences: truthiness tests here would drop them.
+    check("controls/%s keeps falsy values" % label,
+          call(head_max_len=0, hooks=[], hooks_raise=False, min_confidence=0.0),
+          {"head_max_len": 0, "hooks": [], "hooks_raise": False, "min_confidence": 0.0})
+    check("controls/%s alongside model" % label,
+          call(model="laya-multilingual", max_len=1024),
+          {"model": "laya-multilingual", "max_len": 1024})
+
+# The caller's own hook objects have to arrive, not a copy or a re-wrapped stand-in. Read with
+# `.get()` so a surface that drops them reports a named failure instead of a KeyError that hides
+# the rest of the run.
+_sentinel_hooks = [RecordingAgent()]
+_ident_agent = RecordingAgent()
+LayaCrewRouter(agent=_ident_agent, hooks=_sentinel_hooks).route("Analyze Q3 sales", agents)
+_seen_hooks = _ident_agent.calls[0].get("hooks")
+check_true("controls/forwards the caller's objects",
+           _seen_hooks is _sentinel_hooks and _seen_hooks[0] is _sentinel_hooks[0], repr(_seen_hooks))
+
+
+# --------------------------------------------------------------- 5b. Budgets on a remote node
+def remote_body(controls):
+    """POST through the real urllib path with the opener mocked, and return the JSON body sent."""
+    with patch("urllib.request.build_opener") as mock_build_opener:
+        mock_opener = MagicMock()
+        mock_opener.open.return_value = DummyHTTPResponse(remote_response)
+        mock_build_opener.return_value = mock_opener
+        LayaCrewRouter(base_url="http://localhost:8000", **controls).route(
+            "Analyze codebase", agents)
+        return json.loads(mock_opener.open.call_args[0][0].data)
+
+
+check("controls/remote body carries both budgets",
+      {k: v for k, v in remote_body({"max_len": 1024, "head_max_len": 384}).items()
+       if k in _controls.PREDICT_CONTROLS},
+      {"max_len": 1024, "head_max_len": 384})
+check("controls/remote body omits unset budgets",
+      [k for k in remote_body({}) if k in _controls.PREDICT_CONTROLS], [])
+check("controls/remote body keeps a zero",
+      remote_body({"head_max_len": 0}).get("head_max_len"), 0)
+# `lang` / `min_confidence` are laya-serve `BODY_CONTROLS` too, so the same override reaches the
+# remote node -- and an unset one stays out of the body rather than shadowing the deployment.
+check("controls/remote body carries the decision controls",
+      {k: v for k, v in remote_body({"lang": "es", "min_confidence": 0.3}).items()
+       if k in _controls.DECISION_CONTROLS},
+      {"lang": "es", "min_confidence": 0.3})
+check("controls/remote body omits unset decision controls",
+      [k for k in remote_body({}) if k in _controls.DECISION_CONTROLS], [])
+check("controls/remote body keeps min_confidence=0.0",
+      remote_body({"min_confidence": 0.0}).get("min_confidence"), 0.0)
+
+# A hook is a Python callable that runs inside `predict`; a serve node cannot receive one. Saying
+# so beats reporting success after never calling it.
+for _c, _sample in (("hooks", [object()]), ("on_predict_start", object()),
+                    ("on_predict_end", object()), ("hooks_raise", False),
+                    ("hooks_timeout", 0.5)):
+    try:
+        LayaCrewRouter(base_url="http://localhost:8000", **{_c: _sample}).route(
+            "Analyze codebase", agents)
+        check_true("controls/remote refuses %s" % _c, False, "no error raised")
+    except ValueError as exc:
+        check_true("controls/remote refuses %s" % _c, True)
+        check_true("controls/remote %s names itself" % _c, _c in str(exc))
+        check_true("controls/remote %s names the endpoint" % _c, "laya-serve" in str(exc))
+    except Exception as exc:
+        check_true("controls/remote refuses %s" % _c, False, type(exc).__name__)
+
+try:
+    LayaTaskGuard(base_url="http://localhost:8000", hooks=[object()]).screen("hello")
+    check_true("controls/guard remote refuses hooks", False, "no error raised")
+except ValueError as exc:
+    check_true("controls/guard remote refuses hooks", "hooks" in str(exc))
+except Exception as exc:
+    check_true("controls/guard remote refuses hooks", False, type(exc).__name__)
+
+
+# --------------------------------------------------------------- Confidence source
+# The threshold gates on core's own gate number (`_gate_confidence`): `answer_confidence` first,
+# falling back to the entropy `confidence` so an answer that carries only the older field is
+# still gated rather than silently passed (fail-closed). The entropy-only checks below are the
+# ones that regress-protect that fallback: a "read `answer_confidence` or treat as fully
+# confident" rule -- which is what `answer_confidence_value` returns -- would let a 0.10 entropy
+# answer through a 0.80 gate, and those checks would go RED.
+
+
+class DisagreeingAgent(MockLayaAgent):
+    """Answers whose two confidence fields disagree, on purpose."""
+
+
+def _disagreeing_router(**kwargs):
+    def response(state, questions):
+        return {"model": "mock-crew-router",
+                "answers": {"delegation": {"choice": "agent_0", "confidence": 0.95,
+                                           "answer_confidence": 0.4}}}
+    return LayaCrewRouter(agent=DisagreeingAgent(response), **kwargs)
+
+
+# Below the calibrated threshold but above the entropy one: gates on the calibrated number.
+low = _disagreeing_router(confidence_threshold=0.80, fallback_agent_index=1)
+decided = low.route("anything", agents)
+check("gate/reads calibrated not entropy", decided.agent_index, 1)
+try:
+    _disagreeing_router(confidence_threshold=0.80, raise_on_low_confidence=True).route("anything",
+                                                                                       agents)
+    check_true("gate/raises on the calibrated number", False, "no error raised")
+except LayaLowConfidenceError as err:
+    check("gate/error carries the calibrated number", err.confidence, 0.4)
+
+
+# Fail-closed: an answer carrying ONLY the entropy field, below the threshold, is still gated.
+# This is the case a "calibrated number or nothing" reading gets wrong -- it would see no
+# `answer_confidence`, treat the answer as fully confident, and let a 0.10 answer past a 0.80
+# gate. Above the threshold the same shape passes.
+def _entropy_router(conf, **kwargs):
+    def response(state, questions):
+        return {"model": "mock-crew-router",
+                "answers": {"delegation": {"choice": "agent_0", "confidence": conf}}}
+    return LayaCrewRouter(agent=DisagreeingAgent(response), **kwargs)
+
+
+ent_low = _entropy_router(0.10, confidence_threshold=0.80, fallback_agent_index=1).route(
+    "anything", agents)
+check("gate/entropy-only below threshold is still gated (fail-closed)", ent_low.agent_index, 1)
+ent_high = _entropy_router(0.95, confidence_threshold=0.80, fallback_agent_index=1).route(
+    "anything", agents)
+check("gate/entropy-only above threshold passes", ent_high.agent_index, 0)
+
+# An answer with no usable confidence keeps the old behaviour: treated as fully confident.
+def _silent(state, questions):
+    return {"model": "mock-crew-router", "answers": {"delegation": {"choice": "agent_2"}}}
+
+
+kept = LayaCrewRouter(agent=DisagreeingAgent(_silent), confidence_threshold=0.80).route(
+    "anything", agents)
+check("gate/missing confidence still passes", kept.agent_index, 2)
+
+
+# A malformed response must not silently delegate work to the first or last agent.
+for _invalid_choice in (None, "unknown", "agent_-1", "agent_999", "agent_1_extra", 1, []):
+    def _invalid_response(state, questions, choice=_invalid_choice):
+        return {"answers": {"delegation": {"choice": choice, "confidence": 0.95}}}
+    try:
+        LayaCrewRouter(agent=MockLayaAgent(_invalid_response)).route("anything", agents)
+        check_true("choice/rejects %r" % (_invalid_choice,), False, "no error raised")
+    except ValueError as err:
+        check_true("choice/rejects %r" % (_invalid_choice,), "delegation choice" in str(err))
+
+for _invalid_index in (-1, len(agents), True, 0.5, "1"):
+    try:
+        _disagreeing_router(fallback_agent_index=_invalid_index).route("anything", agents)
+        check_true("fallback/rejects %r" % (_invalid_index,), False, "no error raised")
+    except ValueError as err:
+        check_true("fallback/rejects %r" % (_invalid_index,), "fallback_agent_index" in str(err))
+
+def _abstained_delegation(state, questions):
+    return {"answers": {"delegation": {"choice": None, "answer_confidence": 0.1}}}
+
+check("fallback/abstention can use configured agent",
+      LayaCrewRouter(agent=MockLayaAgent(_abstained_delegation), confidence_threshold=0.8,
+                     fallback_agent_index=1).route("anything", agents).agent_index, 1)
 
 
 # --------------------------------------------------------------- Results Summary

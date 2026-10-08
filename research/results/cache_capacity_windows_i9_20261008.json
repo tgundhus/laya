@@ -1,0 +1,54 @@
+{
+  "environment": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "python": "3.12.14"
+  },
+  "baseline_ref": "e29aa6d",
+  "capacity": 100000,
+  "unique_inserts": 50000,
+  "repeats": 5,
+  "mixed_expiry": {
+    "expired_entries": 1000,
+    "unique_inserts": 5000
+  },
+  "timing_note": "Alternating implementations; shared workstation load is uncontrolled. Microsecond timings are exploratory, not universal performance claims.",
+  "before": {
+    "saturated_insert_us": [
+      1.3954920001560822,
+      1.2545099999988452,
+      1.2745420000283048,
+      1.3229520001914352,
+      1.6175660002045333
+    ],
+    "mixed_expiry_insert_us": [
+      0.8034200000111014,
+      0.7480399974156171,
+      0.7404600037261844,
+      0.7595799979753792,
+      0.9203399997204542
+    ],
+    "mixed_expiry_live_entries_retained": 94000,
+    "saturated_insert_us_median": 1.3229520001914352,
+    "mixed_expiry_insert_us_median": 0.7595799979753792
+  },
+  "after": {
+    "saturated_insert_us": [
+      0.9148840000852942,
+      0.8206280000740662,
+      0.797065999940969,
+      0.9847059997264296,
+      0.8803079999051988
+    ],
+    "mixed_expiry_insert_us": [
+      5.012199998600408,
+      3.2329200010281056,
+      4.388660000404343,
+      4.052640002919361,
+      3.6868600000161678
+    ],
+    "mixed_expiry_live_entries_retained": 95000,
+    "saturated_insert_us_median": 0.8803079999051988,
+    "mixed_expiry_insert_us_median": 4.052640002919361
+  }
+}

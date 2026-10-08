@@ -48,6 +48,31 @@ function makeRouter(extra: Record<string, unknown> = {}) {
 }
 
 describe("agent hooks", () => {
+  it("awaits delayed nested result writes even when hooksRaise is false", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const hookStarted = new Promise<void>(resolve => { started = resolve; });
+    const agent = makeAgent([], { hooksRaise: false, hooks: [{
+      async onPredictEnd(ctx: PredictContext) {
+        const answers = ctx.results?.[0]["answers"] as Record<string, Record<string, unknown>>;
+        started();
+        await pending;
+        answers["q"]["noul"] = 0.25;
+      },
+    }] });
+    let settled = false;
+    const prediction = agent.predict("state", QUESTIONS);
+    void prediction.then(() => { settled = true; });
+    await hookStarted;
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release();
+    const result = await prediction;
+    expect(result.answers["q"]).toHaveProperty("noul", 0.25);
+    await Promise.resolve();
+    expect(result.answers["q"]).toHaveProperty("noul", 0.25);
+  });
   it("start and end hooks fire once each with a shared context", async () => {
     const events: string[] = [];
     let startCtx: PredictContext | null = null;

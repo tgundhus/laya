@@ -20,7 +20,7 @@ from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from .confidence import check_min_confidence, flag_low_confidence
+from .confidence import answer_confidence_value, apply_confidence_gate, check_min_confidence
 
 MAX_PROPERTIES = 32
 MAX_OPTIONS = 32
@@ -37,14 +37,37 @@ class DecisionResult:
 
     `values` is the schema-shaped output. `confidence` and `probabilities` are keyed by field,
     and `answers` is Laya's raw answer per field.
+
+    `answer_confidence` is `max(p)` per field -- the probability mass on the answer being
+    reported, under its own name. That makes it the same decision quantity `min_confidence`
+    compares against and the calibration and eval stack measures, which is the reason to report
+    it: a caller filtering this artifact to decide what to automate has to be filtering on the
+    number the gate actually used.
+
+    It is not a claim that the number is right. Reading it as "about c of the answers returned at
+    c are correct" holds only after temperatures are fitted and validated on held-out data for
+    that checkpoint and question shape; the shipped checkpoints are over-confident as shipped and
+    `laya-multilingual` ships with no fitted temperatures at all. See `common.answer_confidence`
+    and the README's Calibration section.
+
+    `confidence` keeps the value each field's type has always produced: normalized entropy
+    `1 - H(p) / log(k)` for `choice` and `score`, whose scale depends on the label count,
+    and `max(p_true, 1 - p_true)` for `noul` -- a probability of the reported side, not an
+    entropy, and not label-count dependent. `structured._details` reads the answer verbatim,
+    so the formula is per-type; a single sentence cannot describe every field in this dict.
+    A field that reported no usable `answer_confidence` maps to `None`, which is not the same
+    as a reported `0.0`.
     """
 
     values: Dict[str, Any]
     confidence: Dict[str, float]
     probabilities: Dict[str, Dict[str, Any]]
     answers: Dict[str, Any]
-    usage: Optional[Dict[str, int]] = None
+    usage: Optional[Dict[str, Any]] = None
     routing: Optional[Dict[str, Any]] = None
+    # Appended with a default so every existing construction of this dataclass keeps working, and
+    # the first six fields keep their positions.
+    answer_confidence: Dict[str, Optional[float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -123,9 +146,44 @@ def _score_field(path: str, name: str, prop: Dict[str, Any],
     return _Field(name=name, kind="score", question=question, minimum=lo)
 
 
-def _field(path: str, name: str, prop: Dict[str, Any]) -> _Field:
+_LOCAL_REFS = (("#/$defs/", "$defs"), ("#/definitions/", "definitions"))
+
+
+def _inline_ref(path: str, prop: Dict[str, Any], root: Dict[str, Any],
+                seen: Tuple[str, ...]) -> Tuple[Dict[str, Any], Tuple[str, ...]]:
+    """Replace a local `$ref` with the definition it names, the property's own keys on top.
+
+    Pydantic renders every `Enum` field as `{"$ref": "#/$defs/<Name>"}` (draft-07 and pydantic v1
+    spell it `#/definitions/`), with a sibling `description` when the field has one. The
+    definition's own `description` is dropped: pydantic fills it from the enum's docstring (v1 with
+    "An enumeration." when there is none), which describes the type rather than asking about this
+    field, so the wording stays the field's and an `Enum` asks what the same `Literal` would. Only
+    this schema's own definitions are looked up; anything else is rejected rather than fetched, and
+    a ref met twice on one path is a cycle.
+    """
+    ref = prop["$ref"]
+    if ref in seen:
+        raise SchemaError("%s: $ref %r is recursive; flatten the schema" % (path, ref))
+    target = None
+    for prefix, key in _LOCAL_REFS:
+        defs = root.get(key)
+        if isinstance(ref, str) and ref.startswith(prefix) and isinstance(defs, dict):
+            target = defs.get(ref[len(prefix):])
+    if not isinstance(target, dict):
+        raise SchemaError("%s: $ref %r does not resolve to an entry of this schema's '$defs' or "
+                          "'definitions'" % (path, ref))
+    # a `$ref` the definition carries is an alias, followed by the caller's loop
+    merged = {k: v for k, v in target.items() if k != "description"}
+    merged.update((k, v) for k, v in prop.items() if k != "$ref")
+    return merged, seen + (ref,)
+
+
+def _field(path: str, name: str, prop: Dict[str, Any], root: Optional[Dict[str, Any]] = None,
+           seen: Tuple[str, ...] = ()) -> _Field:
     if not isinstance(prop, dict):
         raise SchemaError("%s: property must be an object, got %s" % (path, type(prop).__name__))
+    while "$ref" in prop:
+        prop, seen = _inline_ref(path, prop, root or {}, seen)
     description = prop.get("description")
     # Pydantic v2 renders `Optional[X]` as `{"anyOf": [<X>, {"type": "null"}]}` with no
     # top-level type/enum/const, the same nullable shape the list form `type: ["string", "null"]`
@@ -133,6 +191,13 @@ def _field(path: str, name: str, prop: Dict[str, Any]) -> _Field:
     # so `Optional[Literal[...]]`, `Optional[int]` and friends map instead of raising. A union of
     # two real types is genuinely ambiguous and still rejected.
     if not ({"const", "enum", "type"} & set(prop)):
+        # pydantic v1 wraps a described `$ref` as `{"allOf": [{"$ref": ...}], "description": ...}`;
+        # a one-item `allOf` is that schema, so it is unwrapped too, the outer keys on top.
+        wrapped = prop.get("allOf")
+        if isinstance(wrapped, list) and len(wrapped) == 1 and isinstance(wrapped[0], dict):
+            branch = dict(wrapped[0])
+            branch.update((k, v) for k, v in prop.items() if k != "allOf")
+            return _field(path, name, branch, root, seen)
         union = prop.get("anyOf") or prop.get("oneOf")
         if union is not None:
             branches = [b for b in union if isinstance(b, dict) and b.get("type") != "null"]
@@ -142,7 +207,7 @@ def _field(path: str, name: str, prop: Dict[str, Any]) -> _Field:
                     % (path, len(branches)))
             branch = dict(branches[0])
             branch.setdefault("description", description)
-            return _field(path, name, branch)
+            return _field(path, name, branch, root, seen)
     if "const" in prop:
         return _enum_field(path, name, [prop["const"]], description)
     if "enum" in prop:
@@ -165,8 +230,6 @@ def _field(path: str, name: str, prop: Dict[str, Any]) -> _Field:
         raise SchemaError("%s: arrays are not supported; ask one field per element" % path)
     if jtype == "object":
         raise SchemaError("%s: nested objects are not supported; flatten the schema" % path)
-    if "$ref" in prop:
-        raise SchemaError("%s: $ref/recursion is not supported; flatten the schema" % path)
     raise SchemaError("%s: unsupported schema %r" % (path, prop))
 
 
@@ -181,7 +244,7 @@ def plan_from_json_schema(schema: Dict[str, Any]) -> List[_Field]:
         raise SchemaError("'properties' must be a non-empty object")
     if len(properties) > MAX_PROPERTIES:
         raise SchemaError("%d properties exceeds MAX_PROPERTIES=%d" % (len(properties), MAX_PROPERTIES))
-    return [_field("properties.%s" % name, name, prop) for name, prop in properties.items()]
+    return [_field("properties.%s" % name, name, prop, schema) for name, prop in properties.items()]
 
 
 def questions_from_json_schema(schema: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -211,7 +274,13 @@ def _project(answers: Dict[str, Any], fields: Sequence[_Field]) -> Dict[str, Any
             if probs:
                 idx = max(range(len(probs)), key=lambda i: float(probs.get(str(i), probs.get(i, 0.0))))
             else:
-                idx = int(round(float(answer.get("score", 0.0)))) - int(f.minimum or 0)
+                # `score` is always the probability-weighted 0-based level index (see
+                # `DecisionModel._decode_answers`), the same space `idx` is in above -- not an
+                # absolute field value -- so it is rounded on its own, with no `minimum`
+                # subtracted first. Subtracting it here and adding it back below used to cancel
+                # out, silently dropping `minimum` from every field whose schema does not start
+                # at 0.
+                idx = int(round(float(answer.get("score", 0.0))))
             values[f.name] = int(f.minimum or 0) + idx
         else:  # choice
             label = str(answer.get("choice"))
@@ -232,9 +301,13 @@ def answer_to_pydantic(model: Any, answers: Dict[str, Any]) -> Any:
 
 def _details(values: Dict[str, Any], answers: Dict[str, Any], result: Dict[str, Any]) -> DecisionResult:
     confidence: Dict[str, float] = {}
+    answer_confidence: Dict[str, Optional[float]] = {}
     probabilities: Dict[str, Dict[str, Any]] = {}
     for name, answer in answers.items():
         confidence[name] = float(answer.get("confidence", 0.0))
+        # Read through the module that owns the definition, so this and the `min_confidence` gate
+        # cannot disagree about which quantity is being reported.
+        answer_confidence[name] = answer_confidence_value(answer)
         if answer.get("type") == "noul":
             p = float(answer.get("noul", 0.0))
             probabilities[name] = {"false": round(1.0 - p, 4), "true": round(p, 4)}
@@ -247,6 +320,7 @@ def _details(values: Dict[str, Any], answers: Dict[str, Any], result: Dict[str, 
         answers=dict(answers),
         usage=result.get("usage"),
         routing=result.get("routing"),
+        answer_confidence=answer_confidence,
     )
 
 
@@ -280,14 +354,19 @@ def decide(runner, state: Any, schema: Any = None, *, questions: Optional[Dict[s
         else:
             raise
 
-    if mc is not None and isinstance(result, dict):
-        flag_low_confidence([result], mc)
+    if isinstance(result, dict):
+        apply_confidence_gate([result], mc)
 
     answers = result.get("answers", {}) or {}
     values = _project(answers, fields) if fields is not None else dict(answers)
     if return_details:
         return _details(values, answers, result)
     return values
+
+
+# The keys `Router.predict_batch` reads off each request (`route_batch` and the token-budget
+# overrides) rather than accepting as keywords; laya-serve's BATCH_BODY_ITEM_CONTROLS plus `model`.
+_ROUTER_REQUEST_KEYS = ("model", "task", "lang", "lang_guess", "max_len", "head_max_len")
 
 
 def decide_batch(runner, states: Sequence[Any], schema: Any = None, *,
@@ -335,17 +414,20 @@ def decide_batch(runner, states: Sequence[Any], schema: Any = None, *,
 
     if hasattr(runner, "route_batch"):
         # Router convention: one request dict per state, each carrying the shared
-        # questions, so it routes, groups by checkpoint and restores input order.
-        results = predict_batch([{"state": s, "questions": questions} for s in states],
+        # questions, so it routes, groups by checkpoint and restores input order. The routing
+        # pins and the token budget are read off each request there, not taken as keywords of
+        # predict_batch, so they ride on every request; the rest (batch_size, hooks, ...) is
+        # call-level.
+        per_request = {key: predict_kwargs.pop(key) for key in _ROUTER_REQUEST_KEYS if key in predict_kwargs}
+        results = predict_batch([dict({"state": s, "questions": questions}, **per_request) for s in states],
                                 **predict_kwargs)
     else:
         # Agent convention: a list of states evaluated against one question set.
         results = predict_batch(list(states), questions, **predict_kwargs)
 
-    if mc is not None:
-        # Flagged here rather than passed down, so a runner whose predict_batch predates the
-        # keyword still gets the same projection.
-        flag_low_confidence([r for r in results if isinstance(r, dict)], mc)
+    # Applied here rather than passed down, so a runner whose predict_batch predates the
+    # keyword still gets the same projection and the same reported state.
+    apply_confidence_gate([r for r in results if isinstance(r, dict)], mc)
 
     def _one(r: Dict[str, Any]) -> Any:
         answers = r.get("answers", {}) or {}

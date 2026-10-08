@@ -47,11 +47,29 @@ cap to fit what it preloads (`laya/router.py:275` -> `:372`), so the demo's own 
 with three checkpoints resident while `/health` reported one. Nothing in the file ever asked the
 running Router what it was holding.
 
+`main` is at 66 checks now, and this file is at 81. The fifteen new ones are the request `model`
+field. `laya.router.normalise_name` is core's one resolver -- trim, lower-case, alias table,
+registry -- and `laya --model` and `laya/serve.py` both hand it the caller's string, but this demo
+compared it against a tuple of the three checkpoint names. So on `main` the aliases, the checkpoint
+ids with the `laya-` prefix, `typed_decisions`, and the upper-cased and space-padded form of every
+one of them answer 422 here: 60 of the 67 spellings core resolves, which
+`laya-bench/model_alias_witness_main.log` counts against `main` at 9d95567 through
+`_check_model` and through `POST /predict` on a TestClient -- `{"model": "english"}` answers 503,
+`{"model": "laya"}` answers 422, while `laya --model laya` pins the checkpoint. The new checks take
+the probe from `laya.router`'s own tables rather than listing the aliases here, require the
+canonical name to reach the Router, keep blank meaning "do not pin" as the playground sends it,
+read the alias list back out of `/models`, its HTML page, the published request schema and the
+README section for this server, and then add a fourth checkpoint to core at runtime, reload the
+demo, and require it to be pinnable by name and by alias and to appear in that text with no edit to
+this file.
+
 Run: python tests/test_example_server_limits.py
 """
+import ast
 import importlib
 import json
 import os
+import re as _re          # `main()` already binds a local `re` further down; F811 off both
 import sys
 import types
 
@@ -261,10 +279,94 @@ def main():
                + [("n%d" % i, noul_crit) for i in range(30)])),
         ("noul only", "hi", {"n%d" % i: noul_crit for i in range(10)}),
         ("an ordinary request", {"body": "billed twice"}, one),
+        # A state whose `str()` and whose JSON serialization are different lengths (50000 vs 99988).
+        # This case catches the two surfaces DIVERGING -- one measuring the serialized text and the
+        # other `str(state)`. It cannot catch them being wrong together: `examples/server.py` binds
+        # `_state_length` from `laya.serve` by `getattr`, so a regression inside that helper moves
+        # both and parity stays green. Measured: regressing `_state_length` fails 0 of these parity
+        # checks and both of the absolute ones below. Those are the real coverage -- do not prune
+        # them as redundant.
+        ("a state whose repr is half its JSON", {"body": '"' * 49988}, one),
     ]
     for label, st, qs in parity_cases:
         s, d = serve_verdict(st, qs), demo_verdict(st, qs)
         ok("parity with laya.serve: %s" % label, s == d, "serve=%s demo=%s" % (s, d))
+
+    # The BATCH shape, which these parity cases could not reach: every case above drives
+    # `_check_request_limits` with one state, so nothing compared how the two surfaces SIZE a batch.
+    # `laya.serve` splits a batch so one forward pass stays inside its token budget rather than
+    # refusing it, and the demo must split it identically -- it binds the planner from `laya.serve` by
+    # getattr, so this checks the binding took AND that the plan reaches the call.
+    serve_plan = _serve_mod._batch_chunk_size
+    demo_plan = demo._batch_chunk_size
+
+    tiny = {"q": {"type": "noul", "instructions": "True?"}}
+    four = dict(("q%03d" % i, tiny["q"]) for i in range(4))
+    thirty_two = dict(("q%03d" % i, tiny["q"]) for i in range(32))
+    many = dict(("q%03d" % i, tiny["q"]) for i in range(MAX_QUESTIONS))
+    wide = _serve_mod.DEFAULT_MAX_TOKEN_BUDGET
+    for label, ns, nq, mlen in [
+            ("an ordinary batch fits, no split", 2, len(four), None),
+            ("64 states x 4 questions fits", 64, len(four), None),
+            ("8 states x 32 questions fits", 8, len(thirty_two), None),
+            ("9 states x 32 questions splits", 9, len(thirty_two), None),
+            ("64 states x 64 questions splits", 64, len(many), None),
+            ("a wide max_len splits harder", 8, len(thirty_two), wide),
+            ("a wide max_len with few rows fits", 2, 1, wide)]:
+        a, b = serve_plan(ns, nq, mlen), demo_plan(ns, nq, mlen)
+        ok("batch plan parity with laya.serve: %s" % label, a == b, "serve=%r demo=%r" % (a, b))
+
+    # Equal on both sides is not enough -- they bind the same function, so both could be wrong
+    # together. The plan itself has to be the right shape.
+    ok("batch plan/a fitting batch is not split", serve_plan(8, len(thirty_two)) is None,
+       repr(serve_plan(8, len(thirty_two))))
+    split = serve_plan(64, len(many))
+    ok("batch plan/an oversized batch is split", split is not None and split >= 1, repr(split))
+    ok("batch plan/one pass fits the budget",
+       split * len(many) * _serve_mod._BATCH_ROW_TOKENS_ASSUMED
+       <= _serve_mod.DEFAULT_MAX_BATCH_TOKENS,
+       "%r states x %d questions" % (split, len(many)))
+
+    # And the demo's route sends it, rather than computing it and dropping it.
+    sent = {}
+    real_router = demo._router
+
+    class _Recorder:
+        def predict_batch(self, requests, **kwargs):
+            sent.update(kwargs)
+            sent["n"] = len(requests)
+            return [{"model": "m", "answers": {}, "usage": {"input_tokens": 1}} for _ in requests]
+
+    demo._router = lambda: _Recorder()
+    try:
+        code = client.post("/predict/batch",
+                           json={"states": ["hi"] * 64, "questions": many}).status_code
+        ok("batch plan/the demo answers an oversized batch instead of refusing it", code == 200, code)
+        ok("batch plan/the demo forwards the planned batch_size",
+           sent.get("batch_size") == serve_plan(64, len(many)),
+           "sent=%r planned=%r" % (sent.get("batch_size"), serve_plan(64, len(many))))
+        ok("batch plan/every state is still sent", sent.get("n") == 64, sent.get("n"))
+        sent.clear()
+        client.post("/predict/batch", json={"states": ["hi"] * 2, "questions": four})
+        ok("batch plan/a fitting batch is passed no batch_size", "batch_size" not in sent, sent)
+    finally:
+        demo._router = real_router
+
+    # Parity alone cannot see a bug both surfaces share, and `getattr` guarantees they share one:
+    # with `_state_length` measuring `str(state)` again, both agree on accepting a state that
+    # serializes to 99 988 characters and every parity check above stays green (measured: 0 of them
+    # fail, both of these do). So the verdict itself is asserted, not just the agreement.
+    quote_heavy = {"body": '"' * 49988}
+    # Recorded through `ok` like everything else in this file: a bare `assert` here would raise out
+    # of `main()` and abandon the ~30 checks that follow instead of recording one failure.
+    ok("the quote-heavy fixture passes a str()-based gate",
+       len(str(quote_heavy)) <= MAX_STATE_CHARS, len(str(quote_heavy)))
+    ok("the quote-heavy fixture fails a serialization-based gate",
+       len(json.dumps(quote_heavy, ensure_ascii=False)) > MAX_STATE_CHARS,
+       len(json.dumps(quote_heavy, ensure_ascii=False)))
+    for who, verdict in (("laya.serve", serve_verdict(quote_heavy, one)),
+                         ("the demo server", demo_verdict(quote_heavy, one))):
+        ok("%s refuses a state whose JSON is twice its repr" % who, verdict == "refused", verdict)
 
     # --- the resident-checkpoint cap: derived, not copied -------------------
     # examples/server.py used to build its Router with `max_loaded=1`, a copy of a default
@@ -473,6 +575,80 @@ def main():
        and not any("task" in r for r in sent),
        json.dumps(sent[:1])[:200])
 
+    # --- how the batch is packed is askable ---------------------------------------------
+    #
+    # `Router.predict_batch` has taken `batch_size` and `sort_by_length` since #294, and the README
+    # teaches `router.predict_batch(requests, batch_size=8, sort_by_length=True)`. The endpoint that
+    # answers up to 64 states in one call forwarded neither, so every batch was one forward pass
+    # padded to its longest state: a caller who wanted smaller passes had no way to ask, in code or
+    # over HTTP. These drive the real request model, so a body that named the keys and had them
+    # dropped by validation fails here rather than returning a silently slower 200.
+    shape_params = set(inspect.signature(CoreRouter.predict_batch).parameters) - {"self", "requests"}
+    ok("core still takes the shape keys this endpoint forwards",
+       {"batch_size", "sort_by_length"} <= shape_params, str(sorted(shape_params)))
+
+    shaped = RecordingRouter()
+    demo.ROUTER = shaped
+    body = TestClient(demo.app, raise_server_exceptions=False).post(
+        "/predict/batch", json={"states": states, "questions": one,
+                                "batch_size": 4, "sort_by_length": True})
+    ok("a shape request is still one batch call, in order",
+       len(shaped.batch_calls) == 1 and not shaped.predict_calls
+       and body.json().get("count") == 8
+       and [r.get("state") for r in body.json()["results"]] == states,
+       "predict_batch=%d predict=%d" % (len(shaped.batch_calls), len(shaped.predict_calls)))
+    ok("batch_size and sort_by_length reach predict_batch",
+       shaped.batch_calls[0][1] == {"batch_size": 4, "sort_by_length": True},
+       str(shaped.batch_calls[0][1]))
+
+    sized = RecordingRouter()
+    demo.ROUTER = sized
+    TestClient(demo.app, raise_server_exceptions=False).post(
+        "/predict/batch", json={"states": states, "questions": one, "batch_size": 2})
+    ok("batch_size alone does not invent a sort request",
+       sized.batch_calls[0][1] == {"batch_size": 2}, str(sized.batch_calls[0][1]))
+
+    # Core documents `sort_by_length` without a split batch as a no-op, not an error; the endpoint
+    # must not be the surface that turns a valid call into a 422.
+    unsized = RecordingRouter()
+    demo.ROUTER = unsized
+    no_split = TestClient(demo.app, raise_server_exceptions=False).post(
+        "/predict/batch", json={"states": states, "questions": one, "sort_by_length": True})
+    ok("sort_by_length alone is accepted and forwarded, as core takes it",
+       no_split.status_code == 200 and unsized.batch_calls[0][1] == {"sort_by_length": True},
+       "%s %s" % (no_split.status_code, str(unsized.batch_calls[0][1])))
+
+    junk = TestClient(demo.app, raise_server_exceptions=False).post(
+        "/predict/batch", json={"states": states, "questions": one, "batch_size": 0})
+    ok("a zero-size forward pass is a 422 before any router call",
+       junk.status_code == 422, "%s %s" % (junk.status_code, str(junk.json())[:120]))
+
+    # The shape belongs to the batch call only. When a state fails, the endpoint retries per state
+    # through `Router.predict`, which takes neither key: leaking them there would turn one bad
+    # state into 8 TypeErrors and an empty batch.
+    leaked = RecordingRouter(fail_on="ticket 3")
+    demo.ROUTER = leaked
+    retried = TestClient(demo.app, raise_server_exceptions=False).post(
+        "/predict/batch", json={"states": states, "questions": one,
+                                "batch_size": 4, "sort_by_length": True})
+    ok("the per-state fallback carries no batch shape",
+       leaked.batch_calls[0][1] == {"batch_size": 4, "sort_by_length": True}
+       and len(leaked.predict_calls) == 8
+       and not any("batch_size" in kw or "sort_by_length" in kw
+                   for _, kw in leaked.predict_calls)
+       and [r for r in retried.json()["results"] if "error" in r][0]["index"] == 3,
+       str([kw for _, kw in leaked.predict_calls][:1])[:200])
+
+    legacy_shaped = LegacyRouter()
+    demo.ROUTER = legacy_shaped
+    old = TestClient(demo.app, raise_server_exceptions=False).post(
+        "/predict/batch", json={"states": states, "questions": one,
+                                "batch_size": 4, "sort_by_length": True})
+    ok("a router without predict_batch still answers a shaped request",
+       old.status_code == 200 and len(old.json()["results"]) == 8
+       and not [r for r in old.json()["results"] if "error" in r],
+       "%s %s" % (old.status_code, json.dumps(old.json())[:200]))
+
     # One state failing must not cost its neighbours their answer: the endpoint's published
     # contract is per-item errors inside a 200.
     partial = RecordingRouter(fail_on="ticket 3")
@@ -506,6 +682,300 @@ def main():
        and all("503" in r.get("error", "") for r in not_ready.json()["results"]),
        json.dumps(not_ready.json())[:200])
     demo.ROUTER = None
+
+    # ---- the `model` field resolves the way core resolves one ----------------
+    # `laya.router.normalise_name` trims, lower-cases and maps its alias table before it checks
+    # the checkpoint registry, and `laya --model laya` and `POST /v1/systemone {"model":"laya"}`
+    # both go through it. This demo compared the string against a tuple of the three names, so the
+    # alias worked on the CLI and answered 422 here. The probe below is built from laya.router's
+    # own tables, so it covers spellings this file has never heard of and cannot fall behind.
+    from laya import router as _router_mod
+
+    names = sorted(_router_mod.DEFAULT_MODELS)
+    aliases = sorted(a for a, target in _router_mod._ALIASES.items()
+                     if target in _router_mod.DEFAULT_MODELS)
+    spellings = [spelling for value in names + aliases
+                 for spelling in (value, value.upper(), " %s " % value)]
+
+    refused, not_canonical = [], []
+    for value in spellings:
+        want = _router_mod.normalise_name(value)
+        try:
+            got = demo._check_model(value)
+        except Exception as exc:
+            refused.append("%r -> %s" % (value, exc))
+            continue
+        if got != want:
+            not_canonical.append("%r -> %r, core says %r" % (value, got, want))
+    ok("every one of the %d spellings core resolves, the demo resolves too" % len(spellings),
+       not refused, "; ".join(refused[:3]))
+    ok("and what reaches the Router is the checkpoint, not the spelling that named it",
+       not not_canonical, "; ".join(not_canonical[:3]))
+
+    # The negatives, derived from the same tables so one of them cannot accidentally be real.
+    unknown = [v + "-nope" for v in names + aliases]
+
+    def _refuses(fn, value):
+        try:
+            fn(value)
+        except ValueError:
+            return True
+        return False
+
+    ok("a name neither core nor the demo knows still refuses on both surfaces",
+       all(_refuses(_router_mod.normalise_name, v) and _refuses(demo._check_model, v)
+           for v in unknown),
+       repr([v for v in unknown if not _refuses(demo._check_model, v)][:3]))
+
+    # Blank is the demo's own convenience, not core's: the playground posts an empty field, and
+    # core's resolver raises on one. Parity must not take that away.
+    def _resolves(v):
+        """The value the field validator accepts, or the refusal it gave -- never a raised error."""
+        try:
+            return demo._check_model(v)
+        except Exception as exc:
+            return "refused: %s" % exc
+
+    ok("a blank or whitespace-only model still means 'do not pin'",
+       [_resolves(v) for v in (None, "", "   ")] == [None, None, None],
+       repr([(v, _resolves(v)) for v in (None, "", "   ")])[:180])
+
+    regressed = demo.ROUTER
+    demo.ROUTER = RecordingRouter()
+    http = TestClient(demo.app, raise_server_exceptions=False)
+    single = http.post("/predict", json={"state": "ticket 0", "questions": one, "model": "ml"})
+    ok("an alias is accepted by /predict and the Router is asked for its checkpoint",
+       single.status_code == 200 and demo.ROUTER.predict_calls
+       and demo.ROUTER.predict_calls[-1][1].get("model") == "multilingual",
+       "%s %r" % (single.status_code, demo.ROUTER.predict_calls[-1:]))
+    batch = http.post("/predict/batch", json={"states": states, "questions": one, "model": "LAYA"})
+    ok("the same alias on /predict/batch pins english for every state in the batch",
+       batch.status_code == 200 and demo.ROUTER.batch_calls
+       and [r.get("model") for r in demo.ROUTER.batch_calls[-1][0]] == ["english"] * len(states),
+       "%s %r" % (batch.status_code, [r.get("model")
+                                      for r in (demo.ROUTER.batch_calls[-1][0]
+                                                if demo.ROUTER.batch_calls else [])][:3]))
+    bad = http.post("/predict", json={"state": "ticket 0", "questions": one,
+                                      "model": names[0] + "-nope"})
+    bad_text = json.dumps(bad.json())
+    ok("an unknown name is still a 422, in core's words plus this server's own hint",
+       bad.status_code == 422 and "unknown model" in bad_text and "choose one of" in bad_text
+       and "(or omit it)" in bad_text, bad_text[:220])
+
+    listing = http.get("/models").json()
+    ok("/models publishes the aliases a caller may use, and every one it publishes validates",
+       listing["allowed"] == names and listing.get("aliases") == {a: _router_mod._ALIASES[a]
+                                                                  for a in aliases}
+       and all(_resolves(a) == c for a, c in (listing.get("aliases") or {}).items()),
+       json.dumps(listing)[:220])
+    page = http.get("/models", headers={"accept": "text/html"}).text
+    ok("the page that lists the checkpoints names the count and the spellings it accepts",
+       ("%d checkpoints, one router" % len(names)) in page
+       and all("<code>%s</code>" % a in page for a in aliases), page[:160])
+    demo.ROUTER = regressed
+
+    def _rendered(desc):
+        """The checkpoint list and the alias list, read back out of the field's own description.
+
+        That sentence is generated from `MODELS`/`MODEL_ALIASES`, so the honest gate is to parse
+        the lists out of it and compare them with what `laya.router` accepts -- a substring check
+        would also pass a sentence somebody typed beside the tables. A render this cannot read
+        comes back as two empty lists, which fails by name instead of raising and aborting the run.
+        """
+        try:
+            names_part, alias_part = desc.split("one of ", 1)[1].split(
+                ", or an alias core resolves (", 1)
+            alias_part = alias_part.split("), in any casing", 1)[0]
+        except (IndexError, ValueError):
+            return [], []
+        return ([p.strip() for p in names_part.split(" | ")] if names_part.strip() else [],
+                [p.strip() for p in alias_part.split(", ")] if alias_part.strip() else [])
+
+    schema = http.get("/openapi.json").json()["components"]["schemas"]
+    description = schema["PredictRequest"]["properties"]["model"].get("description", "")
+    ok("the published request schema lists every name and alias the endpoint takes, in neither "
+       "more nor less", _rendered(description) == (names, aliases),
+       "rendered %r %r from tables %r %r" % (_rendered(description)[0], _rendered(description)[1],
+                                             names, aliases))
+    ok("and both request models describe the one field identically",
+       description and description
+       == schema["BatchRequest"]["properties"]["model"].get("description", ""),
+       schema["BatchRequest"]["properties"]["model"].get("description", ""))
+
+    # The section of the README that teaches this server has to say the field exists and where its
+    # spellings come from, or the only way to learn it is to get a 422.
+    # Laya-Pro teaches this server in docs/guide.md ("Web playground"), not README.md.
+    with open(os.path.join(ROOT, "docs", "guide.md"), encoding="utf-8") as handle:
+        readme = handle.read()
+    demo_page = readme.split("## Web playground", 1)[1].split("\n## ", 1)[0]
+    ok("the README section for this server teaches `model` and where its names come from",
+       "`model`" in demo_page and "laya.router" in demo_page and "/models" in demo_page,
+       demo_page[-200:])
+
+    # The registry is read, not copied. A checkpoint added to laya.router has to become pinnable
+    # here -- by name, by alias, in the schema text and on /models -- with no edit to this file.
+    # `laya.DEFAULT_MODELS` is the same dict object, so one insert reaches both reads.
+    _router_mod.DEFAULT_MODELS["spanish"] = (_router_mod.BUNDLE_REPO, "spanish")
+    _router_mod._ALIASES["es"] = "spanish"
+    try:
+        grown = importlib.reload(demo)
+        grown_names = sorted(_router_mod.DEFAULT_MODELS)
+        ok("a checkpoint core gains is pinnable here without editing this file",
+           "spanish" in grown.MODELS and _resolves("spanish") == "spanish"
+           and _resolves(" ES ") == "spanish"
+           and grown.MODEL_ALIASES.get("es") == "spanish",
+           "%r %r" % (sorted(grown.MODELS), _resolves(" es ")))
+        grown_schema = TestClient(grown.app, raise_server_exceptions=False).get(
+            "/openapi.json").json()["components"]["schemas"]
+        grown_description = grown_schema["PredictRequest"]["properties"]["model"].get("description", "")
+        ok("and the text that teaches the list is rendered from it, not typed beside it",
+           _rendered(grown_description) == (grown_names, sorted(grown.MODEL_ALIASES))
+           and grown_description
+           == grown_schema["BatchRequest"]["properties"]["model"].get("description", ""),
+           "rendered %r from %r -- %s" % (_rendered(grown_description), grown_names,
+                                          grown_description[:120]))
+        grown_listing = TestClient(grown.app, raise_server_exceptions=False).get("/models").json()
+        ok("/models reports the new checkpoint and its new alias",
+           grown_listing["allowed"] == grown_names
+           and (grown_listing.get("aliases") or {}).get("es") == "spanish",
+           json.dumps(grown_listing)[:220])
+    finally:
+        _router_mod.DEFAULT_MODELS.pop("spanish", None)
+        _router_mod._ALIASES.pop("es", None)
+        demo = importlib.reload(demo)
+
+    # --- the certainty chip: it names a formula, so it has to name that type's formula ---
+    # `confidence` is per-type in the decoders (normalized entropy on `choice`/`score`, the reported
+    # side's probability on `noul`), but the demo's chip said "entropy" for all three and its tooltip
+    # defined the field as one formula. The three have to agree: what the agents write, what the chip
+    # says per type, and what the tooltip attributes to which type. Weight-free -- no Router is built.
+    with open(os.path.join(ROOT, "examples", "server.py"), encoding="utf-8") as handle:
+        srv = handle.read()
+
+    def _decoded_kinds():
+        """The question types this page draws distribution rows for."""
+        tree = ast.parse(srv)
+        fn = next(n for n in ast.walk(tree)
+                  if isinstance(n, ast.FunctionDef) and n.name == "_answer_dist")
+        return sorted({c.value for n in ast.walk(fn) if isinstance(n, ast.Compare)
+                       and isinstance(n.left, ast.Name) and n.left.id == "kind"
+                       for c in n.comparators
+                       if isinstance(c, ast.Constant) and isinstance(c.value, str)})
+
+    def _decoder_formulas(relpath):
+        """{question type: "entropy" | "maxp"}, read off the `confidence` each builder writes."""
+        with open(os.path.join(ROOT, relpath), encoding="utf-8") as handle:
+            tree = ast.parse(handle.read())
+        fn = next(n for n in ast.walk(tree)
+                  if isinstance(n, ast.FunctionDef) and n.name == "_decode_answers")
+        bound = {}
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                bound[node.targets[0].id] = node.value
+        got = {}
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Dict):
+                continue
+            fields = {k.value: v for k, v in zip(node.keys, node.values)
+                      if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+            if "type" not in fields or "confidence" not in fields:
+                continue
+            kind = fields["type"].value
+            expr = fields["confidence"]
+            while isinstance(expr, ast.Name) and expr.id in bound:   # `conf_score = round(...)`
+                expr = bound[expr.id]
+            called = {c.func.id for c in ast.walk(expr)
+                      if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+            formula = "entropy" if "confidence_from_probs" in called else "maxp" if "max" in called else None
+            if formula is None:
+                raise SystemExit("%s: %s's `confidence` is neither confidence_from_probs nor a max(): %s"
+                                 % (relpath, kind, ast.dump(expr)))
+            if got.get(kind) not in (None, formula):
+                raise SystemExit("%s: %s writes `confidence` two ways" % (relpath, kind))
+            got[kind] = formula
+        return got
+
+    def _sentence_types(prose, kinds):
+        """{formula: the question types named, in backticks, in the same sentence as it}."""
+        got = {}
+        for sentence in _re.split(r"(?<=[.!?])\s+", prose):
+            named = {t for t in _re.findall(r"`([a-z]+)`", sentence) if t in kinds}
+            if not named:
+                continue
+            for formula, words in (("entropy", "entropy"), ("maxp", "max(p")):
+                if words in sentence:
+                    got.setdefault(formula, set()).update(named)
+        return {key: sorted(value) for key, value in sorted(got.items())}
+
+    def _chip(row):
+        hit = _re.search(r"<code>confidence</code> <b>([0-9.]+)</b> (.*?) <svg", row)
+        return (hit.group(1), hit.group(2)) if hit else (None, None)
+
+    kinds = _decoded_kinds()
+    label = demo._CERTAINTY_LABEL
+    tip = demo._CERTAINTY_TIP
+    ok("the chip has a label for every type the page draws rows for, and no other",
+       sorted(label) == kinds, "%r vs the page's %r" % (sorted(label), kinds))
+
+    page_formula = {kind: ("entropy" if "entropy" in text else "maxp") for kind, text in sorted(label.items())}
+    for relpath in ("laya/agent.py", "laya/onnx_agent.py"):
+        decoders = _decoder_formulas(relpath)
+        ok("%s writes `confidence` the way this page labels it" % relpath,
+           decoders == page_formula, "%r vs the chip's %r" % (decoders, page_formula))
+
+    said = _sentence_types(tip, set(kinds))
+    ok("the tooltip attributes entropy to exactly the types whose chip says entropy",
+       said.get("entropy") == sorted(k for k, f in page_formula.items() if f == "entropy"),
+       "tooltip %r vs chip %r" % (said, page_formula))
+    ok("and the reported side's max(p_true, 1 - p_true) to exactly the types whose chip does not",
+       said.get("maxp") == sorted(k for k, f in page_formula.items() if f == "maxp"),
+       "tooltip %r vs chip %r" % (said, page_formula))
+    ok("so the tooltip names both formulas rather than defining the field as one",
+       len(said) == 2 and set(said) == {"entropy", "maxp"}, repr(said))
+
+    OLD_BLANKET = "The `confidence` field is 1 minus the normalized entropy of the whole distribution:"
+    ok("the blanket sentence this replaced is gone", OLD_BLANKET not in srv, OLD_BLANKET)
+    ok("and the page no longer promises an accuracy rate for a confidence value",
+       "are right about 90% of the time" not in srv
+       and "gate on a threshold you have measured" in tip, tip)
+
+    OLD_JS_CHIP = 'toFixed(4)}), "entropy, not calibrated",\n        icon("info")'
+    ok("the browser's chip reads the table by the row's type, in the block the page ships",
+       OLD_JS_CHIP not in srv and "CERTAINTY_LABEL[kind]" in demo._PLAYGROUND_JS)
+    page = client.get("/").text
+    ok("the browser gets the label table from this dict, not a copy of it",
+       "const CERTAINTY_LABEL = " + json.dumps(label) in page, json.dumps(label))
+    ok("and the tooltip it shows is this same text",
+       "is not one formula, and it is not calibrated, so do not gate on it" in page)
+
+    import numpy as np
+    from laya.common import confidence_from_probs
+
+    spread = [0.62, 0.25, 0.13]
+    ent = round(confidence_from_probs(np.asarray(spread), 3), 4)
+    row = demo._answer_row("q", {"type": "choice", "choice": "billing", "answer_confidence": 0.62,
+                                 "confidence": ent, "probabilities": {"billing": 0.62, "support": 0.25,
+                                                                     "sales": 0.13}},
+                           {"type": "choice", "instructions": "?"}, 1)
+    ok("a choice row reads as the entropy it is", _chip(row) == ("%.4f" % ent, label["choice"]),
+       "%r" % (_chip(row),))
+    row = demo._answer_row("q", {"type": "score", "score": 1.2, "answer_confidence": 0.5,
+                                 "confidence": round(confidence_from_probs(np.asarray([0.3, 0.5, 0.2]), 3), 4),
+                                 "legend": {"0": "low", "1": "mid", "2": "high"},
+                                 "probabilities": {"0": 0.3, "1": 0.5, "2": 0.2}},
+                           {"type": "score", "instructions": "?"}, 1)
+    ok("so does a score row", _chip(row) == ("%.4f" % round(
+        confidence_from_probs(np.asarray([0.3, 0.5, 0.2]), 3), 4), label["score"]), "%r" % (_chip(row),))
+
+    p_true = 0.8727
+    side = round(max(p_true, 1 - p_true), 4)
+    two_option_entropy = round(confidence_from_probs(np.asarray([p_true, 1 - p_true]), 2), 4)
+    row = demo._answer_row("q", {"type": "noul", "noul": p_true, "answer_confidence": 0.79,
+                                 "confidence": side}, {"type": "noul", "instructions": "?"}, 1)
+    ok("a noul row's confidence is the side being reported, not an entropy",
+       side == p_true and abs(side - two_option_entropy) > 0.4
+       and _chip(row) == ("%.4f" % side, label["noul"])
+       and "entropy" not in _chip(row)[1], "%r %r" % (_chip(row), two_option_entropy))
 
     print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
     for f in FAIL:

@@ -19,6 +19,7 @@ from laya.shortlist import (  # noqa: E402
     cached_embed_fn,
     embed_fn_from_agent,
     predict_shortlist,
+    predict_tournament,
     shortlist_choice,
 )
 
@@ -221,6 +222,28 @@ check("render/0 and False stay in the option text", rich_embed.calls[0][1:], ric
 boom = BoomEmbed()
 check("pass/k == n returns every label in order", shortlist_choice("pay me", CRITERIA, boom, k=4), list(CRITERIA))
 check("pass/k > n returns every label in order", shortlist_choice("pay me", CRITERIA, boom, k=20), list(CRITERIA))
+
+
+# ---------------------------------------------------------------- return_scores
+score_embed = _embed_for("pay me", OPTION_TEXTS)
+pair = shortlist_choice("pay me", CRITERIA, score_embed, k=2, return_scores=True)
+check("scores/labels match the bare call", pair[0], ["alpha", "delta"])
+check("scores/cosines are in rank order", pair[1], [1.0, 1.0])
+trio = shortlist_choice("pay me", CRITERIA, _embed_for("pay me", OPTION_TEXTS), k=3, return_scores=True)
+check("scores/third label is gamma", trio[0], ["alpha", "delta", "gamma"])
+check("scores/third cosine rounds to gamma", [round(s, 9) for s in trio[1]], [1.0, 1.0, 0.6])
+bare = shortlist_choice("pay me", CRITERIA, _embed_for("pay me", OPTION_TEXTS), k=2)
+check("scores/default still returns bare labels", bare, ["alpha", "delta"])
+pass_pair = shortlist_choice("pay me", CRITERIA, BoomEmbed(), k=20, return_scores=True)
+check("scores/passthrough keeps every label", pass_pair[0], list(CRITERIA))
+check("scores/passthrough reports no scores", pass_pair[1], None)
+meta_agent = Recorder()
+meta_out = predict_shortlist(
+    meta_agent, "pay me", {"intent": {"type": "choice", "criteria": CRITERIA}},
+    _embed_for("pay me", OPTION_TEXTS), k=2,
+)
+check("scores/agree with predict_shortlist metadata",
+      pair[1], meta_out["shortlist"]["intent"]["scores"])
 
 
 # ---------------------------------------------------------------- mock predict sees only k criteria
@@ -720,6 +743,108 @@ check_true(
     "cache/concurrent counters consistent",
     mt_cached.cache_info()["hits"] + mt_cached.cache_info()["misses"] == 32,
 )
+
+# --------------------------------------------------------------- cache dimensionality
+# A row stored under one dimensionality cannot stack against a row of another: the
+# docstring asks the caller to clear the cache when the model changes, and the cache
+# refuses the call instead of returning a matrix that silently mixes both.
+
+
+class SwapEmbed:
+    """One callable whose width changes between calls, like a swapped model."""
+
+    def __init__(self):
+        self.dim = 2
+        self.calls = []
+
+    def __call__(self, texts):
+        self.calls.append(list(texts))
+        return [[1.0] * self.dim for _text in texts]
+
+
+swap_fn = SwapEmbed()
+swap_cached = cached_embed_fn(swap_fn)
+swap_cached(["alpha"])
+check("cache/dim first width cached", swap_cached.cache_info()["size"], 1)
+swap_fn.dim = 3
+try:
+    swap_cached(["beta"])
+    check_true("cache/dim drift refused", False, "no error raised")
+except ValueError as exc:
+    check_true("cache/dim drift refused", "cache_clear()" in str(exc), str(exc))
+check("cache/dim drift caches nothing new", swap_cached.cache_info()["size"], 1)
+swap_cached.cache_clear()
+swap_cached(["beta"])
+check("cache/dim clear then re-embed works", swap_cached.cache_info()["size"], 1)
+
+
+# --------------------------------------------------------------- tournament
+class Ranker:
+    """Stand-in for Agent that always answers the label it ranks highest, in any group."""
+
+    def __init__(self, order):
+        self.rank = {label: i for i, label in enumerate(order)}
+        self.calls = []
+
+    def predict(self, state, questions, **kwargs):
+        self.calls.append((questions, kwargs))
+        return {"model": "fake", "answers": {
+            qid: {"type": "choice", "choice": min(qdef["criteria"], key=self.rank.get)}
+            for qid, qdef in questions.items() if qdef["type"] == "choice"}}
+
+
+check_true("export/predict_tournament", laya.predict_tournament is predict_tournament)
+check_true("all/predict_tournament", "predict_tournament" in laya.__all__)
+
+# A ranker that is consistent across groups must see its best label win from any position.
+for n, calls in ((77, 2), (257, 3)):
+    labels = ["l%03d" % i for i in range(n)]
+    for best in (labels[0], labels[n // 2], labels[-1]):
+        ranker = Ranker([best] + [label for label in labels if label != best])
+        out = predict_tournament(ranker, "s", {"q": {"type": "choice", "instructions": "pick",
+                                                     "criteria": list(labels)}})
+        check("tournament/%d labels: %s wins" % (n, best), out["answers"]["q"]["choice"], best)
+        check("tournament/%d labels: %s calls" % (n, best), len(ranker.calls), calls)
+    if n == 77:
+        check("tournament/77 labels in balanced groups",
+              [len(qdef["criteria"]) for qdef in ranker.calls[0][0].values()], [15, 15, 16, 15, 16])
+
+# Only the choice over the group size plays rounds; the final call carries the whole request.
+labels = ["l%02d" % i for i in range(20)]
+big = {"type": "choice", "instructions": "pick", "criteria": {label: "about " + label for label in labels}}
+small = {"type": "choice", "instructions": "pick", "criteria": ["x", "y"]}
+level = {"type": "score", "instructions": "rate", "criteria": ["low", "high"]}
+questions = {"big": big, "small": small, "level": level}
+before = repr(questions)
+ranker = Ranker(labels[::-1] + ["y", "x"])
+out = predict_tournament(ranker, "s", questions, group_size=8, model="english")
+check("tournament/caller questions unchanged", repr(questions), before)
+check("tournament/two calls", len(ranker.calls), 2)
+check("tournament/kwargs reach every call", [kwargs for _q, kwargs in ranker.calls], [{"model": "english"}] * 2)
+check("tournament/round holds only the big choice's groups",
+      [q["criteria"] for q in ranker.calls[0][0].values()],
+      [{label: "about " + label for label in part} for part in (labels[:6], labels[6:13], labels[13:])])
+final = ranker.calls[1][0]
+check("tournament/final keeps every question id", sorted(final), ["big", "level", "small"])
+check("tournament/final cuts the big choice to its finalists",
+      final["big"], dict(big, criteria={label: "about " + label for label in ("l05", "l12", "l19")}))
+check_true("tournament/final passes the rest unchanged", final["small"] is small and final["level"] is level)
+check("tournament/answers come from the final call", out["answers"]["big"]["choice"], "l19")
+check("tournament/meta", out["tournament"], {
+    "big": {"labels": ["l05", "l12", "l19"], "n": 20, "rounds": 1},
+    "small": {"labels": ["x", "y"], "n": 2, "rounds": 0}})
+
+ranker = Ranker(["y", "x"])
+predict_tournament(ranker, "s", {"small": small, "level": level})
+check("tournament/nothing to narrow: one call with the request itself",
+      ranker.calls, [({"small": small, "level": level}, {})])
+
+for bad in (1, 0, -3, True, 2.5, "16"):
+    check_raises("tournament/group_size %r refused" % (bad,),
+                 lambda bad=bad: predict_tournament(Ranker([]), "s", {}, group_size=bad))
+check_raises("tournament/questions must be a dict", lambda: predict_tournament(Ranker([]), "s", []), TypeError)
+check_raises("tournament/choice without criteria",
+             lambda: predict_tournament(Ranker([]), "s", {"q": {"type": "choice", "instructions": "pick"}}))
 
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))

@@ -37,14 +37,32 @@ with open(blob, "w") as f:
     f.write(ORIGINAL)
 
 link = os.path.join(snap_dir, "tokenizer_config.json")
-os.symlink(blob, link)
 
-check("setup/snapshot file is a symlink", os.path.islink(link), True)
+
+def shared_link(path):
+    try:
+        os.symlink(blob, path)
+    except OSError as error:
+        if os.name != "nt" or getattr(error, "winerror", None) != 1314:
+            raise
+        # A hard link has the same shared-blob write hazard on Windows hosts
+        # where Developer Mode or symlink privileges are unavailable.
+        os.link(blob, path)
+
+
+def is_shared(path):
+    return os.path.samefile(blob, path)
+
+
+shared_link(link)
+
+check("setup/snapshot shares the blob", is_shared(link), True)
 
 _fix_tokenizer_config(os.path.dirname(snap_dir))
 
 check("blob/is untouched", open(blob).read(), ORIGINAL)
 check("snapshot/is now a regular file", os.path.islink(link), False)
+check("snapshot/no longer shares the blob", is_shared(link), False)
 check("snapshot/carries the patch", '"PreTrainedTokenizerFast"' in open(link).read(), True)
 check("snapshot/drops backend+is_local as intended", '"backend": "x"' not in open(link).read(), True)
 check("snapshot/no temporary file left behind",
@@ -76,7 +94,7 @@ check("bad-json/file left as written", open(bad_file).read(), "{ not json")
 fail_snap = os.path.join(root, "fail", "tokenizer")
 os.makedirs(fail_snap)
 fail_link = os.path.join(fail_snap, "tokenizer_config.json")
-os.symlink(blob, fail_link)
+shared_link(fail_link)
 
 real_replace = os.replace
 
@@ -97,7 +115,7 @@ check("replace-failure/warns instead of raising",
       any(issubclass(w.category, RuntimeWarning) for w in caught), True)
 check("replace-failure/no temp file left behind",
       [n for n in os.listdir(fail_snap) if n.startswith(".tokenizer_config.")], [])
-check("replace-failure/original symlink intact", os.path.islink(fail_link), True)
+check("replace-failure/original shared link intact", is_shared(fail_link), True)
 check("replace-failure/blob untouched", open(blob).read(), ORIGINAL)
 
 shutil.rmtree(root, ignore_errors=True)

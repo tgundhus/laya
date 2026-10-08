@@ -127,6 +127,8 @@ for label, text in BILLING:
     a = ml.predict({"message": text}, QD)["answers"]
     hit = a["dept"]["choice"] == "billing"
     correct += hit
+    # BILLING contains fixed fictional sentences; only fixture labels and numeric metrics are printed.
+    # codeql[py/clear-text-logging-sensitive-data]
     print("   %-9s dept=%-10s p=%.2f  refund=%.2f  %5.0fms  %s"
           % (label, a["dept"]["choice"], max(a["dept"]["probabilities"].values()),
              a["refund"]["noul"], (time.time() - t) * 1000, "OK" if hit else "<-- miss"), flush=True)
@@ -161,7 +163,7 @@ print("\n   -- phishing / email triage --", flush=True)
 PHISH = [
     ("phishing", "security@wellsf-argo-verify.com", "Urgent: your account is locked",
      "Your account has been locked for security reasons. Verify immediately at "
-     "http://wellsfargo--verify.tj49.wsipv6.com or it will be closed permanently.", True),
+     "http://secure-bank--verify.account-check.example or it will be closed permanently.", True),
     ("legit billing", "ap@acme.com", "Invoice 4411 duplicate charge",
      "Hi, we were billed twice for invoice 4411 in March. Could you refund the duplicate? Thanks.", False),
     ("legit newsletter", "news@python.org", "PyCon 2026 schedule is live",

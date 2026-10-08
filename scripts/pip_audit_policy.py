@@ -10,11 +10,14 @@ stops being read. This script reads pip-audit's JSON reports and fails on:
 - an entry accepted for one package that shows up on another, and
 - a dependency pip-audit could not audit at all (what its --strict fails on).
 
-An accepted advisory that is still unfixed passes with a warning, so it stays in sight. The list
+An accepted advisory that is still unfixed passes with a warning, so it stays in sight. A report
+passed with `--shipped` covers what the package and its image ship (the core plus `serve`): no
+advisory there is ever accepted, whatever the list says. The list
 lives in `.github/accepted-advisories.toml`; each entry needs an `id`, the `package` and a
 `reason`, and may give `aliases` (CVE and GHSA ids) and where it comes from.
 
-    python scripts/pip_audit_policy.py --accepted .github/accepted-advisories.toml report.json ...
+    python scripts/pip_audit_policy.py --accepted .github/accepted-advisories.toml \
+        --shipped shipped.json report.json ...
 """
 import argparse
 import json
@@ -86,14 +89,26 @@ def evaluate(reports: List[Dict[str, Any]], accepted: Dict[str, Dict[str, Any]]
 def main(argv: List[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--accepted", required=True, help="the accepted-advisories TOML file")
+    parser.add_argument("--shipped", action="append", default=[], metavar="REPORT",
+                        help="a report of what the package and its image ship; nothing in it is "
+                             "accepted (repeatable)")
     parser.add_argument("reports", nargs="+", help="pip-audit reports written with -f json")
     args = parser.parse_args(argv)
     accepted = load_accepted(args.accepted)
-    reports = []
-    for path in args.reports:
-        with open(path, encoding="utf-8") as fh:
-            reports.append(json.load(fh))
+
+    def read(paths):
+        loaded = []
+        for path in paths:
+            with open(path, encoding="utf-8") as fh:
+                loaded.append(json.load(fh))
+        return loaded
+
+    reports, shipped = read(args.reports), read(args.shipped)
     failures, warnings, stale = evaluate(reports, accepted)
+    # The shipped scope gets no exceptions: an advisory there fails even if the list accepts it.
+    failures += ["%s (it ships in the package or its image, where nothing is accepted)" % line
+                 for line in evaluate(shipped, {})[0]]
+    reports = reports + shipped
     audited = {_package(d.get("name", "")) for r in reports for d in r.get("dependencies", [])}
     print("audited %d packages across %d report(s)" % (len(audited), len(reports)))
     for line in warnings:

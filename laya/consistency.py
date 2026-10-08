@@ -33,7 +33,7 @@ from .hooks import PredictContext, aggregate_usage
 
 # Part of every key: bump it when the key layout changes, so no entry stored under an older
 # layout is ever replayed.
-_KEY_VERSION = 1
+_KEY_VERSION = 2
 # A stored value at least this long is zlib-compressed when that makes it smaller.
 _COMPRESS_MIN = 256
 # Wall clock rather than a monotonic one, because a persisted decision has to age across restarts.
@@ -116,34 +116,98 @@ def decision_margins(result: Mapping[str, Any],
     return margins
 
 
+def _needs_typed_json(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(not isinstance(key, str) or _needs_typed_json(item) for key, item in value.items())
+    if isinstance(value, tuple):
+        return True
+    if isinstance(value, list):
+        return any(_needs_typed_json(item) for item in value)
+    return False
+
+
+def _typed_json(value: Any, stringify: bool = False) -> Any:
+    """Preserve numeric keys; stringify descriptors only in request signatures, never stored results."""
+    if isinstance(value, dict):
+        return ["dict", [[key, _typed_json(item, stringify)] for key, item in value.items()]]
+    if isinstance(value, list):
+        return ["list", [_typed_json(item, stringify) for item in value]]
+    if isinstance(value, tuple):
+        return ["tuple", [_typed_json(item, stringify) for item in value]]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return ["value", value]
+    if stringify:
+        return ["value", str(value)]
+    raise TypeError("%s is not a plain JSON value" % type(value).__name__)
+
+
+def _from_typed_json(value: Any) -> Any:
+    kind, data = value
+    if kind == "dict":
+        return {key: _from_typed_json(item) for key, item in data}
+    if kind == "list":
+        return [_from_typed_json(item) for item in data]
+    if kind == "tuple":
+        return tuple(_from_typed_json(item) for item in data)
+    if kind == "value":
+        return data
+    raise ValueError("unknown typed JSON value")
+
+
 def _canonical(value: Any) -> bytes:
     # Order-preserving at every level, as in the Router's `_question_schema`: option order is
     # positional, so two schemas that differ only in order are different requests (#166).
     # ASCII output keeps any string, lone surrogates included, encodable.
+    if _needs_typed_json(value):
+        return b"k" + json.dumps(_typed_json(value, stringify=True), separators=(",", ":")).encode("ascii")
     return json.dumps(value, sort_keys=False, separators=(",", ":"), default=str).encode("ascii")
 
 
-def _pack(raw: bytes) -> bytes:
+def _pack(raw: bytes, typed: bool = False) -> bytes:
     if len(raw) >= _COMPRESS_MIN:
         packed = zlib.compress(raw, 6)
         if len(packed) < len(raw):
-            return b"z" + packed
-    return b"j" + raw
+            return (b"t" if typed else b"z") + packed
+    return (b"k" if typed else b"j") + raw
 
 
 def _unpack(blob: bytes) -> Dict[str, Any]:
-    raw = zlib.decompress(blob[1:]) if blob[:1] == b"z" else blob[1:]
-    return json.loads(raw.decode("utf-8", "surrogatepass"))
+    if blob[:1] not in (b"j", b"z", b"k", b"t"):
+        raise ValueError("unknown decision encoding")
+    raw = zlib.decompress(blob[1:]) if blob[:1] in (b"z", b"t") else blob[1:]
+    result = json.loads(raw.decode("utf-8", "surrogatepass"))
+    if blob[:1] in (b"k", b"t"):
+        result = _from_typed_json(result)
+    if (not isinstance(result, dict) or not isinstance(result.get("answers"), dict)
+            or ("usage" in result and not isinstance(result["usage"], dict))):
+        raise ValueError("stored decision must contain an answers mapping and a usage mapping if present")
+    for name in ("input_tokens", "output_tokens"):
+        value = result.get("usage", {}).get(name, 0)
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value) or value < 0):
+            raise ValueError("stored token usage must be a finite non-negative number")
+    for answer in result["answers"].values():
+        if (not isinstance(answer, dict)
+                or any(name in answer and not isinstance(answer[name], dict) for name in ("probabilities", "legend"))):
+            raise ValueError("stored answers and their probability or legend mappings must be objects")
+    return result
+
+
+# What a confidence gate writes on each answer for one call: the flag, the gate's state and the
+# threshold it used (see `laya.confidence.apply_confidence_gate`). The engine writes them again for
+# every call that asks, replays included, so they are never stored.
+_GATE_FIELDS = frozenset({"low_confidence", "abstention", "abstention_threshold"})
 
 
 def _storable(result: Dict[str, Any]) -> Dict[str, Any]:
-    """What is kept of a result: not `routing`, which a Router re-adds to a replay, nor the marks
-    one call's options put on its answers (`low_confidence` under `min_confidence`), which the
-    engine applies again to each call's results, replays included."""
+    """What is kept of a result: not `routing`, which a Router re-adds to a replay, nor the gate
+    state one call's `min_confidence` put on its answers, which the engine applies again to each
+    call's results, replays included."""
     payload = {k: v for k, v in result.items() if k != "routing"}
     answers = payload.get("answers")
-    if isinstance(answers, dict) and any(isinstance(a, dict) and "low_confidence" in a for a in answers.values()):
-        payload["answers"] = {q: {k: v for k, v in a.items() if k != "low_confidence"} if isinstance(a, dict) else a
+    if isinstance(answers, dict) and any(isinstance(a, dict) and not _GATE_FIELDS.isdisjoint(a)
+                                         for a in answers.values()):
+        payload["answers"] = {q: {k: v for k, v in a.items() if k not in _GATE_FIELDS} if isinstance(a, dict) else a
                               for q, a in answers.items()}
     return payload
 
@@ -155,10 +219,15 @@ def _fingerprint(agent: Any) -> List[Any]:
     cfg = getattr(agent, "cfg", None)
     if not isinstance(cfg, Mapping):
         cfg = {}
+    # `binning_map` (a fitted calibration) changes `answer_confidence` and so what a gate decides,
+    # and `option_layout` changes how options are encoded: neither shows in any other field here.
     return [__version__, getattr(agent, "model_id", None), getattr(agent, "revision", None),
+            getattr(agent, "subfolder", None),
+            getattr(agent, "_checkpoint_signature", None),
             cfg.get("max_len"), cfg.get("head_max_len"),
             getattr(agent, "temperature", None), getattr(agent, "temperature_by_options", None),
-            getattr(agent, "lang_temperatures", None)]
+            getattr(agent, "lang_temperatures", None), getattr(agent, "binning_map", None),
+            cfg.get("option_layout"), cfg.get("act_costs")]
 
 
 class DecisionStore(Protocol):
@@ -221,6 +290,7 @@ class _MemoryStore:
         self._data: "OrderedDict[bytes, bytes]" = OrderedDict()
         self._lock = threading.Lock()
         self._adds_until_sweep = 4096
+        self._next_expiry = math.inf
 
     def _get(self, key: bytes, now: float) -> Optional[Tuple[bytes, float]]:
         entry = self._data.get(key)
@@ -233,9 +303,18 @@ class _MemoryStore:
         return entry[_ENTRY.size:], expires_at
 
     def _sweep(self, now: float) -> int:
-        expired = [key for key, entry in self._data.items() if _ENTRY.unpack_from(entry)[1] <= now]
-        for key in expired:
-            del self._data[key]
+        expired = []
+        if self._next_expiry <= now:
+            next_expiry = math.inf
+            for key, entry in self._data.items():
+                expires_at = _ENTRY.unpack_from(entry)[1]
+                if expires_at <= now:
+                    expired.append(key)
+                elif expires_at < next_expiry:
+                    next_expiry = expires_at
+            for key in expired:
+                del self._data[key]
+            self._next_expiry = next_expiry
         # Lifetimes differ per decision, so expired ones are anywhere in the order: sweep them all,
         # but only after as many stores as would make the sweep cheap on average.
         self._adds_until_sweep = max(4096, len(self._data) // 4)
@@ -253,19 +332,26 @@ class _MemoryStore:
                 if first is None:
                     self._data[key] = _ENTRY.pack(now, expires_at) + value
                     self._adds_until_sweep -= 1
+                    if expires_at < self._next_expiry:
+                        self._next_expiry = expires_at
                     first = (value, expires_at)
                 held.append(first[0])
+            # Expired entries may be newer than a live one when a per-answer TTL is used.
+            # Reclaim them before capacity eviction, or an expired entry can evict a live one.
+            if self._adds_until_sweep <= 0 or (self.maxsize is not None and len(self._data) > self.maxsize
+                                             and self._next_expiry <= now):
+                self._sweep(now)
             while self.maxsize is not None and len(self._data) > self.maxsize:
                 self._data.popitem(last=False)
-            if self._adds_until_sweep <= 0:
-                self._sweep(now)
         return held
 
     def renew(self, key: bytes, expires_at: float, now: float) -> None:
         with self._lock:
             entry = self._data.get(key)
-            if entry is not None:
+            if entry is not None and _ENTRY.unpack_from(entry)[1] > now:
                 self._data[key] = _ENTRY.pack(now, expires_at) + entry[_ENTRY.size:]
+                if expires_at < self._next_expiry:
+                    self._next_expiry = expires_at
                 self._data.move_to_end(key)
 
     def prune(self, now: float) -> int:
@@ -283,6 +369,7 @@ class _MemoryStore:
     def clear(self) -> None:
         with self._lock:
             self._data.clear()
+            self._next_expiry = math.inf
 
     def close(self) -> None:
         pass
@@ -558,14 +645,15 @@ class DecisionCache:
 
     def _encode(self, payload: Dict[str, Any]) -> Optional[bytes]:
         try:
-            raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            typed = _needs_typed_json(payload)
+            raw = json.dumps(_typed_json(payload) if typed else payload, ensure_ascii=False, separators=(",", ":"))
         except (TypeError, ValueError) as exc:
             if not self._warned:
                 self._warned = True
                 warnings.warn("laya: DecisionCache: a result is not plain JSON, so it cannot be replayed "
                               "exactly and is not cached (%s)" % exc, RuntimeWarning, stacklevel=3)
             return None
-        return _pack(raw.encode("utf-8", "surrogatepass"))
+        return _pack(raw.encode("utf-8", "surrogatepass"), typed=typed)
 
     def _renew(self, ctx: PredictContext, keys: List[bytes], held: List[Any], replays: List[Any],
                now: float) -> None:

@@ -60,8 +60,29 @@ except ImportError:
             return self.query_str
 
 
+# The per-call control rules are shared with the other two integrations: they end at the same
+# `predict` call and the same laya-serve request body, and three copies of the rule is how two of
+# them came to forward only `model`.
+from ._controls import budget_kwargs as _budget_kwargs, hook_kwargs as _hook_kwargs  # noqa: E402
+from ._controls import decision_kwargs as _decision_kwargs  # noqa: E402
+from ._controls import predict_kwargs as _predict_kwargs, reject_remote_hooks as _reject_remote_hooks  # noqa: E402
+
 # One class for every integration, so `except LayaLowConfidenceError` catches all of them.
 from ._errors import LayaLowConfidenceError  # noqa: E402
+from ..confidence import _gate_confidence  # noqa: E402
+
+
+def _gated_confidence(answer: Dict[str, Any]) -> float:
+    """The threshold number for one answer, defaulting to 1.0 when it reports none.
+
+    Every selector and router in this module gates `confidence_threshold` through this, and it
+    delegates to core's `_gate_confidence` so the wrappers and `flag_low_confidence` read the
+    same quantity: `answer_confidence` first, falling back to the entropy `confidence` so an
+    answer that carries only the older field is still gated rather than silently passed. An
+    answer with no usable number at all is treated as fully confident, exactly as before.
+    """
+    conf = _gate_confidence(answer or {})
+    return conf if conf is not None else 1.0
 
 
 def _extract_query_str(query: Union[str, QueryBundle, Any]) -> str:
@@ -122,8 +143,18 @@ def _call_remote(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: float = 10.0,
+    max_len: Optional[int] = None,
+    head_max_len: Optional[int] = None,
+    lang: Optional[str] = None,
+    min_confidence: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Send decision request to a remote laya-serve HTTP instance using standard library urllib."""
+    """Send decision request to a remote laya-serve HTTP instance using standard library urllib.
+
+    `max_len` / `head_max_len` travel in the body; laya-serve applies them up to its
+    `LAYA_MAX_TOKEN_BUDGET` ceiling and answers a larger value with 422. `lang` / `min_confidence`
+    ride in the same body (they are laya-serve `BODY_CONTROLS` too): the language codes the state
+    is routed and answered in, and core's abstention gate.
+    """
     url = base_url.rstrip("/")
     if not url.endswith("/v1/systemone"):
         url = f"{url}/v1/systemone"
@@ -131,6 +162,14 @@ def _call_remote(
     payload: Dict[str, Any] = {"state": state, "questions": questions}
     if model:
         payload["model"] = model
+    if max_len is not None:
+        payload["max_len"] = max_len
+    if head_max_len is not None:
+        payload["head_max_len"] = head_max_len
+    if lang is not None:
+        payload["lang"] = lang
+    if min_confidence is not None:
+        payload["min_confidence"] = min_confidence
 
     data = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"}
@@ -170,11 +209,31 @@ def _execute_decision(
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
+    max_len: Optional[int] = None,
+    head_max_len: Optional[int] = None,
+    lang: Optional[str] = None,
+    min_confidence: Optional[float] = None,
+    hooks: Optional[Any] = None,
+    on_predict_start: Optional[Any] = None,
+    on_predict_end: Optional[Any] = None,
+    hooks_raise: Optional[bool] = None,
+    hooks_timeout: Optional[float] = None,
 ) -> Dict[str, Any]:
+    """One decision on the local runner or a laya-serve node, with the per-call controls kept.
+
+    Which controls either path accepts is `._controls`' rule, shared with the LangChain and
+    CrewAI wrappers -- they end at the same `predict` call and the same request body.
+    """
+    hook_kwargs = _hook_kwargs(hooks, on_predict_start, on_predict_end, hooks_raise, hooks_timeout)
     if base_url:
-        return _call_remote(base_url, state, questions, api_key=api_key, model=model)
+        _reject_remote_hooks(hook_kwargs, base_url)
+        budget = _budget_kwargs(max_len, head_max_len)
+        decision = _decision_kwargs(lang, min_confidence)
+        return _call_remote(base_url, state, questions, api_key=api_key, model=model,
+                            **budget, **decision)
     runner = agent if agent is not None else _get_default_router()
-    kwargs = {"model": model} if model else {}
+    kwargs = _predict_kwargs(model, max_len, head_max_len, lang, min_confidence)
+    kwargs.update(hook_kwargs)
     return runner.predict(state, questions, **kwargs)
 
 
@@ -196,6 +255,15 @@ class LayaSingleSelector(BaseSelector):
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        max_len: Optional[int] = None,
+        head_max_len: Optional[int] = None,
+        lang: Optional[str] = None,
+        min_confidence: Optional[float] = None,
+        hooks: Optional[Any] = None,
+        on_predict_start: Optional[Any] = None,
+        on_predict_end: Optional[Any] = None,
+        hooks_raise: Optional[bool] = None,
+        hooks_timeout: Optional[float] = None,
     ):
         self.instructions = instructions
         self.confidence_threshold = confidence_threshold
@@ -205,6 +273,15 @@ class LayaSingleSelector(BaseSelector):
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
+        self.max_len = max_len
+        self.head_max_len = head_max_len
+        self.lang = lang
+        self.min_confidence = min_confidence
+        self.hooks = hooks
+        self.on_predict_start = on_predict_start
+        self.on_predict_end = on_predict_end
+        self.hooks_raise = hooks_raise
+        self.hooks_timeout = hooks_timeout
         self.last_decision: Optional[Dict[str, Any]] = None
 
     def _select(
@@ -215,6 +292,12 @@ class LayaSingleSelector(BaseSelector):
         """Select a single choice synchronously."""
         if not choices:
             raise ValueError("No choices provided to select from.")
+        if self.fallback_index is not None and (
+            isinstance(self.fallback_index, bool)
+            or not isinstance(self.fallback_index, int)
+            or not 0 <= self.fallback_index < len(choices)
+        ):
+            raise ValueError("fallback_index must be an integer within the provided choices.")
 
         query_str = _extract_query_str(query)
         criteria = _format_choices_criteria(choices)
@@ -234,22 +317,21 @@ class LayaSingleSelector(BaseSelector):
             base_url=self.base_url,
             api_key=self.api_key,
             model=self.model,
+            max_len=self.max_len,
+            head_max_len=self.head_max_len,
+            lang=self.lang,
+            min_confidence=self.min_confidence,
+            hooks=self.hooks,
+            on_predict_start=self.on_predict_start,
+            on_predict_end=self.on_predict_end,
+            hooks_raise=self.hooks_raise,
+            hooks_timeout=self.hooks_timeout,
         )
         self.last_decision = res
 
         ans = res.get("answers", {}).get("selector", {})
         chosen_key = ans.get("choice")
-        conf = ans.get("answer_confidence", ans.get("confidence", 1.0))
-
-        # Map "choice_i" back to index i
-        chosen_idx: int = 0
-        if chosen_key and chosen_key.startswith("choice_"):
-            try:
-                chosen_idx = int(chosen_key.split("_")[1])
-            except (ValueError, IndexError):
-                chosen_idx = 0
-        elif chosen_key in criteria:
-            chosen_idx = list(criteria.keys()).index(chosen_key)
+        conf = _gated_confidence(ans)
 
         # Confidence gating
         if self.confidence_threshold > 0.0 and conf < self.confidence_threshold:
@@ -268,6 +350,9 @@ class LayaSingleSelector(BaseSelector):
                     raw_decision=res,
                 )
 
+        if not isinstance(chosen_key, str) or chosen_key not in criteria:
+            raise ValueError(f"Laya returned an unknown selector choice: {chosen_key!r}.")
+        chosen_idx = list(criteria.keys()).index(chosen_key)
         choice_obj = choices[chosen_idx]
         choice_name = getattr(choice_obj, "name", None) or f"choice_{chosen_idx}"
         reason = f"Selected '{choice_name}' via Laya System 1 decision (confidence: {conf:.3f})."
@@ -315,6 +400,15 @@ class LayaMultiSelector(BaseSelector):
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        max_len: Optional[int] = None,
+        head_max_len: Optional[int] = None,
+        lang: Optional[str] = None,
+        min_confidence: Optional[float] = None,
+        hooks: Optional[Any] = None,
+        on_predict_start: Optional[Any] = None,
+        on_predict_end: Optional[Any] = None,
+        hooks_raise: Optional[bool] = None,
+        hooks_timeout: Optional[float] = None,
     ):
         self.instructions = instructions
         self.max_outputs = max_outputs
@@ -324,6 +418,15 @@ class LayaMultiSelector(BaseSelector):
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
+        self.max_len = max_len
+        self.head_max_len = head_max_len
+        self.lang = lang
+        self.min_confidence = min_confidence
+        self.hooks = hooks
+        self.on_predict_start = on_predict_start
+        self.on_predict_end = on_predict_end
+        self.hooks_raise = hooks_raise
+        self.hooks_timeout = hooks_timeout
         self.last_decision: Optional[Dict[str, Any]] = None
 
     def _select(
@@ -352,6 +455,15 @@ class LayaMultiSelector(BaseSelector):
             base_url=self.base_url,
             api_key=self.api_key,
             model=self.model,
+            max_len=self.max_len,
+            head_max_len=self.head_max_len,
+            lang=self.lang,
+            min_confidence=self.min_confidence,
+            hooks=self.hooks,
+            on_predict_start=self.on_predict_start,
+            on_predict_end=self.on_predict_end,
+            hooks_raise=self.hooks_raise,
+            hooks_timeout=self.hooks_timeout,
         )
         self.last_decision = res
 
@@ -443,6 +555,15 @@ class LayaQueryRouter:
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        max_len: Optional[int] = None,
+        head_max_len: Optional[int] = None,
+        lang: Optional[str] = None,
+        min_confidence: Optional[float] = None,
+        hooks: Optional[Any] = None,
+        on_predict_start: Optional[Any] = None,
+        on_predict_end: Optional[Any] = None,
+        hooks_raise: Optional[bool] = None,
+        hooks_timeout: Optional[float] = None,
     ):
         self.query_engines = query_engines
         self.descriptions = descriptions or {}
@@ -453,6 +574,15 @@ class LayaQueryRouter:
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
+        self.max_len = max_len
+        self.head_max_len = head_max_len
+        self.lang = lang
+        self.min_confidence = min_confidence
+        self.hooks = hooks
+        self.on_predict_start = on_predict_start
+        self.on_predict_end = on_predict_end
+        self.hooks_raise = hooks_raise
+        self.hooks_timeout = hooks_timeout
         self.last_decision: Optional[Dict[str, Any]] = None
 
     def route(self, query: Union[QueryBundle, str]) -> str:
@@ -478,12 +608,21 @@ class LayaQueryRouter:
             base_url=self.base_url,
             api_key=self.api_key,
             model=self.model,
+            max_len=self.max_len,
+            head_max_len=self.head_max_len,
+            lang=self.lang,
+            min_confidence=self.min_confidence,
+            hooks=self.hooks,
+            on_predict_start=self.on_predict_start,
+            on_predict_end=self.on_predict_end,
+            hooks_raise=self.hooks_raise,
+            hooks_timeout=self.hooks_timeout,
         )
         self.last_decision = res
 
         ans = res.get("answers", {}).get("route", {})
         chosen = ans.get("choice")
-        conf = ans.get("answer_confidence", ans.get("confidence", 1.0))
+        conf = _gated_confidence(ans)
 
         if self.confidence_threshold > 0.0 and conf < self.confidence_threshold:
             if self.fallback_key:
