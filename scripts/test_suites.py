@@ -57,6 +57,7 @@ SCRIPT_SUITES = [
     "tests/test_doc_tables.py",
     "tests/test_env_docs.py",
     "tests/test_tokenizer_cache.py",
+    "tests/test_tokenizer_parse_cache.py",
     "tests/test_tokenizer_concurrency.py",
     "tests/test_question_token_reuse.py",
     "tests/test_question_heads.py",
@@ -93,6 +94,7 @@ SCRIPT_SUITES = [
     "tests/test_portability.py",
     "tests/test_training.py",
     "tests/test_train.py",
+    "tests/test_kaggle_ddp_convergence.py",
     "tests/test_example_server_limits.py",
     "tests/test_blank_lang_routing.py",
     "tests/test_export_onnx_safety.py",
@@ -108,6 +110,7 @@ SCRIPT_SUITES = [
 
 PYTEST_SUITES = [
     "tests/test_serve.py",
+    "tests/test_server_cache.py",
     "tests/test_mcp_remote.py",
     "tests/test_router_batch.py",
     "tests/test_predict_batch.py",

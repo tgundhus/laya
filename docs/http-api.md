@@ -11,7 +11,7 @@ that maps a class of enums and attributes onto questions and returns an instance
 for a deploy check, and ships a test fake so callers can unit-test without a running server.
 
 ```bash
-pip install "laya[serve] @ git+https://github.com/tgundhus/laya.git"
+pip install "laya-pro[serve] @ git+https://github.com/tgundhus/laya-pro.git"
 laya-serve            # http://0.0.0.0:8000
 ```
 
@@ -36,6 +36,12 @@ Everything is environment variables, so one image serves a laptop dev run and a 
 | `LAYA_IDLE_UNLOAD_SECONDS` | unload resident checkpoints after this many idle seconds; the next request loads its checkpoint again. Zero disables unloading | `0` |
 | `LAYA_DEFAULT_MODEL` | checkpoint a state with no language evidence falls back to; aliases such as `ml` resolve the way core resolves them, and an unresolvable name stops the server at startup | `english` |
 | `LAYA_API_KEY` | if set, require `Authorization: Bearer <key>` | none |
+| `LAYA_EXTRA_MODELS` | JSON map of checkpoint names to local paths or model IDs, registered at startup | none |
+| `LAYA_CACHE` | enable an in-memory decision cache | `0` |
+| `LAYA_CACHE_PATH` | SQLite decision cache file; a path enables the cache | none |
+| `LAYA_CACHE_TTL` | retention seconds, or `none` for indefinite retention | `86400` |
+| `LAYA_CACHE_MAXSIZE` | maximum stored decisions | `10000` |
+| `LAYA_CACHE_RENEW_ON_HIT` | renew expiry on use | `0` |
 | `LAYA_LOG_LEVEL` | uvicorn log level | `info` |
 | `LAYA_MAX_CONCURRENT` | requests admitted past auth at once; excess gets `503` | `16` |
 | `LAYA_MAX_BATCH_TOKENS` | tokens one `/v1/systemone/batch` FORWARD PASS may collate (`states` x questions x row width); a larger batch is split into several passes, not refused | `131072` |

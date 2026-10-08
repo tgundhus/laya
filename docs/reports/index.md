@@ -14,7 +14,8 @@ This work set out to answer three questions about Laya's decisions:
 2. Can a repeated request be guaranteed the answer it got the first time?
 3. Where does a request's time go, and how much of it can be removed?
 
-The detailed reports:
+The [October 2026 production review](production-review.md) records the later upstream merge,
+SDK and cache fixes, and checks on Windows. The detailed September reports:
 
 - [Consistency: Jev against Laya](consistency-jev-vs-laya.md): what varies between runs, and
   how voting compares with replaying decisions.

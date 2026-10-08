@@ -58,7 +58,7 @@ jobs:
   npm:
     name: Publish to npm
     needs: build
-    if: startsWith(github.ref, 'refs/tags/laya-ts-v')
+    if: startsWith(github.ref, 'refs/tags/laya-ts-v') && vars.PUBLISH_TO_NPM == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: npm
@@ -97,7 +97,7 @@ jobs:
   github_release:
     name: Attach to GitHub Release
     needs: [build, npm]
-    if: startsWith(github.ref, 'refs/tags/laya-ts-v')
+    if: startsWith(github.ref, 'refs/tags/laya-ts-v') && vars.PUBLISH_TO_NPM == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

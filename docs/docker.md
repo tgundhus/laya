@@ -10,14 +10,14 @@ From the repository root:
 docker compose run --build --rm laya
 ```
 
-This builds the checkout, runs the [sample request](https://github.com/tgundhus/laya/blob/main/examples/docker/request.json)
+This builds the checkout, runs the [sample request](https://github.com/tgundhus/laya-pro/blob/main/examples/docker/request.json)
 on CPU and prints JSON covering `choice`, `score` and `noul`. The first request
 downloads the selected public Hugging Face checkpoint; no account is needed.
 Allow several minutes for its first download.
 Weights stay in a named volume. Subsequent runs use `docker compose run --rm laya`.
 
 Predictions and confidence still need evaluation on your workload. See the
-[benchmark limits](https://github.com/tgundhus/laya/blob/main/BENCHMARKS.md).
+[benchmark limits](https://github.com/tgundhus/laya-pro/blob/main/BENCHMARKS.md).
 
 For ARM64 hosts, DGX Spark and Apple Silicon, see
 [ARM64 and DGX Spark containers](docker-platforms.md).
@@ -109,7 +109,7 @@ docker compose run --rm --volume "$PWD/request.json:/inputs/request.json:ro" \
 ```
 
 For a commented configuration with request, checkpoint and secret-file mounts,
-see [`compose.example.yml`](https://github.com/tgundhus/laya/blob/main/compose.example.yml):
+see [`compose.example.yml`](https://github.com/tgundhus/laya-pro/blob/main/compose.example.yml):
 
 ```bash
 docker compose -f compose.yaml -f compose.example.yml run --build --rm laya
@@ -140,7 +140,7 @@ checkpoints need no token.
 ## Fine-tuned checkpoints
 
 This image runs inference. Fine-tuning happens outside it — the
-[fine-tuning notebook](https://github.com/tgundhus/laya/blob/main/notebooks/laya_finetune_typed_decisions_2xT4_kaggle.ipynb)
+[fine-tuning notebook](https://github.com/tgundhus/laya-pro/blob/main/notebooks/laya_finetune_typed_decisions_2xT4_kaggle.ipynb)
 runs the whole loop on Kaggle's free 2xT4 GPUs and exports a checkpoint this image can
 serve. Background and open questions about the training interface stay in
 Laya issues #4 and
@@ -196,7 +196,7 @@ same Compose files and the same `LAYA_CACHE_VOLUME`, or `LAYA_CACHE_VOLUME=<name
 for a fresh one. With `HF_HUB_OFFLINE=1` a missing or divergent ref is a load
 failure with no network to fall back to, but the prerequisite is the same.
 
-[`docker/prefetch_modelscope.py`](https://github.com/tgundhus/laya/blob/main/docker/prefetch_modelscope.py)
+[`docker/prefetch_modelscope.py`](https://github.com/tgundhus/laya-pro/blob/main/docker/prefetch_modelscope.py)
 lists the repository on modelscope.cn, downloads the checkpoint's own files -- the
 same set `laya/agent.py` asks the Hub for, so no sibling checkpoint is pulled -- and
 writes them into the image's hub cache the way `snapshot_download` lays out a
@@ -346,6 +346,12 @@ These apply to the `laya-serve` service only.
 | `LAYA_ROOT_PATH` | (empty) | public URL prefix for FastAPI when behind a reverse proxy; the proxy should strip it before forwarding |
 | `LAYA_MAX_TOKEN_BUDGET` | `8192` | cap on per-request `max_len` and `head_max_len` overrides |
 | `LAYA_SHA256_DIGESTS` | (none) | JSON digests checked before a checkpoint is parsed: `{artifact: digest}` for every checkpoint, or `{model: {artifact: digest}}` per checkpoint. See [Security](security.md) |
+| `LAYA_EXTRA_MODELS` | (none) | Additional checkpoint names and paths as JSON |
+| `LAYA_CACHE` | `0` | Enable process-local memory decision caching |
+| `LAYA_CACHE_PATH` | (none) | SQLite decision file; a nonempty path enables caching |
+| `LAYA_CACHE_TTL` | `86400` | Fixed retention in seconds, or `none` |
+| `LAYA_CACHE_MAXSIZE` | `10000` | Decision count target; SQLite enforces it during periodic pruning |
+| `LAYA_CACHE_RENEW_ON_HIT` | `0` | Extend retention on replay |
 
 For example, set `LAYA_ROOT_PATH=/laya` when publishing the API under `/laya`. The proxy must
 strip that prefix before forwarding to the container; this setting updates FastAPI's generated
@@ -361,6 +367,17 @@ cannot drift. Change one place to move the service:
 ```bash
 LAYA_PORT=9000 docker compose -f compose.yaml -f compose.http.yaml up --build laya-serve
 ```
+
+For a persistent seven-day decision cache, use the container's dedicated volume path:
+
+```bash
+LAYA_CACHE_PATH=/home/laya/decisions/cache.sqlite LAYA_CACHE_TTL=604800 \
+  docker compose -f compose.yaml -f compose.http.yaml up --build laya-serve
+```
+
+The `decision-cache` volume is separate from downloaded models. Removing that volume removes
+its database files; TTL alone does not physically erase rows or backups. See
+[retention and deletion](production.md#retention-and-deletion).
 
 ### Bearer token from a file
 

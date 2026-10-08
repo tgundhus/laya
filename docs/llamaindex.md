@@ -1,8 +1,10 @@
 # LlamaIndex Integration
 
-Laya provides sub-35ms, non-autoregressive decision components for **LlamaIndex** RAG pipelines, `RouterQueryEngine`, and tool selection (single-question latency measured at **32.8 ms** with `laya-multilingual` and **39.5 ms** with `laya` on a Tesla T4 GPU; 193–464 ms on CPU):
+Laya-Pro provides local decision components for **LlamaIndex** RAG pipelines,
+`RouterQueryEngine` and tool selection. Latency depends on hardware, checkpoint and questions;
+see the [current review](reports/production-review.md) and [archived benchmarks](benchmarks.md).
 
-* **`LayaSingleSelector`**: Sub-35ms single-choice selector replacing `LLMSingleSelector` for `RouterQueryEngine`.
+* **`LayaSingleSelector`**: Single-choice selector replacing `LLMSingleSelector` for `RouterQueryEngine`.
 * **`LayaMultiSelector`**: Multi-choice selector replacing `LLMMultiSelector` for composite queries spanning multiple data sources.
 * **`LayaQueryRouter`**: Standalone query dispatcher routing incoming requests directly to target query engines or callables.
 
@@ -13,14 +15,15 @@ Supports both **local in-process inference** (`Agent` or `Router`) and **remote 
 ## Installation
 
 ```bash
-pip install "laya[llamaindex] @ git+https://github.com/tgundhus/laya.git"
+pip install "laya-pro[llamaindex] @ git+https://github.com/tgundhus/laya-pro.git"
 ```
 
 ---
 
 ## 1. Single-Choice Routing with `RouterQueryEngine`
 
-In LlamaIndex, `RouterQueryEngine` uses a selector to decide which underlying query engine or tool should answer a question. Autoregressive LLM selectors (`LLMSingleSelector`) take 1,000–2,000 ms generating text. `LayaSingleSelector` evaluates candidate tools in **~33 ms** without token generation:
+In LlamaIndex, `RouterQueryEngine` uses a selector to choose the query engine or tool for a
+question. `LayaSingleSelector` evaluates those candidates without generating text:
 
 ```python
 from llama_index.core.query_engine import RouterQueryEngine
@@ -43,7 +46,7 @@ sql_tool = QueryEngineTool(
     ),
 )
 
-# Initialize Laya sub-35ms selector with confidence fallback
+# Initialize the selector with confidence fallback
 selector = LayaSingleSelector(
     confidence_threshold=0.80,   # If confidence < 0.80, fall back to index 0
     fallback_index=0,

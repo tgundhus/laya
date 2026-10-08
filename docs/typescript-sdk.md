@@ -1,7 +1,7 @@
 # TypeScript SDK design
 
-`laya-client` is a dependency-free HTTP client for a self-hosted `laya-serve`
-server. It uses the `POST /v1/systemone` endpoint and adds no Python production
+`laya-pro-client` is a dependency-free HTTP client for a self-hosted `laya-serve`
+server. It uses `POST /v1/systemone` and `POST /v1/systemone/batch` and adds no Python production
 code or server dependencies.
 The npm package starts at version `0.1.0`, independently of Python releases.
 
@@ -17,21 +17,21 @@ The npm package starts at version `0.1.0`, independently of Python releases.
 
 ```mermaid
 flowchart LR
-    A[JavaScript or TypeScript application] --> B[laya-client]
+    A[JavaScript or TypeScript application] --> B[laya-pro-client]
     B -->|POST /v1/systemone| C[Existing Laya server]
     C --> E[Router and local checkpoint]
 ```
 
-The SDK exports `predict` and a Laya-only `health` probe. It ships ESM,
+The SDK exports `predict`, `predictBatch` and a Laya-only `health` probe. It ships ESM,
 CommonJS and declarations, retaining inferred question IDs and choice labels.
-Use `laya-client` when a JavaScript or TypeScript application talks over HTTP to
+Use `laya-pro-client` when a JavaScript or TypeScript application talks over HTTP to
 self-hosted Python `laya-serve`. Use `laya-ts` when inference must run directly
 inside JavaScript through its local ONNX runtime, without a Python server.
 
 ## Shared contract
 
 Requests contain `state` and `questions`. Unless configured or supplied for a
-prediction, `laya-client` omits `model`, letting `laya-serve` select a local
+prediction, `laya-pro-client` omits `model`, letting `laya-serve` select a local
 checkpoint automatically. A client-wide or per-call `model` can select a local
 checkpoint, as can the other per-request controls in the table below. Choice label
 arrays are normalized to maps with null descriptions before transport.
@@ -46,8 +46,8 @@ answers and `low_confidence: true` on the ones below the threshold; with no
 threshold set, none of those three keys are sent, and that absence is the report.
 Optional extensions are validated when present.
 
-`/v1/systemone` is the only endpoint the client calls, and it has no standalone routing method:
-`laya-client` exposes `predict` and `health` and nothing else, and the live integration test asserts the
+`/v1/systemone` and `/v1/systemone/batch` handle predictions, and it has no standalone routing method:
+`laya-pro-client` exposes `predict`, `predictBatch` and `health`, and the live integration test asserts the
 server answers `404` for `/v1/route`. The controls the endpoint does honour are per-request, and each is
 sent only when the caller supplied the option -- an absent option leaves the deployment's own
 `Router(...)` settings in charge instead of overriding them with a client-side default:
@@ -61,6 +61,13 @@ sent only when the caller supplied the option -- an absent option leaves the dep
 | `maxLen` | `max_len` |
 | `headMaxLen` | `head_max_len` |
 | `minConfidence` | `min_confidence` |
+
+Batch calls also accept:
+
+| batch option | request field |
+| --- | --- |
+| `batchSize` | `batch_size` |
+| `sortByLength` | `sort_by_length` |
 
 An option that cannot mean anything is refused locally, before the request goes out: a blank `task`, a
 budget that is not a positive integer, a threshold outside `[0, 1]`, or a threshold map that is empty
@@ -88,6 +95,5 @@ authentication and request limits. CI runs the SDK checks on Node.js 22 and 24.
 Tiny random weights verify transport and numerical parity, not pretrained
 quality or performance.
 
-See the [SDK guide](https://github.com/tgundhus/laya/blob/main/sdk/typescript/README.md) for setup, examples, and npm
-publishing. The package will be published under the `laya-client` name. Python release workflows
-are unchanged.
+See the [SDK guide](https://github.com/tgundhus/laya-pro/blob/main/sdk/typescript/README.md) for setup, examples, and npm
+publishing. Build `laya-pro-client` from this checkout until a fork release is published. See [integration](integration.md) for source installation.

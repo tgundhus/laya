@@ -17,16 +17,18 @@ Supports both **local in-process inference** (`Agent` or `Router`) and **remote 
 ## Installation
 
 ```bash
-pip install "laya[langchain] @ git+https://github.com/tgundhus/laya.git"   # langchain-core and langgraph
+pip install "laya-pro[langchain] @ git+https://github.com/tgundhus/laya-pro.git"   # langchain-core and langgraph
 # or
-pip install "laya[langgraph] @ git+https://github.com/tgundhus/laya.git"
+pip install "laya-pro[langgraph] @ git+https://github.com/tgundhus/laya-pro.git"
 ```
 
 ---
 
 ## 1. LangGraph Conditional Edge Routing
 
-In LangGraph, conditional edges determine which node executes next. Autoregressive LLMs take 500–2,000 ms to make this decision. `LayaRouter` runs in **~33 ms** (measured at 32.8 ms on `laya-multilingual` / 39.5 ms on `laya` English on a Tesla T4 GPU):
+In LangGraph, conditional edges determine which node executes next. `LayaRouter` makes that
+decision through local inference. Latency depends on hardware, checkpoint and questions;
+see the [current review](reports/production-review.md) and [archived benchmarks](benchmarks.md).
 
 ```python
 from typing import TypedDict

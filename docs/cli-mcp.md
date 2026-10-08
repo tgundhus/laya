@@ -21,7 +21,7 @@ Installing the package installs the `laya` entry point. Run `laya --help` for th
 option list.
 
 ```bash
-python -m pip install laya
+python -m pip install "laya-pro @ git+https://github.com/tgundhus/laya-pro.git"
 laya --help
 ```
 
@@ -128,7 +128,7 @@ installation, Hub access, and the selected device before retrying.
 The MCP server is an optional extra. The core package does not install the `mcp` dependency:
 
 ```bash
-python -m pip install "laya[mcp]"
+python -m pip install "laya-pro[mcp] @ git+https://github.com/tgundhus/laya-pro.git"
 laya-mcp-server
 # equivalent module form:
 python -m laya.mcp.server

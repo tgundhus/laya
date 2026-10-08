@@ -1,8 +1,10 @@
 # CrewAI Integration
 
-Laya provides sub-35ms, non-autoregressive decision components for **CrewAI** multi-agent crews (single-question latency measured at **32.8 ms** with `laya-multilingual` and **39.5 ms** with `laya` on a Tesla T4 GPU; 193–464 ms on CPU):
+Laya-Pro provides local decision components for **CrewAI** multi-agent crews. Latency depends
+on hardware, checkpoint and questions; see the [current review](reports/production-review.md)
+and [archived benchmarks](benchmarks.md).
 
-* **`LayaCrewRouter`**: Sub-35ms task delegation router replacing LLM managers in hierarchical crews.
+* **`LayaCrewRouter`**: Task delegation router for hierarchical crews.
 * **`LayaTaskGuard`**: Pre-execution task guardrail screening prompts and instructions for jailbreaks, injections, and policy violations.
 
 Both take core's per-call decision controls -- the two token budgets (`max_len`, `head_max_len`), the language and abstention controls (`lang`, `min_confidence`) and the five prediction-hook arguments (`hooks`, `on_predict_start`, `on_predict_end`, `hooks_raise`, `hooks_timeout`) -- see [Per-call decision controls](#5-per-call-decision-controls).
@@ -14,18 +16,19 @@ Supports both **local in-process inference** (`Agent` or `Router`) and **remote 
 ## Installation
 
 ```bash
-pip install "laya[crewai] @ git+https://github.com/tgundhus/laya.git"
+pip install "laya-pro[crewai] @ git+https://github.com/tgundhus/laya-pro.git"
 ```
 
 The extra needs CrewAI 1.15.6 or newer, the first release that pins a patched `json-repair`. Those
-releases also pin `mcp~=1.28`, while Laya-Pro's MCP server needs `mcp>=2.2`, so `laya[crewai]` and
-`laya[mcp]` cannot share one environment; install them in separate ones.
+releases also pin `mcp~=1.28`, while Laya-Pro's MCP server needs `mcp>=2.2`, so `laya-pro[crewai]` and
+`laya-pro[mcp]` cannot share one environment; install them in separate ones.
 
 ---
 
-## 1. Sub-35ms Task Delegation in Hierarchical Crews
+## 1. Task delegation in hierarchical crews
 
-In hierarchical CrewAI workflows, a manager agent decides which worker agent should execute each incoming task. Autoregressive LLMs take 2,000–4,000 ms generating text just to make this delegation choice. `LayaCrewRouter` evaluates task requirements against agent roles and goals in **~33 ms** with zero token generation cost:
+In hierarchical CrewAI workflows, a manager selects the worker for each incoming task.
+`LayaCrewRouter` evaluates task requirements against agent roles and goals in a forward pass:
 
 ```python
 from crewai import Agent, Crew, Process, Task
@@ -50,7 +53,7 @@ writer = Agent(
 
 agents = [analyst, architect, writer]
 
-# Initialize sub-35ms router with confidence fallback
+# Initialize the router with confidence fallback
 router = LayaCrewRouter(
     confidence_threshold=0.80,   # If confidence < 0.80, delegate to fallback agent
     fallback_agent_index=0,
@@ -61,7 +64,7 @@ task = Task(
     expected_output="A bulleted summary of gross margin percentages compared to prior quarter.",
 )
 
-# Route and assign agent in ~33ms:
+# Route and assign an agent:
 decision = router.route(task, agents)
 print(f"Delegated to: {decision.role} (Confidence: {decision.confidence:.3f})")
 

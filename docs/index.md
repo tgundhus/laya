@@ -1,36 +1,30 @@
-# Laya
+---
+title: Laya-Pro documentation
+description: Run a local AI decision engine with Python, TypeScript, Java and .NET SDKs, HTTP and MCP tools, and configurable decision cache retention.
+---
 
-Multilingual, non-autoregressive System 1 decision engine: typed `choice`, `score` and `noul`
-decisions over any state, in a single forward pass.
+# Laya-Pro: local decisions with configurable retention
 
-A `choice` question picks one of several options, a `score` question places the state on a
-scale, and a `noul` question gives the probability that the answer is yes. Laya runs on your own
-hardware, reads 100+ languages, and its `Router` picks the checkpoint for each request.
+Laya-Pro classifies, scores and answers yes/no questions over text or JSON in a single
+forward pass. It runs on your hardware and can replay stored decisions for exact repeat
+requests. This independent fork of Laya adds cache retention policies, decision margins
+and optimizations around inference.
 
-## Start here
+Start with [installation and a first decision](https://github.com/tgundhus/laya-pro#install),
+then choose an [SDK or local MCP interface](integration.md).
 
-Install Laya-Pro and make a first decision with the README's
-[Install](https://github.com/tgundhus/laya#install) and
-[Quickstart](https://github.com/tgundhus/laya#quickstart). They stay in the README so there
-is one copy to keep current. [Using Laya-Pro](guide.md) has the engine in detail, and
-[Limits](limits.md) what the models do not do well.
-
-## Find a guide
-
-| To | Read |
+| Need | Guide |
 |---|---|
-| get typed values back from a JSON schema or a pydantic model | [Schema-driven decisions](structured.md) |
-| log, redact, cache or gate every decision without forking Laya | [Prediction hooks](hooks/index.md) |
-| adopt Laya incrementally without granting execution permission | [Staged adoption](staged-adoption.md) |
-| give a repeated request the answer it got before, or see how close an answer is to flipping | [Decision consistency](consistency.md) |
-| route, screen or triage inside a LangChain or LangGraph app | [LangChain & LangGraph](langchain.md) |
-| run Laya from a terminal or connect its built-in MCP stdio server | [Command line and MCP server](cli-mcp.md) |
-| run the SDK or the `laya-serve` HTTP API in a container, on CPU or an NVIDIA GPU | [Docker quickstart](docker.md) |
-| build for ARM64 hosts or DGX Spark | [ARM64 and DGX Spark containers](docker-platforms.md) |
-| specialise a checkpoint for your own decisions | [Browser-agent fine-tuning example](finetune_browser_agent.md) and the [fine-tuning notebook](https://github.com/tgundhus/laya/blob/main/notebooks/laya_finetune_typed_decisions_2xT4_kaggle.ipynb) |
-| judge benchmark results and deployment limits | [Benchmarks and known limits](benchmarks.md) |
-| look up a class, function or parameter | [Python API reference](reference/index.md) |
-| score a labelled dataset, compare to a baseline, or gate a build on it | [Evaluation harness](evals.md) |
+| Install and run the Python engine | [Using Laya-Pro](guide.md) |
+| Connect another application | [SDKs and integration](integration.md) |
+| Configure persistent decisions and retention | [Decision consistency](consistency.md) |
+| Deploy HTTP or local MCP | [Deployment](production.md), [HTTP API](http-api.md), [CLI and MCP](cli-mcp.md) |
+| Work with schemas and confidence policies | [Structured decisions](structured.md), [Questions and answers](questions-and-answers.md) |
+| Check accuracy and performance | [Benchmarks](benchmarks.md), [Limits](limits.md), [October review](reports/production-review.md) |
+| Use containers | [Docker](docker.md), [ARM64 and DGX Spark](docker-platforms.md) |
+| Look up Python methods | [API reference](reference/index.md) |
 
-Routing, the command line, the MCP server and confidence gating are in
-[Using Laya-Pro](guide.md).
+The [source repository](https://github.com/tgundhus/laya-pro) includes SDKs, examples,
+regression suites and raw benchmark results. The pretrained checkpoints remain upstream
+Laya models. Cache replay fixes repeatability while an entry remains valid; it does not
+establish that a decision is correct.

@@ -5,10 +5,10 @@ name: Docs
 
 on:
   pull_request:
-    paths: [docs/**, laya/**, zensical.toml, requirements-docs.txt, .github/workflows/docs.yml]
+    paths: [docs/**, laya/**, zensical.toml, requirements-docs.txt, scripts/check_site.py, .github/workflows/docs.yml]
   push:
     branches: [main]
-    paths: [docs/**, laya/**, zensical.toml, requirements-docs.txt, .github/workflows/docs.yml]
+    paths: [docs/**, laya/**, zensical.toml, requirements-docs.txt, scripts/check_site.py, .github/workflows/docs.yml]
   workflow_dispatch:
 
 permissions:
@@ -47,6 +47,9 @@ jobs:
             exit 1
           fi
 
+      - name: Check canonical URLs and crawl metadata
+        run: python scripts/check_site.py
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.event_name != 'pull_request'
         with:
@@ -59,7 +62,7 @@ jobs:
     # fork of it would try to create a deployment it is not allowed to (404) and go red on every
     # push to main; the strict build above still runs there, so the docs are checked everywhere and
     # published in one place.
-    if: github.event_name != 'pull_request' && github.repository == 'tgundhus/laya'
+    if: github.event_name != 'pull_request' && github.repository == 'tgundhus/laya-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

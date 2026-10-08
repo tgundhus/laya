@@ -8,6 +8,10 @@ credibility: "Measured. tests/test_consistency.py recomputes every consistency f
 
 # Decision consistency
 
+The figures on this page describe the archived 0.3.20 runs identified above. The
+[October review](reports/production-review.md) records checks against the current fork and
+clarifies local checkpoint identity and retention limits.
+
 The same request can come back with a different answer for two unrelated reasons: the model
 varies between runs, or something around the model changed. Laya's forward pass samples nothing,
 so the first reason does not apply to it on a fixed setup, but the second one does. This page
@@ -92,7 +96,10 @@ router.predict(state, questions)   # the stored decision, no forward pass
 
 - **Key.** A 16-byte BLAKE2b hash of the state, the questions in their given order, the per-call
   token budget, the checkpoint, and the model's fingerprint: its id, revision, calibration
-  temperatures, configured token budget and the Laya version. When the checkpoint has
+  temperatures, configured token budget, subfolder and the Laya version. Unversioned local
+  checkpoints also use artifact identity captured at load: verified digests when supplied,
+  otherwise file size, modification time and inode. File metadata detects ordinary replacements;
+  it does not verify contents or provide portable identity across machines. When the checkpoint has
   per-language temperatures the routing decision is part of the key too, because that is the one
   way the language reaches an answer. The device is not part of it, so a fleet of mixed hardware
   shares one set of decisions.
@@ -104,7 +111,9 @@ router.predict(state, questions)   # the stored decision, no forward pass
   decision is answered afresh, `None` for never, or a function of the question set and the answer
   (below). `maxsize` (100,000 by default) is the most decisions the built-in stores hold; past it
   the least recently stored or renewed leave first, and `prune()` drops the expired ones on
-  demand.
+  demand. Memory capacity is enforced on each write. SQLite checks the size bound periodically
+  to amortize maintenance, so it can temporarily exceed `maxsize`, especially with several
+  processes writing. Call `prune()` when a maintenance task must enforce the bound immediately.
 - **Retention from last use.** With `renew_on_hit=True` a replay pushes the expiry out again, so
   a decision lasts as long as its request keeps coming and only one that stops coming expires.
   The renewal is written once the decision has aged a sixteenth of its lifetime, at most 16 times
@@ -141,7 +150,7 @@ machines, pass `store=` any object that follows `laya.DecisionStore`: `get`, `ad
 seconds. The one rule a store must keep is in `add`: when a key already holds an unexpired
 value, keep it and return it; that is what makes the first decision stored the one every machine
 replays. Laya ships no network store itself, so it keeps depending on nothing hosted.
-[`examples/hooks/decision_store_redis.py`](https://github.com/tgundhus/laya/blob/main/examples/hooks/decision_store_redis.py)
+[`examples/hooks/decision_store_redis.py`](https://github.com/tgundhus/laya-pro/blob/main/examples/hooks/decision_store_redis.py)
 is one over Redis, using `SET ... NX` for that rule and Redis's own expiry:
 
 ```python

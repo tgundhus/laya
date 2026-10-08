@@ -3,6 +3,7 @@
 nav:
   - index.md
   - Guides:
+      - integration.md
       - use-cases.md
       - structured.md
       - hooks
@@ -12,6 +13,7 @@ nav:
       - glob: "*"
         ignore_no_matches: true
   - Deployment:
+      - production.md
       - docker.md
       - docker-platforms.md
       - security.md
@@ -20,6 +22,7 @@ nav:
       - finetune_browser_agent.md
   - Reports:
       - reports/index.md
+      - reports/production-review.md
       - reports/consistency-jev-vs-laya.md
       - reports/request-performance.md
       - reports/decision-cache-engineering.md

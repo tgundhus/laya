@@ -3,10 +3,10 @@
 
 [project]
 site_name = "Laya-Pro"
-site_description = "Typed decisions in one forward pass, with a memory for them"
-site_url = "https://tgundhus.github.io/laya/"
-repo_url = "https://github.com/tgundhus/laya"
-repo_name = "tgundhus/laya"
+site_description = "Local AI decisions with Python, TypeScript, Java and .NET SDKs, MCP tools, and configurable decision cache retention"
+site_url = "https://laya.xgnd.me/"
+repo_url = "https://github.com/tgundhus/laya-pro"
+repo_name = "tgundhus/laya-pro"
 edit_uri = "edit/main/docs/"
 copyright = "Apache 2.0. Laya by Convai Innovations; Laya-Pro by Tobias Gundhus."
 # The navigation order lives in docs/.nav.yml, read by the awesome-nav plugin below. A page it

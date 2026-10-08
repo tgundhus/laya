@@ -2,7 +2,7 @@
 
 The original project's release notes for the versions merged into Laya-Pro, from its README. Laya-Pro
 0.3.29 contains everything below, except the Java and .NET SDKs, which it does not carry, and with
-Laya-Pro's own additions on top: see the [README](https://github.com/tgundhus/laya#readme). Issue
+Laya-Pro's own additions on top: see the [README](https://github.com/tgundhus/laya-pro#readme). Issue
 and pull request numbers refer to the original project.
 
 ## What's new in 0.3.29
@@ -130,10 +130,13 @@ A small release: one new SDK, one TypeScript port, and the dependency bumps.
 
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/tgundhus/laya/main/assets/laya_vs_jev_full.png" alt="Laya versus TypeSafe Jev: accuracy on shared public datasets, every application workflow, all 51 languages, speed, calibration, and the cost of not preloading" width="100%" />
+  <img src="https://raw.githubusercontent.com/tgundhus/laya-pro/main/assets/laya_vs_jev_full.png" alt="Laya versus TypeSafe Jev: accuracy on shared public datasets, every application workflow, all 51 languages, speed, calibration, and the cost of not preloading" width="100%" />
 </p>
 
-Laya evaluates typed questions (`choice`, `score`, `noul`) over any state (text, email, ticket or JSON document) in **a single forward pass** — 33 ms for one question, 7.2 ms/question batched, measured on a T4. No text generation, so nothing to parse and nothing to hallucinate.
+Laya evaluates typed questions (`choice`, `score`, `noul`) over text, email, tickets or JSON
+documents in a forward pass. Archived T4 measurements were 33 ms for one question and
+7.2 ms/question batched. It returns typed decisions without generating text; predictions
+can still be wrong.
 
 Three checkpoints, and a `Router` that picks between them per request:
 
