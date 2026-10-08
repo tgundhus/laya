@@ -55,10 +55,11 @@ jobs:
   deploy:
     name: docs (deploy)
     needs: build
-    # Only the canonical repository has Pages configured. A fork would try to create a deployment
-    # it is not allowed to (404) and go red on every push to main; the strict build above still
-    # runs there, so the docs are checked everywhere and published in one place.
-    if: github.event_name != 'pull_request' && github.repository == 'NandhaKishorM/laya'
+    # Only this repository has Pages configured (Settings -> Pages -> Source: GitHub Actions). A
+    # fork of it would try to create a deployment it is not allowed to (404) and go red on every
+    # push to main; the strict build above still runs there, so the docs are checked everywhere and
+    # published in one place.
+    if: github.event_name != 'pull_request' && github.repository == 'tgundhus/laya'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

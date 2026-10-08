@@ -1,7 +1,7 @@
 # Compile defaults measurements (2026-10-03)
 
-Source: PR bodies #718 and #576 (`gh pr view 718 --repo NandhaKishorM/laya --json body`
-and the same command for 576). The requested `docs/fast-backends.md` is now
+Source: the original Laya project's pull request bodies #718 and #576 (`gh pr view 718 --json
+body` against that repository, and the same for 576). The requested `docs/fast-backends.md` is now
 `docs/compile-and-fast-path.md`. Base: fa9a2a7, branch feat/compile-defaults.
 
 Hardware: RTX 4070 Ti SUPER 16 GiB, torch 2.11.0+cu130, driver 615.71.09.

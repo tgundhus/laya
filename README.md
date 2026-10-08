@@ -1,11 +1,16 @@
-# Laya-Pro
+# Laya-Pro: an open-source, self-hosted AI decision engine
 
-**Typed decisions in one forward pass, with a memory for them.** Laya-Pro answers `choice`, `score`
-and yes/no questions about any text, email, ticket or JSON document in a single forward pass, in
-100+ languages, on your own hardware. It is built on the Laya decision engine and adds what
-repeated production traffic needs: the same request gets the same decision every time, on any
-machine and any backend, for as long as you choose to keep it, and a repeat costs microseconds
-instead of a forward pass.
+**Typed decisions in one forward pass, with a memory for them.** Laya-Pro is a self-hosted,
+multilingual AI decision engine for text classification, scoring and yes/no decisions: routing,
+triage, moderation and guardrails over any text, email, ticket or JSON document, in 100+ languages.
+It answers in a single forward pass on your own hardware, in Python or through ONNX Runtime, with no
+hosted inference API.
+
+Laya-Pro is built on the Laya decision engine and adds what repeated production traffic needs: a
+persistent decision cache, so the same request gets the same decision every time, on any machine
+and any backend, for as long as you choose to keep it; decision margins that flag borderline
+answers; and faster code around the model. A repeated request costs microseconds instead of a
+forward pass. Documentation: [laya.xgnd.me](https://laya.xgnd.me/).
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/tgundhus/laya/main/assets/laya_pro_vs_laya_vs_jev.png" alt="Laya-Pro against Laya against TypeSafe Jev: the same request gives the same answer (Jev 22.7% identical across three runs, Laya 100% on one setup but 72-99.6% of decisions unchanged across precisions, Laya-Pro 100%); a repeated request takes 0.04-0.06 ms on Laya-Pro against 34-144 ms on Laya and 236-276 ms on Jev; accuracy where Jev numbers exist; 3.6 times the requests served at 70% repeats; decision memory by retention period; decisions changed when the setup changes" width="100%" />
