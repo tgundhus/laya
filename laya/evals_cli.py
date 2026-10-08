@@ -490,6 +490,12 @@ def _cmd_compare(args) -> int:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _build_parser().parse_args(argv)
+    # Same reason as `laya.cli.main`: redirected output is encoded with the locale's codec by
+    # default (cp1252 on Windows), which cannot hold a non-Latin question id, tag or language, so
+    # `laya-evals validate data.jsonl > out.txt` died with a traceback and exit 1 -- the code kept
+    # for a quality failure. `laya eval` lands here before `cli.main` reaches its own copy.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     try:
         if args.command == "validate":
             return _cmd_validate(args)

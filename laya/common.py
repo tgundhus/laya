@@ -825,8 +825,10 @@ def answer_confidence(p: np.ndarray, k: int) -> float:
     of the answers returned at confidence c, about c of them are right. That property is
     conditional, and the condition is not met by default -- it holds only after the temperatures
     have been fitted and validated on held-out data for this checkpoint and this option count.
-    The shipped checkpoints are over-confident: `choice:11+` is a ~10x sharpener that returns a
-    point mass at 1.0, so a threshold applied to them selects below model accuracy (issue #394).
+    The shipped checkpoints are over-confident: `choice:11+` is fitted at 0.1006, a ~10x
+    sharpener. `clamp_temperature` refuses it and applies `TEMP_MIN` (0.5), which still sharpens
+    2x. The clamp limits the distortion; it does not establish calibration. Thresholds still
+    require held-out validation for the checkpoint and option count (issue #394).
 
     `confidence_from_probs` below reports a different quantity on a different scale and carries
     no such guarantee, so the two must not be compared against the same threshold.
