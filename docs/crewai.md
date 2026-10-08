@@ -15,6 +15,10 @@ Supports both **local in-process inference** (`Agent` or `Router`) and **remote 
 pip install "laya[crewai] @ git+https://github.com/tgundhus/laya.git"
 ```
 
+The extra needs CrewAI 1.15.6 or newer, the first release that pins a patched `json-repair`. Those
+releases also pin `mcp~=1.28`, while Laya-Pro's MCP server needs `mcp>=2.2`, so `laya[crewai]` and
+`laya[mcp]` cannot share one environment; install them in separate ones.
+
 ---
 
 ## 1. Sub-35ms Task Delegation in Hierarchical Crews

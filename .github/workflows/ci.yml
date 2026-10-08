@@ -156,6 +156,7 @@ jobs:
           python tests/test_example_server_errors.py
           python tests/test_crewai.py
           python tests/test_llamaindex.py
+          python tests/test_audit_policy.py
 
       - name: LangChain integration runs on the real base class
         run: |
