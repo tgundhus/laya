@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "laya": "0.3.29",
+    "python": "3.12.14",
+    "machine": "AMD64",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "sqlite": "3.53.1",
+    "renew_fraction": 0.0625
+  },
+  "exactness": {
+    "memory": {
+      "fixed ttl 1 h": {
+        "events": 40000,
+        "hits": 34312,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 0,
+        "renewal_writes_per_key_per_ttl_max": 0.0,
+        "store_writes_per_hit": 0.0
+      },
+      "fixed ttl 30 days": {
+        "events": 40000,
+        "hits": 34312,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 0,
+        "renewal_writes_per_key_per_ttl_max": 0.0,
+        "store_writes_per_hit": 0.0
+      },
+      "ttl 1 h, renew_on_hit": {
+        "events": 40000,
+        "hits": 37844,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 19522,
+        "renewal_writes_per_key_per_ttl_max": 15.67,
+        "store_writes_per_hit": 0.5159
+      },
+      "ttl function (per question set, 5 min for borderline answers)": {
+        "events": 40000,
+        "hits": 19569,
+        "outcome_disagreements": 0,
+        "per_question_set": {
+          "billing": {
+            "requests": 9871,
+            "hits": 9271
+          },
+          "urgency": {
+            "requests": 9975,
+            "hits": 567
+          },
+          "spam": {
+            "requests": 10123,
+            "hits": 0
+          },
+          "policy": {
+            "requests": 10031,
+            "hits": 9731
+          }
+        }
+      },
+      "maxsize 1,000, no ttl": {
+        "maxsize": 1000,
+        "stored": 14002,
+        "held_at_end": 1000,
+        "held_max_seen": 1000,
+        "held_not_newest": 0
+      }
+    },
+    "sqlite": {
+      "fixed ttl 1 h": {
+        "events": 40000,
+        "hits": 34312,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 0,
+        "renewal_writes_per_key_per_ttl_max": 0.0,
+        "store_writes_per_hit": 0.0
+      },
+      "fixed ttl 30 days": {
+        "events": 40000,
+        "hits": 34312,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 0,
+        "renewal_writes_per_key_per_ttl_max": 0.0,
+        "store_writes_per_hit": 0.0
+      },
+      "ttl 1 h, renew_on_hit": {
+        "events": 40000,
+        "hits": 37844,
+        "outcome_disagreements": 0,
+        "replayed_other_decision": 0,
+        "renewal_writes": 19522,
+        "renewal_writes_per_key_per_ttl_max": 15.67,
+        "store_writes_per_hit": 0.5159
+      },
+      "ttl function (per question set, 5 min for borderline answers)": {
+        "events": 40000,
+        "hits": 19569,
+        "outcome_disagreements": 0,
+        "per_question_set": {
+          "billing": {
+            "requests": 9871,
+            "hits": 9271
+          },
+          "urgency": {
+            "requests": 9975,
+            "hits": 567
+          },
+          "spam": {
+            "requests": 10123,
+            "hits": 0
+          },
+          "policy": {
+            "requests": 10031,
+            "hits": 9731
+          }
+        }
+      },
+      "maxsize 1,000, no ttl": {
+        "maxsize": 1000,
+        "stored": 14002,
+        "held_at_end": 1002,
+        "held_max_seen": 1099,
+        "held_not_newest": 0
+      }
+    }
+  },
+  "restart": {
+    "decisions": 2000,
+    "1. first process computes and stores": {
+      "open_ms": 7.286,
+      "first_request_ms": 0.435,
+      "median_request_us": 108.1,
+      "p99_request_us": 365.3,
+      "replayed": 0,
+      "replayed_first_decision": 0,
+      "computed": 2000,
+      "held": 2000
+    },
+    "2. a fresh process, same model": {
+      "open_ms": 2.131,
+      "first_request_ms": 0.137,
+      "median_request_us": 27.8,
+      "p99_request_us": 108.6,
+      "replayed": 2000,
+      "replayed_first_decision": 2000,
+      "computed": 0,
+      "held": 2000
+    },
+    "3. a fresh process after a model upgrade (new fingerprint)": {
+      "open_ms": 1.639,
+      "first_request_ms": 1.257,
+      "median_request_us": 93.3,
+      "p99_request_us": 428.0,
+      "replayed": 0,
+      "replayed_first_decision": 0,
+      "computed": 2000,
+      "held": 4000
+    },
+    "4. a fresh process 31 days later, same model": {
+      "open_ms": 2.057,
+      "first_request_ms": 1.234,
+      "median_request_us": 97.2,
+      "p99_request_us": 434.0,
+      "replayed": 0,
+      "replayed_first_decision": 0,
+      "computed": 2000,
+      "held": 4000
+    },
+    "file_bytes": 1417216,
+    "rows": 4000
+  }
+}

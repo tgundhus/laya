@@ -1,0 +1,305 @@
+{
+  "environment": {
+    "laya": "0.3.29",
+    "torch": "2.14.1+cpu",
+    "transformers": "5.19.0",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "threads": 4,
+    "device": "cpu",
+    "dtype": "torch.float32",
+    "amp_enabled": false,
+    "checkpoint": "convaiinnovations/laya",
+    "revision": "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851"
+  },
+  "workload": {
+    "states": 4,
+    "questions_per_state": 3,
+    "repeats": 3,
+    "accuracy_evaluation": false
+  },
+  "load_ms": 2436.7732999962755,
+  "local_fingerprint": {
+    "median_ms": 0.07989999721758068,
+    "samples_ms": [
+      0.18229999113827944,
+      0.10109998402185738,
+      0.1238000113517046,
+      0.08239998714998364,
+      0.08490000618621707,
+      0.08180001168511808,
+      0.07890001870691776,
+      0.08860000525601208,
+      0.07959999493323267,
+      0.07769998046569526,
+      0.07730000652372837,
+      0.07660000119358301,
+      0.07720000576227903,
+      0.07749997894279659,
+      0.08970001363195479,
+      0.0847000046633184,
+      0.08019999950192869,
+      0.07689997437410057,
+      0.07650000043213367,
+      0.07690000347793102
+    ],
+    "includes_encoder_config": true,
+    "measured_on": "2026-10-09"
+  },
+  "single": {
+    "median_ms": 571.4570999844,
+    "samples_ms": [
+      396.5752999938559,
+      571.4570999844,
+      683.7307999958284
+    ]
+  },
+  "four_serial": {
+    "median_ms": 3300.4803999792784,
+    "samples_ms": [
+      3380.25389998802,
+      3300.4803999792784,
+      3051.1945000034757
+    ]
+  },
+  "four_batched": {
+    "median_ms": 2598.100000002887,
+    "samples_ms": [
+      2730.435400007991,
+      2500.9442000009585,
+      2598.100000002887
+    ]
+  },
+  "consistency": {
+    "repeat_payloads_identical": true,
+    "batch_decision_flips": 0,
+    "batch_max_probability_delta": 0.0
+  },
+  "answers": [
+    {
+      "department": {
+        "type": "choice",
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9658,
+          "technical": 0.0181,
+          "other": 0.0162
+        },
+        "confidence": 0.8427,
+        "answer_confidence": 0.9658,
+        "action": {
+          "act_probability": 1.0
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "score": 1.3817,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "a critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.1625,
+          "1": 0.2932,
+          "2": 0.5443
+        },
+        "confidence": 0.1024,
+        "answer_confidence": 0.5443,
+        "action": {
+          "act_probability": 1.0
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "noul": 0.8953,
+        "confidence": 0.8953,
+        "answer_confidence": 0.8953,
+        "action": {
+          "act_probability": 1.0
+        }
+      }
+    },
+    {
+      "department": {
+        "type": "choice",
+        "choice": "technical",
+        "probabilities": {
+          "billing": 0.017,
+          "technical": 0.9234,
+          "other": 0.0596
+        },
+        "confidence": 0.717,
+        "answer_confidence": 0.9234,
+        "action": {
+          "act_probability": 1.0
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "score": 1.8366,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "a critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.018,
+          "1": 0.1274,
+          "2": 0.8546
+        },
+        "confidence": 0.5729,
+        "answer_confidence": 0.8546,
+        "action": {
+          "act_probability": 1.0
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "noul": 0.0467,
+        "confidence": 0.9533,
+        "answer_confidence": 0.9533,
+        "action": {
+          "act_probability": 1.0
+        }
+      }
+    },
+    {
+      "department": {
+        "type": "choice",
+        "choice": "technical",
+        "probabilities": {
+          "billing": 0.0911,
+          "technical": 0.7964,
+          "other": 0.1125
+        },
+        "confidence": 0.4126,
+        "answer_confidence": 0.7964,
+        "action": {
+          "act_probability": 1.0
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "score": 0.244,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "a critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.7903,
+          "1": 0.1753,
+          "2": 0.0344
+        },
+        "confidence": 0.4475,
+        "answer_confidence": 0.7903,
+        "action": {
+          "act_probability": 1.0
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "noul": 0.0,
+        "confidence": 1.0,
+        "answer_confidence": 1.0,
+        "action": {
+          "act_probability": 1.0
+        }
+      }
+    },
+    {
+      "department": {
+        "type": "choice",
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.3805,
+          "technical": 0.3672,
+          "other": 0.2523
+        },
+        "confidence": 0.0142,
+        "answer_confidence": 0.3805,
+        "action": {
+          "act_probability": 1.0
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "score": 0.8732,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "a critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.3609,
+          "1": 0.405,
+          "2": 0.2341
+        },
+        "confidence": 0.0226,
+        "answer_confidence": 0.405,
+        "action": {
+          "act_probability": 1.0
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "noul": 0.071,
+        "confidence": 0.929,
+        "answer_confidence": 0.929,
+        "action": {
+          "act_probability": 1.0
+        }
+      }
+    }
+  ],
+  "long": {
+    "windows": 14,
+    "usage": {
+      "input_tokens": 4699,
+      "output_tokens": 0,
+      "state_tokens": 1081,
+      "state_tokens_dropped": 0,
+      "truncated": 0,
+      "truncated_questions": [],
+      "windows": 14
+    },
+    "median_ms": 12035.398400010308,
+    "samples_ms": [
+      11701.99249999132,
+      12035.398400010308,
+      14265.13949999935
+    ]
+  },
+  "sqlite_replay": {
+    "median_ms": 0.14819999341852963,
+    "samples_ms": [
+      0.2621999883558601,
+      0.2440999960526824,
+      0.17250000382773578,
+      0.15259999781847,
+      0.14769998961128294,
+      0.14819999341852963,
+      0.14700001338496804,
+      0.1466000103391707,
+      0.14449999434873462,
+      0.14719998580403626,
+      0.1446000242140144,
+      0.14519999967887998,
+      0.2443999983370304,
+      0.17179999849759042,
+      0.15239999629557133
+    ],
+    "counters_after_reopen": {
+      "size": 1,
+      "maxsize": 100000,
+      "hits": 1,
+      "misses": 0,
+      "conflicts": 0,
+      "coalesced": 0,
+      "errors": 0
+    },
+    "forward_passes_avoided": 17
+  },
+  "timing_note": "Shared workstation load is uncontrolled. Timings are exploratory CPU measurements; the small workload verifies integration and consistency, not predictive accuracy."
+}

@@ -21,6 +21,7 @@ Sections:
 """
 import argparse
 import bisect
+import contextlib
 import json
 import math
 import os
@@ -406,7 +407,7 @@ def run_restart(tmp, n):
     out["2. a fresh process, same model"] = child()
     out["3. a fresh process after a model upgrade (new fingerprint)"] = child(fingerprint="model-v2", ttl=None)
     out["4. a fresh process 31 days later, same model"] = child(advance=31 * DAY)
-    with sqlite3.connect(path) as db:
+    with contextlib.closing(sqlite3.connect(path)) as db:
         out["file_bytes"] = os.path.getsize(path)
         out["rows"] = db.execute("SELECT COUNT(*) FROM laya_decisions").fetchone()[0]
     return out
