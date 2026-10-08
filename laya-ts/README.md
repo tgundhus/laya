@@ -1,6 +1,19 @@
 # laya-ts
 
-TypeScript inference for Laya (`Agent.predict`, `Router`, `lang`, `email`, `presets`, `shortlist`, `hooks`) on Node and the browser via split ONNX (`encoder.onnx` + `head.onnx`). ESM-only (`"type": "module"`); no CJS build — import from ESM or bundle.
+TypeScript inference for Laya-Pro (`Agent.predict`, `Router`, `lang`, `email`, `presets`, `shortlist`, `hooks`) on Node and the browser via split ONNX (`encoder.onnx` + `head.onnx`). ESM-only (`"type": "module"`); import from ESM or bundle.
+
+Build and install this checkout in another project:
+
+```sh
+cd laya-ts
+npm ci
+npm pack
+# In the consuming application:
+npm install /path/to/laya-pro/laya-ts/laya-ts-0.1.0.tgz
+```
+
+The package retains the `laya-ts` import name. For HTTP calls to a shared Python process, use
+the [Laya-Pro HTTP SDK](https://github.com/tgundhus/laya-pro/blob/main/sdk/typescript/README.md) instead.
 
 ## Export weights (once per checkpoint)
 
@@ -68,6 +81,9 @@ class MetricsHook extends BaseHook {
 // so a tracer or metrics hook does not have to be threaded through every construction:
 setDefaultHooks([new MetricsHook()]);  // addDefaultHook(...) appends; clearDefaultHooks() resets
 ```
+
+Asynchronous prediction hooks are awaited before the prediction returns, including when
+`hooksRaise` is `false`. Hooks should finish promptly; the native SDK does not cancel them.
 
 ## Structured decisions (`decide`)
 
