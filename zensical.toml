@@ -4,7 +4,7 @@
 [project]
 site_name = "Laya-Pro"
 site_description = "Local AI decisions with Python, TypeScript, Java and .NET SDKs, MCP tools, and configurable decision cache retention"
-site_url = "https://laya.xgnd.me/"
+site_url = "https://tgundhus.github.io/laya-pro/"
 repo_url = "https://github.com/tgundhus/laya-pro"
 repo_name = "tgundhus/laya-pro"
 edit_uri = "edit/main/docs/"

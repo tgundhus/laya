@@ -101,8 +101,8 @@ laya-mcp-server = "laya.mcp.server:main"
 laya-train = "laya.train_cli:main"
 
 [project.urls]
-Homepage = "https://laya.xgnd.me/"
-Documentation = "https://laya.xgnd.me/"
+Homepage = "https://tgundhus.github.io/laya-pro/"
+Documentation = "https://tgundhus.github.io/laya-pro/"
 Repository = "https://github.com/tgundhus/laya-pro"
 Issues = "https://github.com/tgundhus/laya-pro/issues"
 "Upstream models" = "https://huggingface.co/convaiinnovations/laya"

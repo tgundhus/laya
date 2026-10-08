@@ -9,7 +9,7 @@ retention, replay across devices and precision modes, and optimizations around i
 The pretrained models remain upstream Laya checkpoints; the fork maintains its own code,
 SDKs, documentation and measurements.
 
-[Documentation](https://laya.xgnd.me/) · [Integration](https://github.com/tgundhus/laya-pro/blob/main/docs/integration.md) ·
+[Documentation](https://tgundhus.github.io/laya-pro/) · [Integration](https://github.com/tgundhus/laya-pro/blob/main/docs/integration.md) ·
 [Benchmarks](https://github.com/tgundhus/laya-pro/blob/main/BENCHMARKS.md) · [Deployment](https://github.com/tgundhus/laya-pro/blob/main/docs/production.md)
 
 ## Install
