@@ -49,7 +49,7 @@ cache.cache_info()                          # size, hits, misses, coalesced, con
   never, or a function of the questions and the result. `renew_on_hit=True` keeps a decision alive
   while its request keeps coming, and `maxsize` bounds the store (100,000 decisions by default).
 - **Where.** In memory, in a SQLite file that several processes share, or in your own
-  `DecisionStore` ([a Redis example](examples/hooks/decision_store_redis.py) is included). The first
+  `DecisionStore` ([a Redis example](https://github.com/tgundhus/laya/blob/main/examples/hooks/decision_store_redis.py) is included). The first
   decision stored wins, across threads, processes and machines.
 - **Every backend, one decision.** fp32, int8 and ONNX share one key, on a `Router`, an `Agent` or
   an `ONNXAgent`, and identical requests in flight together share one forward pass.
@@ -57,7 +57,7 @@ cache.cache_info()                          # size, hits, misses, coalesced, con
   prediction: the request is computed, the first failure warns, and `cache_info()["errors"]` counts
   them all. A model upgrade changes the fingerprint, so old decisions are not replayed after it.
 
-Guide: [Decision consistency](docs/consistency.md).
+Guide: [Decision consistency](https://github.com/tgundhus/laya/blob/main/docs/consistency.md).
 
 ### How shaky an answer is
 
@@ -97,15 +97,15 @@ budgets. The cache works with all of it, and a review of the merge fixed:
 - `Router.predict_batch` serves agents that predate `lang` and `sort_by_length`, LangChain's
   `abatch` accepts an empty batch, and the ONNX option-overflow error says how many options fit.
 
-Details: [Merging Laya 0.3.21](docs/reports/real-checkpoints-m4-max.md#merging-laya-0321).
+Details: [Merging Laya 0.3.21](https://github.com/tgundhus/laya/blob/main/docs/reports/real-checkpoints-m4-max.md#merging-laya-0321).
 
 ## Benchmarks
 
 Laya-Pro against the original Laya (0.3.20, the version Laya-Pro branched from) on an Apple M4 Max,
 with the published checkpoints, over 841 requests in 11 languages. Rows marked *cache* need
 `DecisionCache` installed; the rest are the default path. Method and raw results: [Real checkpoints
-on an Apple M4 Max](docs/reports/real-checkpoints-m4-max.md). The figure above comes from
-[`make_laya_pro_plot.py`](research/scripts/make_laya_pro_plot.py), which reads the committed
+on an Apple M4 Max](https://github.com/tgundhus/laya/blob/main/docs/reports/real-checkpoints-m4-max.md). The figure above comes from
+[`make_laya_pro_plot.py`](https://github.com/tgundhus/laya/blob/main/research/scripts/make_laya_pro_plot.py), which reads the committed
 results.
 
 **Consistency**
@@ -163,12 +163,12 @@ new-request rows run both versions around one model in one process, in alternati
 ### Against Jev
 
 Laya-Pro answers the same kind of typed questions as TypeSafe's Jev, a closed, hosted decision API,
-and serves the same `/v1/systemone` protocol ([HTTP API](docs/http-api.md)). Where Jev falls short:
+and serves the same `/v1/systemone` protocol ([HTTP API](https://github.com/tgundhus/laya/blob/main/docs/http-api.md)). Where Jev falls short:
 
 - **The same request does not get the same response.** Sent the same 64 requests three times, Jev
   1.13.0 returned identical responses for 29 of 128 (23%), and none of its 64 four-question yes/no
   answer sets repeated exactly: one label went `todo`, `todo`, then `noise`. Laya returned 128 of
-  128 identical responses ([details](docs/reports/consistency-jev-vs-laya.md)), and Laya-Pro keeps
+  128 identical responses ([details](https://github.com/tgundhus/laya/blob/main/docs/reports/consistency-jev-vs-laya.md)), and Laya-Pro keeps
   that across devices and precisions.
 - **Confident misses.** On DAIR Emotion, Jev gave the true label zero probability on 16% of
   examples.
@@ -185,7 +185,7 @@ and serves the same `/v1/systemone` protocol ([HTTP API](docs/http-api.md)). Whe
 | Banking77 (72 against 77 labels) | **0.870** | 0.425 |
 
 Jev leads on large label sets, soft accuracy and raw calibration: [Where Jev
-leads](docs/limits.md#where-jev-leads). The Jev figures are third-party published, since there is
+leads](https://github.com/tgundhus/laya/blob/main/docs/limits.md#where-jev-leads). The Jev figures are third-party published, since there is
 no Jev API access here, except the repeat test, which reads archived raw responses in this
 repository.
 
@@ -200,7 +200,7 @@ Python 3.10 or newer. Extras go in brackets, as in
 `onnx`, `langchain`, `llamaindex`, `crewai`, `structured` and `fast` (the TileLang GPU path). The
 package keeps the name `laya`, so `import laya` and the `laya` command work unchanged; `pip install
 laya` from PyPI installs the original Laya, without Laya-Pro's changes. Platform notes:
-[Installation](docs/guide.md#installation).
+[Installation](https://github.com/tgundhus/laya/blob/main/docs/guide.md#installation).
 
 ## Quickstart
 
@@ -266,21 +266,21 @@ Routed accuracy, measured on a T4 by Laya's authors; Laya-Pro gives the same ans
 Also in the engine, each with its guide:
 
 - **Routing:** script and language detection in under a millisecond, with `model=`, `lang=` and
-  `lang_guess=` to decide it yourself. [Routing](docs/guide.md#routing)
+  `lang_guess=` to decide it yourself. [Routing](https://github.com/tgundhus/laya/blob/main/docs/guide.md#routing)
 - **Batches and long documents:** `predict_batch` shares forward passes, `predict_long` scans a
   document past the context window, and `laya-multilingual` reads 8,192 tokens with
-  `max_len=8192`. [Batches](docs/guide.md#batches), [Long documents](docs/guide.md#long-documents)
+  `max_len=8192`. [Batches](https://github.com/tgundhus/laya/blob/main/docs/guide.md#batches), [Long documents](https://github.com/tgundhus/laya/blob/main/docs/guide.md#long-documents)
 - **Confidence and abstention:** calibrated probabilities, and `min_confidence` to flag answers
-  below a threshold. [Confidence](docs/guide.md#confidence-and-abstention)
+  below a threshold. [Confidence](https://github.com/tgundhus/laya/blob/main/docs/guide.md#confidence-and-abstention)
 - **Schema-driven decisions:** `decide(state, schema=...)` from a JSON schema or a pydantic model.
-  [Schema-driven decisions](docs/structured.md)
+  [Schema-driven decisions](https://github.com/tgundhus/laya/blob/main/docs/structured.md)
 - **Serving:** `laya-serve` on the Jev-compatible `POST /v1/systemone`, Docker, an MCP server, the
-  `laya` command, and `ONNXAgent` for ONNX Runtime. [HTTP API](docs/http-api.md),
-  [Docker](docs/docker.md), [MCP](docs/guide.md#mcp-server), [command line](docs/guide.md#command-line)
-- **Integrations:** [LangChain and LangGraph](docs/langchain.md), [LlamaIndex](docs/llamaindex.md)
-  and [CrewAI](docs/crewai.md).
-- **Hooks:** observe or change every decision; the decision cache is one. [Hooks](docs/hooks/index.md)
-- **Fine-tuning:** where the accuracy jumps, on Kaggle's free GPUs. [Fine-tuning](docs/finetune.md)
+  `laya` command, and `ONNXAgent` for ONNX Runtime. [HTTP API](https://github.com/tgundhus/laya/blob/main/docs/http-api.md),
+  [Docker](https://github.com/tgundhus/laya/blob/main/docs/docker.md), [MCP](https://github.com/tgundhus/laya/blob/main/docs/guide.md#mcp-server), [command line](https://github.com/tgundhus/laya/blob/main/docs/guide.md#command-line)
+- **Integrations:** [LangChain and LangGraph](https://github.com/tgundhus/laya/blob/main/docs/langchain.md), [LlamaIndex](https://github.com/tgundhus/laya/blob/main/docs/llamaindex.md)
+  and [CrewAI](https://github.com/tgundhus/laya/blob/main/docs/crewai.md).
+- **Hooks:** observe or change every decision; the decision cache is one. [Hooks](https://github.com/tgundhus/laya/blob/main/docs/hooks/index.md)
+- **Fine-tuning:** where the accuracy jumps, on Kaggle's free GPUs. [Fine-tuning](https://github.com/tgundhus/laya/blob/main/docs/finetune.md)
 
 ## Limits
 
@@ -294,17 +294,17 @@ Also in the engine, each with its guide:
   labels instead of the text; give `noul` questions criteria.
 - The cache replays exact repeats only, and `laya-serve` and the MCP server do not install it yet.
 
-All of them, measured: [Limits](docs/limits.md).
+All of them, measured: [Limits](https://github.com/tgundhus/laya/blob/main/docs/limits.md).
 
 ## Documentation
 
-- [Using Laya-Pro](docs/guide.md): installation, routing, batches, long documents, confidence and
+- [Using Laya-Pro](https://github.com/tgundhus/laya/blob/main/docs/guide.md): installation, routing, batches, long documents, confidence and
   the servers
-- [Decision consistency](docs/consistency.md): the decision cache and decision margins
-- [Where a request's time goes](docs/performance.md)
-- [Limits](docs/limits.md)
-- [Reports](docs/reports/index.md), and [every benchmark run](BENCHMARKS.md)
-- [Python API reference](docs/reference/index.md)
+- [Decision consistency](https://github.com/tgundhus/laya/blob/main/docs/consistency.md): the decision cache and decision margins
+- [Where a request's time goes](https://github.com/tgundhus/laya/blob/main/docs/performance.md)
+- [Limits](https://github.com/tgundhus/laya/blob/main/docs/limits.md)
+- [Reports](https://github.com/tgundhus/laya/blob/main/docs/reports/index.md), and [every benchmark run](https://github.com/tgundhus/laya/blob/main/BENCHMARKS.md)
+- [Python API reference](https://github.com/tgundhus/laya/blob/main/docs/reference/index.md)
 
 ## Credits and license
 
@@ -313,4 +313,4 @@ models, the RLCD training method, the checkpoints and the engine are theirs, pub
 Apache License 2.0. Laya-Pro's additions (the decision cache, decision margins, the work around the
 model, the ONNX export changes and the benchmarks here) are by Tobias Gundhus, under the same
 license. Laya-Pro is an independent fork, not affiliated with or endorsed by Convai Innovations.
-See [LICENSE](LICENSE).
+See [LICENSE](https://github.com/tgundhus/laya/blob/main/LICENSE).

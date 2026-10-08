@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Protocol, Sequence
 
+from ..confidence import check_min_confidence
+from ..hooks import validate_timeout
 from ..presets import state_field
 from .device import agent_device, device_report, router_agent
 
@@ -110,6 +112,26 @@ def _check_noul_labels(name: str, labels: Any) -> None:
         )
 
 
+def _check_option_order(name: str, order: Any, n: int) -> list:
+    """The agent's `option_order` rule: slot s shows option `order[s]`.
+
+    Anything but a permutation of the option indices would drop an option or show one twice, and
+    the agent rejects it with a ValueError -- which, past this layer, reaches the client as
+    internal_error. A bool, a float or a numeric string is not an index; the agent does not
+    coerce them, so neither does this.
+    """
+    if (not isinstance(order, (list, tuple))
+            or len(order) != n
+            or not all(isinstance(i, int) and not isinstance(i, bool) for i in order)
+            or sorted(order) != list(range(n))):
+        raise ToolError(
+            "invalid_questions",
+            f"questions[{name}].option_order must be a permutation of range({n}) -- one slot per "
+            f"option, each option once -- got {order!r}",
+        )
+    return list(order)
+
+
 def validate_questions(questions: Any) -> dict:
     if not isinstance(questions, dict) or not questions:
         raise ToolError(
@@ -187,6 +209,11 @@ def validate_questions(questions: Any) -> dict:
                 )
             _check_noul_labels(name, spec["labels"])
             entry["labels"] = spec["labels"]
+        if "option_order" in spec:
+            # Documented for every type; rebuilding the entry from the keys above dropped it, so
+            # the order a caller asked for never reached the model.
+            n_options = 2 if qtype == "noul" else len(entry["criteria"])
+            entry["option_order"] = _check_option_order(name, spec["option_order"], n_options)
         cleaned[name] = entry
     return cleaned
 
@@ -279,6 +306,25 @@ def validate_lang(lang: Any) -> str | None:
     return lang
 
 
+def validate_lang_guess(lang_guess: Any) -> str | None:
+    """A soft routing hint for core's ``lang_guess`` override, or ``None`` for "not set".
+
+    ``lang_guess`` sits between an explicit ``lang`` and the built-in detector: it names a probable
+    language so routing can prefer the checkpoint that reads it, without forcing the answer the way
+    ``lang`` does. Like ``lang`` only the type is checked here -- a code's meaning is core's business,
+    and a blank or unknown code falls through to detection rather than failing. Core also accepts a
+    callable for ``lang_guess``, but an MCP client carries JSON, not a function, so a non-string is
+    refused rather than silently dropped. The batch surface already advertises this key
+    (:data:`BATCH_ITEM_OVERRIDES`); the single-request tools forward it through here.
+    """
+    if lang_guess is None:
+        return None
+    if not isinstance(lang_guess, str):
+        raise ToolError("invalid_lang_guess",
+                        "lang_guess must be a language code like 'en' or 'de', got %r" % (lang_guess,))
+    return lang_guess
+
+
 def validate_budget(value: Any, name: str) -> int | None:
     """One of the two per-call token budgets (``max_len``, ``head_max_len``), or ``None``.
 
@@ -293,6 +339,23 @@ def validate_budget(value: Any, name: str) -> int | None:
     return value
 
 
+def validate_min_confidence(value: Any) -> float | None:
+    """The per-call abstention threshold (``min_confidence``), or ``None`` when unset.
+
+    Range, booleans and non-finite values are core's rule, not this layer's, so it defers to
+    ``laya.confidence.check_min_confidence`` and only wraps its ``ValueError`` as a clean
+    ``invalid_min_confidence`` the client can read -- the way ``validate_task`` carries core's
+    task list instead of restating it. ``None`` means "answer everything", which is the flag's
+    meaning on the CLI and the checkpoint default on every surface.
+    """
+    if value is None:
+        return None
+    try:
+        return check_min_confidence(value)
+    except (TypeError, ValueError) as exc:
+        raise ToolError("invalid_min_confidence", str(exc)) from None
+
+
 def _overrides(task: Any, lang: Any, max_len: Any, head_max_len: Any) -> dict:
     """The per-call controls as keyword arguments, with the unset ones left out.
 
@@ -302,6 +365,14 @@ def _overrides(task: Any, lang: Any, max_len: Any, head_max_len: Any) -> dict:
     """
     values = {"task": task, "lang": lang, "max_len": max_len, "head_max_len": head_max_len}
     return {name: value for name, value in values.items() if value is not None}
+
+
+def _raise_if_remote_error(exc: BaseException) -> None:
+    """Turn transport failures into the ToolError the client can read."""
+    from .remote import RemoteError
+
+    if isinstance(exc, RemoteError):
+        raise ToolError(exc.code, exc.message) from exc
 
 
 def _normalize_answers(raw: Any) -> dict:
@@ -342,8 +413,10 @@ def laya_predict(
     *,
     task: Any = None,
     lang: Any = None,
+    lang_guess: Any = None,
     max_len: Any = None,
     head_max_len: Any = None,
+    min_confidence: Any = None,
     router: Any = None,
     agent: Any = None,
 ) -> dict:
@@ -352,9 +425,12 @@ def laya_predict(
     ``router`` is used when model == "auto"; ``agent`` for a direct checkpoint.
 
     ``task``/``lang`` are the router's own overrides (an explicit ``model`` outranks an explicit
-    ``task``, which outranks an explicit ``lang``); ``max_len``/``head_max_len`` override the token
-    budget the answering checkpoint was configured with. None of them is forwarded unless set, so a
-    router or agent that predates those keywords keeps working.
+    ``task``, which outranks an explicit ``lang``); ``lang_guess`` is the router's soft hint that sits
+    below ``lang`` and above built-in detection -- it only participates in routing, so like ``task``
+    it is refused on a pinned model and never reaches a direct agent; ``max_len``/``head_max_len``
+    override the token budget the answering checkpoint was configured with; ``min_confidence`` flags
+    any answer whose calibrated confidence falls below it with ``low_confidence: true``. None of them
+    is forwarded unless set, so a router or agent that predates those keywords keeps working.
     """
     state_d = validate_state(state)
     questions_d = validate_questions(questions)
@@ -366,6 +442,16 @@ def laya_predict(
         validate_budget(max_len, "max_len"),
         validate_budget(head_max_len, "head_max_len"),
     )
+    lang_guess_code = validate_lang_guess(lang_guess)
+    if lang_guess_code is not None:
+        # Only when set, so a call that passes no hint stays byte-identical to the one that made
+        # no ``lang_guess`` keyword exist, and a deployment's ``Router(lang_guess=...)`` still answers.
+        budget["lang_guess"] = lang_guess_code
+    min_conf = validate_min_confidence(min_confidence)
+    if min_conf is not None:
+        # Only when set, so a call that abstains over nothing stays byte-identical to the one
+        # that made no ``min_confidence`` keyword exist.
+        budget["min_confidence"] = min_conf
     # `task` picks a checkpoint by saying what the work is, so it means nothing once one is pinned:
     # `Router._route` checks an explicit `model` first and never reaches the task, and
     # `Agent.system_one` does not accept the keyword at all. Both would answer as if it were unset,
@@ -375,6 +461,13 @@ def laya_predict(
             "invalid_task",
             "task routes between checkpoints; with a pinned model there is nothing to route",
         )
+    # `lang_guess` is routing-only in the same way, and `Agent.predict` does not accept it, so a
+    # pinned call that set it would either be ignored (router) or crash (direct agent).
+    if model_name != AUTO and "lang_guess" in budget:
+        raise ToolError(
+            "invalid_lang_guess",
+            "lang_guess routes between checkpoints; with a pinned model there is nothing to route",
+        )
 
     def _run() -> Any:
         if model_name == "auto":
@@ -382,12 +475,13 @@ def laya_predict(
                 if agent is None:
                     raise ToolError("models_not_ready", "Router is not loaded (auto mode)")
                 # An Agent answers but does not route: run it directly and report
-                # a null model below, instead of echoing 'auto' (#444). `task` only
-                # chooses between checkpoints, so it has nothing to do here.
+                # a null model below, instead of echoing 'auto' (#444). `task` and `lang_guess` only
+                # choose between checkpoints, so they have nothing to do here.
                 nonlocal auto_without_router
                 auto_without_router = True
                 return agent.predict(state_d, questions_d,
-                                     **{k: v for k, v in budget.items() if k != "task"})
+                                     **{k: v for k, v in budget.items()
+                                        if k not in ("task", "lang_guess")})
             return router.predict(state_d, questions_d, **budget)
         if agent is not None:
             return agent.predict(state_d, questions_d, **budget)
@@ -396,7 +490,11 @@ def laya_predict(
         return router.predict(state_d, questions_d, model=model_name, **budget)
 
     started = time.perf_counter()
-    result = _run()
+    try:
+        result = _run()
+    except Exception as exc:
+        _raise_if_remote_error(exc)
+        raise
     latency_ms = (time.perf_counter() - started) * 1000.0
 
     norm = _normalize_result(result)
@@ -445,12 +543,14 @@ def laya_route(
     model: Any = None,
     task: Any = None,
     lang: Any = None,
+    lang_guess: Any = None,
     router: Any = None,
 ) -> dict:
     """Routing decision only: no forward pass.
 
-    Takes the three routing overrides :meth:`laya_predict` takes -- ``model``, ``task``, ``lang`` --
-    so "which checkpoint would this go to?" can be asked under a pin without running anything.
+    Takes the routing overrides :meth:`laya_predict` takes -- ``model``, ``task``, ``lang``,
+    ``lang_guess`` -- so "which checkpoint would this go to?" can be asked under a pin without
+    running anything.
     Passing a predict call's controls here reproduces the ``routing`` block it returned, which is
     what makes a route a cheap explanation of a decision rather than a different decision.
     """
@@ -460,12 +560,19 @@ def laya_route(
     # override rather than a ValueError from normalise_name.
     model_name = validate_model(model)
     task_name = validate_task(task)
+    lang_guess_code = validate_lang_guess(lang_guess)
     # Same rule as the decision tools: `_route` checks an explicit model first and never reaches
     # the task, so a call that sets both is asking a question with two answers.
     if model_name != AUTO and task_name is not None:
         raise ToolError(
             "invalid_task",
             "task routes between checkpoints; with a pinned model there is nothing to route",
+        )
+    # `lang_guess` routes in the same place, so it is equally meaningless once a checkpoint is pinned.
+    if model_name != AUTO and lang_guess_code is not None:
+        raise ToolError(
+            "invalid_lang_guess",
+            "lang_guess routes between checkpoints; with a pinned model there is nothing to route",
         )
     overrides: dict[str, Any] = {}
     if model_name != AUTO:
@@ -475,6 +582,8 @@ def laya_route(
     lang_code = validate_lang(lang)
     if lang_code is not None:
         overrides["lang"] = lang_code
+    if lang_guess_code is not None:
+        overrides["lang_guess"] = lang_guess_code
     # Everything the caller typed is checked before the server is asked for a checkpoint.
     if router is None:
         raise ToolError("models_not_ready", "Router is not loaded")
@@ -517,6 +626,13 @@ def _resident_or_load(router: Any, name: str) -> Any:
     resident = router_agent(router, name)
     if resident is not None:
         return resident
+    if hasattr(router, "base_url") and hasattr(router, "health"):
+        raise ToolError(
+            "unsupported_remote",
+            "laya_shortlist embeds options with the answering checkpoint in-process; it is not "
+            "available when LAYA_BASE_URL points the MCP server at a remote laya-serve. Use "
+            "laya_predict with head_max_len raised, or run the MCP server without LAYA_BASE_URL.",
+        )
     load = getattr(router, "load", None)
     if load is None:
         raise ToolError("models_not_ready", f"checkpoint {name!r} is not loaded")
@@ -558,8 +674,10 @@ def laya_shortlist(
     *,
     task: Any = None,
     lang: Any = None,
+    lang_guess: Any = None,
     max_len: Any = None,
     head_max_len: Any = None,
+    min_confidence: Any = None,
     router: Any = None,
     agent: Any = None,
     embed_fn: Callable[[Sequence[str]], Any] | None = None,
@@ -579,8 +697,19 @@ def laya_shortlist(
     ``head_max_len`` matters more here than anywhere else: shortlisting exists
     because a large label set shares that budget, and narrowing to ``k`` is only
     half of the fix. The budget override reaches the answering forward pass;
-    ``task``/``lang`` reach the route that chose the checkpoint.
+    ``task``/``lang``/``lang_guess`` reach the route that chose the checkpoint
+    (``lang_guess`` only routes, so like ``task`` it is stripped before the answering pass);
+    ``min_confidence`` flags a kept-label answer the checkpoint is unsure of.
     """
+    # Before the heavy imports below: a remote router has no in-process encoder to embed with,
+    # and the refusal should not cost the MCP process a torch import on the way to saying so.
+    if router is not None and agent is None and hasattr(router, "base_url") and hasattr(router, "health"):
+        raise ToolError(
+            "unsupported_remote",
+            "laya_shortlist embeds options with the answering checkpoint in-process; it is not "
+            "available when LAYA_BASE_URL points the MCP server at a remote laya-serve. Use "
+            "laya_predict with head_max_len raised, or run the MCP server without LAYA_BASE_URL.",
+        )
     # Lazy: keeps numpy/shortlist out of module import for laya.mcp.tools.
     from laya.shortlist import (
         DEFAULT_SHORTLIST_K,
@@ -593,8 +722,16 @@ def laya_shortlist(
     questions_d = validate_questions(questions)
     model_name = validate_model(model)
     routing_overrides = _overrides(validate_task(task), validate_lang(lang), None, None)
+    lang_guess_code = validate_lang_guess(lang_guess)
+    if lang_guess_code is not None:
+        routing_overrides["lang_guess"] = lang_guess_code
     budget = _overrides(None, None, validate_budget(max_len, "max_len"),
                         validate_budget(head_max_len, "head_max_len"))
+    min_conf = validate_min_confidence(min_confidence)
+    if min_conf is not None:
+        # Forwarded to the answering predict the same way the budget is, so a shortlisted field the
+        # model reads with low confidence comes back flagged rather than as a confident-looking pick.
+        budget["min_confidence"] = min_conf
     # Same rule as `laya_predict`: a checkpoint is already pinned, so `task` has nothing left to
     # decide -- and it is a routing keyword, which the answering `system_one` does not accept.
     if model_name != AUTO and "task" in routing_overrides:
@@ -602,13 +739,31 @@ def laya_shortlist(
             "invalid_task",
             "task routes between checkpoints; with a pinned model there is nothing to route",
         )
+    # `lang_guess` is routing-only in the same way, so a pinned call has nothing for it to choose.
+    if model_name != AUTO and "lang_guess" in routing_overrides:
+        raise ToolError(
+            "invalid_lang_guess",
+            "lang_guess routes between checkpoints; with a pinned model there is nothing to route",
+        )
     # `lang` survives pinning because it means two things: it can route, and on the answering
     # checkpoint it selects the per-language temperature table.
-    forward_overrides = {name: value for name, value in routing_overrides.items() if name != "task"}
+    forward_overrides = {name: value for name, value in routing_overrides.items()
+                         if name not in ("task", "lang_guess")}
     if k is None:
         k = DEFAULT_SHORTLIST_K
     if isinstance(k, bool) or not isinstance(k, int) or k < 1:
         raise ToolError("invalid_k", f"k must be a positive integer, got {k!r}")
+    # A choice with more than k labels is answered over the k it keeps, in rank order, so an
+    # `option_order` over all of its options no longer describes the question -- the agent
+    # rejects the stale order. A choice of at most k labels is answered as given and keeps it.
+    for name, spec in questions_d.items():
+        if spec["type"] == "choice" and "option_order" in spec and len(spec["criteria"]) > k:
+            raise ToolError(
+                "invalid_questions",
+                f"questions[{name}].option_order orders all {len(spec['criteria'])} options, but "
+                f"laya_shortlist answers it over the {k} it keeps, in rank order; omit option_order, "
+                f"or raise k to at least {len(spec['criteria'])}",
+            )
 
     routing: dict[str, Any]
     if model_name == "auto":
@@ -685,8 +840,10 @@ def laya_preset(
     *,
     task: Any = None,
     lang: Any = None,
+    lang_guess: Any = None,
     max_len: Any = None,
     head_max_len: Any = None,
+    min_confidence: Any = None,
     router: Any = None,
     agent: Any = None,
     preset_builder: Callable[[str], dict] | None = None,
@@ -700,8 +857,9 @@ def laya_preset(
     shape and is passed through untouched.
 
     The preset fixes the questions, not the route or the budget, so the per-call controls a
-    hand-written :func:`laya_predict` takes are available here too -- most usefully ``lang``, since
-    a preset's instructions are English text whatever state they read.
+    hand-written :func:`laya_predict` takes -- ``task``/``lang``/``lang_guess``/``max_len``/
+    ``head_max_len`` and ``min_confidence`` -- are available here too; most usefully ``lang``, since a
+    preset's instructions are English text whatever state they read.
     """
     preset_name = validate_preset(preset)
     state_d = validate_state(state)
@@ -719,14 +877,48 @@ def laya_preset(
         model="auto",
         task=task,
         lang=lang,
+        lang_guess=lang_guess,
         max_len=max_len,
         head_max_len=head_max_len,
+        min_confidence=min_confidence,
         router=router,
         agent=agent,
     )
 
 
+def _remote_status(router: Any, preload: bool) -> dict:
+    """``laya_status`` for a remote router: the server's own /health, no torch import here."""
+    versions: dict[str, str | None] = {"laya": None}
+    try:
+        versions["laya"] = getattr(__import__("laya"), "__version__", "unknown")
+    except Exception:
+        pass
+    out: dict[str, Any] = {
+        "mode": "remote",
+        "base_url": router.base_url,
+        "router_preload": False,
+        "router_ready": True,
+        "package_versions": versions,
+    }
+    try:
+        health = router.health()
+    except Exception as exc:  # noqa: BLE001 -- the status tool reports, it never raises
+        out["server"] = None
+        out["server_error"] = f"{type(exc).__name__}: {exc}"
+        out["loaded"] = []
+        return out
+    out["server"] = health
+    loaded = health.get("loaded")
+    out["loaded"] = [v for v in loaded if isinstance(v, str)] if isinstance(loaded, list) else []
+    for key in ("device", "device_is_preference", "checkpoint_devices"):
+        if key in health:
+            out[key] = health[key]
+    return out
+
+
 def laya_status(*, router: Any = None, loaded: list[str] | None = None, preload: bool = True) -> dict:
+    if router is not None and hasattr(router, "base_url") and hasattr(router, "health"):
+        return _remote_status(router, preload)
     report = device_report()
     versions: dict[str, str | None] = {
         "laya": None,
@@ -792,6 +984,20 @@ def _validate_batch_str(value: Any, where: str, allow_empty: bool = False) -> st
     return value
 
 
+def _validate_batch_budget(value: Any, name: str, where: str) -> int | None:
+    """One of the two per-request token budgets, with the batch item named in the message.
+
+    Same guard and same error code as the single-request tools take, so `invalid_max_len` means
+    one thing whichever tool a client called.
+    """
+    if value is None:
+        return None
+    try:
+        return validate_budget(value, name)
+    except ToolError as error:
+        raise ToolError("invalid_%s" % name, "%s[%r]: %s" % (where, name, error)) from None
+
+
 def _validate_batch_item(request: Any, i: int) -> dict:
     where = "requests[%d]" % i
     if not isinstance(request, dict):
@@ -808,21 +1014,49 @@ def _validate_batch_item(request: Any, i: int) -> dict:
         if key in request:
             item[key] = _validate_batch_str(request[key], "%s[%r]" % (where, key))
     if "lang_guess" in request:
-        item["lang_guess"] = request["lang_guess"]
+        # Type-check it the way the single-request path does (`validate_lang_guess`), instead of
+        # passing it through raw: a non-string (e.g. a JSON object) otherwise reached
+        # `_english_from_code(dict)`, stringified to something that matches no English subtag, and
+        # silently routed that item to the multilingual checkpoint instead of raising cleanly.
+        item["lang_guess"] = validate_lang_guess(request["lang_guess"])
+    # `Router.predict_batch` reads both off the request dict and splits requests that ask for
+    # different budgets into separate forward passes, so an item that names one must keep it.
+    for key in ("max_len", "head_max_len"):
+        if key in request:
+            budget = _validate_batch_budget(request[key], key, where)
+            if budget is not None:
+                item[key] = budget
     return item
+
+
+# The per-request overrides a batch item may carry. Written out from here rather than retyped,
+# because the key list a client sees is the key list `_validate_batch_item` keeps: an enumeration
+# that drops one advertises a control that would be ignored, and an enumeration that gains one
+# rejects a request the tool would have answered.
+BATCH_ITEM_OVERRIDES = ("model", "task", "lang", "lang_guess", "max_len", "head_max_len")
+
+
+def batch_item_key_doc(omit: tuple = ()) -> str:
+    """The batch item shape as one phrase: ``{state, questions, model?, task?, ...}``.
+
+    `omit` drops the overrides a given tool has no use for -- the token budgets are kept by the
+    shared validator but mean nothing to `route_batch`, which never runs a forward pass.
+    """
+    keys = [key for key in BATCH_ITEM_OVERRIDES if key not in omit]
+    return "{state, questions, %s} objects" % ", ".join("%s?" % key for key in keys)
 
 
 def validate_batch_requests(requests: Any) -> list[dict]:
     """Validate a tool payload of many requests, preserving order.
 
     Same per-item validation as ``laya_predict``/``laya_route`` (state, questions,
-    optional model/task/lang/lang_guess overrides), run before any model loads so
-    one malformed item fails the whole call instead of a partial batch.
+    optional model/task/lang/lang_guess/max_len/head_max_len overrides), run before any model
+    loads so one malformed item fails the whole call instead of a partial batch.
     """
     if not isinstance(requests, list) or not requests:
         raise ToolError(
             "invalid_request",
-            "requests must be a non-empty array of {state, questions, model?, task?, lang?, lang_guess?} objects",
+            "requests must be a non-empty array of %s" % batch_item_key_doc(),
         )
     return [_validate_batch_item(request, i) for i, request in enumerate(requests)]
 
@@ -835,9 +1069,32 @@ def _validate_batch_size(batch_size: Any) -> int | None:
     return batch_size
 
 
+def _validate_hooks_timeout(value: Any) -> float | None:
+    # Mirrors laya_predict_batch's forwarding shape: unset stays unset so a
+    # Router with its own default is not shadowed by 0, and core's
+    # ``validate_timeout`` decides what counts as a real deadline. Wrapping
+    # its ValueError as a ToolError keeps a bad arg from surfacing as
+    # ``internal_error: ValueError`` at the MCP boundary. Bools are refused
+    # here the same way _validate_batch_size refuses them -- core's
+    # float(True) == 1.0 would silently turn "True" into a one-second
+    # deadline, which is the kind of wrong-that-needs-to-shout.
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ToolError("invalid_hooks_timeout",
+                        "hooks_timeout must be a positive number or None, got %r" % (value,))
+    try:
+        return validate_timeout(value)
+    except (TypeError, ValueError) as exc:
+        raise ToolError("invalid_hooks_timeout", str(exc)) from exc
+
+
 def laya_predict_batch(
     requests: Any,
     batch_size: Any = None,
+    hooks_timeout: Any = None,
+    min_confidence: Any = None,
+    sort_by_length: bool = False,
     *,
     router: Any = None,
 ) -> dict:
@@ -854,6 +1111,12 @@ def laya_predict_batch(
     """
     items = validate_batch_requests(requests)
     size = _validate_batch_size(batch_size)
+    # Validate the call-level controls up front, the way every sibling tool does, so a bad value is
+    # a clean ToolError the client can read -- not an `internal_error: ValueError` that escapes the
+    # TypeError-only handler below (min_confidence), and not a silent 1-second hook deadline from
+    # core's `float(True) == 1.0` (hooks_timeout).
+    mc = validate_min_confidence(min_confidence)
+    ht = _validate_hooks_timeout(hooks_timeout)
     if router is None:
         raise ToolError("models_not_ready", "Router is not loaded")
     if not hasattr(router, "predict_batch"):
@@ -861,9 +1124,21 @@ def laya_predict_batch(
 
     started = time.perf_counter()
     try:
-        results = router.predict_batch(items, batch_size=size) if size is not None \
-            else router.predict_batch(items)
-    except TypeError as exc:
+        kwargs = {}
+        if size is not None:
+            kwargs["batch_size"] = size
+        if ht is not None:
+            kwargs["hooks_timeout"] = ht
+        if mc is not None:
+            kwargs["min_confidence"] = mc
+        if sort_by_length:
+            kwargs["sort_by_length"] = True
+        results = router.predict_batch(items, **kwargs)
+    except Exception as exc:
+        _raise_if_remote_error(exc)
+        if not isinstance(exc, TypeError):
+            raise
+
         # A Router without batch support raises at the call itself; anything
         # else is a real bug and must surface unchanged.
         raise ToolError(
@@ -902,19 +1177,24 @@ def laya_predict_batch(
     }
 
 
-def laya_route_batch(requests: Any, *, router: Any = None) -> dict:
+def laya_route_batch(requests: Any, hooks_timeout: Any = None, *, router: Any = None) -> dict:
     """Routing decisions for many requests: no forward pass, no checkpoint loads.
 
     The batch form of ``laya_route``, mirroring ``Router.route_batch``: it
     reports which checkpoint each request *would* answer from so clients can
     inspect or aggregate a workload's routing before paying any load cost.
+    ``hooks_timeout`` overrides the Router's own value for this call's
+    ``on_route`` dispatch, exactly as it does for ``laya_predict_batch``: an
+    operator-installed hook that hangs should not stall a whole routing sweep.
     """
     items = validate_batch_requests(requests)
+    timeout = _validate_hooks_timeout(hooks_timeout)
     if router is None:
         raise ToolError("models_not_ready", "Router is not loaded")
     if not hasattr(router, "route_batch"):
         raise ToolError("internal_error", "router has no route_batch() method")
-    decisions = router.route_batch(items)
+    decisions = router.route_batch(items, hooks_timeout=timeout) if timeout is not None \
+        else router.route_batch(items)
     if not isinstance(decisions, list) or len(decisions) != len(items):
         raise ToolError(
             "internal_error",
@@ -935,6 +1215,7 @@ def laya_decide(
     schema: Any,
     model: Any = "auto",
     *,
+    min_confidence: Any = None,
     router: Any = None,
     agent: Any = None,
 ) -> dict:
@@ -947,6 +1228,11 @@ def laya_decide(
     answer is ``values`` -- enum members, integer levels, booleans -- beside the
     per-field ``confidence``/``probabilities`` and the usual routing/device/
     latency metadata, so a client never parses an answer map by hand.
+
+    ``min_confidence`` is ``laya.decide``'s own abstention control, not a generic
+    predict keyword: a field whose answer falls below it comes back as ``null`` in
+    ``values`` -- the raw answer stays in ``confidence``/``probabilities`` -- so a
+    client that trusts the values can tell "not confident" from a confident pick.
     """
     # Lazy: keeps laya.structured (pure Python, but a module import is still a
     # module import) out of this module's import-time surface.
@@ -954,6 +1240,7 @@ def laya_decide(
 
     state_d = validate_state(state)
     model_name = validate_model(model)
+    min_conf = validate_min_confidence(min_confidence)
     try:
         # `decide` validates the schema itself (SchemaError names the offending
         # path) and projects the answers; calling it with return_details keeps
@@ -962,16 +1249,21 @@ def laya_decide(
         if model_name == "auto":
             if router is None:
                 raise ToolError("models_not_ready", "Router is not loaded (auto mode)")
-            details = decide(router, state_d, schema=schema, return_details=True)
+            details = decide(router, state_d, schema=schema, return_details=True,
+                            min_confidence=min_conf)
         elif agent is not None:
-            details = decide(agent, state_d, schema=schema, return_details=True)
+            details = decide(agent, state_d, schema=schema, return_details=True,
+                            min_confidence=min_conf)
         else:
             if router is None:
                 raise ToolError("models_not_ready", "no agent/router loaded")
             details = decide(router, state_d, schema=schema, return_details=True,
-                             model=model_name)
+                            model=model_name, min_confidence=min_conf)
     except SchemaError as exc:
         raise ToolError("invalid_schema", str(exc)) from exc
+    except Exception as exc:
+        _raise_if_remote_error(exc)
+        raise
     latency_ms = (time.perf_counter() - started) * 1000.0
 
     answers = _normalize_answers(details.answers)

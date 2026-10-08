@@ -12,6 +12,7 @@ Run: python tests/test_onnx_long.py
 import inspect
 import os
 import sys
+import warnings
 import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np  # noqa: E402
 
 from laya.agent import Agent  # noqa: E402
+from laya.common import window_budget  # noqa: E402
 from laya.onnx_agent import ONNXAgent  # noqa: E402
 
 PASS, FAIL = [], []
@@ -137,6 +139,28 @@ check("short/lang forwards to system_one",
       _with_one_window(_bare_onnx().system_one("aa", QUESTIONS, lang="de")))
 
 
+# ---------------------------------------------------------------- a state the questions leave room for
+# "Fits" is the room the questions leave, not the default window: system_one reads a state up to that
+# room whole, so windowing one between the two re-read it in pieces and moved the answer.
+def _roomy_onnx():
+    a = _bare_onnx()
+    a.cfg = {"max_len": 256, "head_max_len": 96}     # default window 152
+    return a
+
+
+_win, _, _room_q = window_budget(_FakeTok(), [Agent._to_internal(q) for q in QUESTIONS.values()], 256, 96)
+check_true("room/these questions leave more room than the default window", _room_q > _win, (_win, _room_q))
+_at_room = "".join(chr(65 + (k % 11)) for k in range(_room_q))
+roomy = _roomy_onnx()
+check("room/a state at the room delegates byte-for-byte to system_one",
+      roomy.predict_long(_at_room, QUESTIONS), _with_one_window(_roomy_onnx().system_one(_at_room, QUESTIONS)))
+check("room/in one session run", roomy.session.calls, [2])
+check_true("room/one token past the room is still scanned",
+           _roomy_onnx().predict_long(_at_room + "A", QUESTIONS)["usage"]["windows"] > 1)
+check_true("room/an explicit window still scans a state wider than it",
+           _roomy_onnx().predict_long(_at_room, QUESTIONS, window=_win)["usage"]["windows"] > 1)
+
+
 # ---------------------------------------------------------------- long state windows and aggregates
 # Record the windows predict_long feeds predict_batch, then score the same windows directly so
 # every aggregation claim is checked against real per-window answers, not a re-implementation.
@@ -166,15 +190,60 @@ for qid, key in (("dept", "answer_confidence"), ("urgent", "noul")):
     check_true("aggregate/%s is the strongest window on its rule" % qid,
                ans[key] == max(pw["answers"][qid][key] for pw in per_window),
                [pw["answers"][qid][key] for pw in per_window])
+    # Derived from the *effective* window, not from `max_len - head_max_len - 8`: these questions
+    # leave less room than that budget at this tiny config, so the window is capped at the room and
+    # the reported span has to describe what the model actually read. Hardcoding 64/32 here asserted
+    # a `token_end` that overstated the span by the difference.
+    _eff, _step, _room = window_budget(agent.tok, [agent._to_internal(q) for q in QUESTIONS.values()],
+                                       agent.cfg["max_len"], agent.cfg["head_max_len"])
     check("window/%s fields index the deciding span into the original state" % qid,
           (ans["window"]["count"], ans["window"]["token_start"], ans["window"]["token_end"]),
-          (len(windows), j * 32, min(j * 32 + 64, 200)))
+          (len(windows), j * _step, min(j * _step + _eff, 200)))
+    check_true("window/%s span is no wider than the room the questions leave" % qid,
+               ans["window"]["token_end"] - ans["window"]["token_start"] <= _room,
+               (ans["window"]["token_start"], ans["window"]["token_end"], _room))
 check("usage/windows counts the scanned windows", result["usage"]["windows"], len(windows))
 check("usage/input_tokens sums the window runs",
       result["usage"]["input_tokens"], sum(r["usage"]["input_tokens"] for r in per_window))
 check("usage/output_tokens stays zero", result["usage"]["output_tokens"], 0)
 check_true("aggregate/the fixture actually varies across windows (parity is not vacuous)",
            len({pw["answers"]["dept"]["answer_confidence"] for pw in per_window}) > 1)
+
+
+# ------------------------------------------------- per-question usage fields merge across windows
+# `usage["options"]` is a dict keyed by question id and is set only on windows where option
+# spans collapsed, so it is a per-question record rather than a scalar counter. Replacing it
+# per window left the caller holding whichever collapsing window came last, and the deciding
+# window is the most confident one rather than the last one. Every window is given a record
+# keyed by its own index, so the aggregate must keep all of them.
+_onnx = _bare_onnx()
+_orig_batch = _onnx.predict_batch
+_scan = []
+
+
+def _with_collapse(sts, q, **kw):
+    _scan.extend(sts)
+    rows = _orig_batch(list(sts), q, **kw)
+    for i, row in enumerate(rows):
+        row["usage"] = dict(row["usage"])
+        row["usage"]["options"] = {"w%d" % i: {"total": 10 + i, "distinct": i + 1,
+                                               "tokens_per_option": 0.5}}
+    return rows
+
+
+_onnx.predict_batch = _with_collapse
+_merged = _onnx.predict_long(LONG_STATE, QUESTIONS)
+_seen = _merged["usage"].get("options") or {}
+_nwin = len(_scan)
+_won = _merged["answers"]["dept"]["window"]["index"]
+check("collapse/every window record survives the merge",
+      sorted(_seen), sorted("w%d" % i for i in range(_nwin)))
+check_true("collapse/the deciding window kept its own record",
+           "w%d" % _won in _seen, sorted(_seen))
+check("collapse/record contents are carried per window, not summed",
+      [_seen.get("w%d" % i, {}).get("total") for i in range(_nwin)],
+      [10 + i for i in range(_nwin)])
+check_true("collapse/more than one window, so this is a real test", _nwin > 1, _nwin)
 
 
 # ---------------------------------------------------------------- shared session runs and chunking
@@ -192,9 +261,18 @@ check("batch_size/chunking does not change the answer",
 
 
 # ---------------------------------------------------------------- explicit window and stride
-check("window/explicit window=96 stride=96 -> three windows",
-      _bare_onnx().predict_long(LONG_STATE, QUESTIONS, window=96, stride=96)["usage"]["windows"],
-      3)
+# window=96 is wider than the room these questions leave at max_len=64, so it is clamped -- and the
+# stride the caller paired with it is clamped to match rather than refused, since 96 was a valid step
+# for the 96 they asked for. What must hold is that the scan still covers the state.
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", RuntimeWarning)
+    _explicit = _bare_onnx().predict_long(LONG_STATE, QUESTIONS, window=96, stride=96)
+_eff96, _step96, _ = window_budget(_bare_onnx().tok,
+                                   [_bare_onnx()._to_internal(q) for q in QUESTIONS.values()], 64, 32,
+                                   window=96, stride=96)
+check_true("window/explicit window=96 stride=96 is clamped and still covers the state",
+           _explicit["usage"]["windows"] >= 3 and _step96 <= _eff96,
+           (_explicit["usage"]["windows"], _eff96, _step96))
 check_raises("aggregate/anything but auto is refused", ValueError,
              lambda: _bare_onnx().predict_long(LONG_STATE, QUESTIONS, aggregate="mean"))
 
@@ -205,6 +283,132 @@ check("empty/no questions -> empty answers, windowed usage",
       (eq_res["answers"], eq_res["usage"]["output_tokens"] > 0 or True,
        eq_res["usage"]["windows"] > 1),
       ({}, True, True))
+
+
+# ---------------------------------------------------------------- start hooks may replace questions
+def _rewrite_agrees(name, actual, expected):
+    """A question rewrite must reproduce the direct call, EXCEPT for the pass count.
+
+    #692 added this comparison so a start hook's questions drive aggregation: an added decision must
+    not disappear, a rename must not `KeyError`, a type change must apply the right rule. All of that
+    lives in `answers`, and all of it is asserted exactly as before.
+
+    What is exempted is `usage.windows`, and only in the safe direction. Windowing happens BEFORE the
+    hook chain -- it has to, because a start hook is documented to see and rewrite `ctx.states`, i.e.
+    the windows themselves -- so the scan is sized from the questions the caller passed. When a hook
+    then LEAVES MORE room than the scan was sized for, the scan is finer than it needed to be: every
+    token is still covered, the answers are identical, and the only difference is that more passes
+    were made. Measured on the ONNX fixture for the `clear` rewrite: 14 windows against 6, with
+    identical `answers`. The torch fixture happens to produce 8 either way, so it passed the
+    whole-dict comparison by luck rather than by construction.
+
+    The other direction is not exempted and is not silent: a hook that leaves LESS room than the scan
+    was sized for is refused outright by `_check_scan_budget`, because then the windows really would be
+    re-truncated and part of the document would reach no model. That refusal has its own checks, and it
+    is why this exemption is one-sided in practice rather than by assertion here -- an earlier revision
+    of this helper also asserted `hooked >= direct`, which reads like a guarantee and cannot fail:
+    the only route to a coarser hooked scan is a shrinking rewrite, and that is refused before it can
+    be observed. Removed rather than kept as decoration.
+    """
+    # `actual` is None when the call raised: the torch side routes it through `_attempt`, which
+    # swallows the exception and returns None. Report that as a failure rather than raising out of
+    # the helper -- the whole-dict `check` this replaced compared None against a dict and failed
+    # cleanly, and losing that cost a crash instead of a diagnosis the first time a mutation
+    # reintroduced #692's KeyError.
+    if not isinstance(actual, dict) or not isinstance(expected, dict):
+        FAIL.append("questions/%s did not return a result to compare (actual=%r, expected=%r)"
+                    % (name, type(actual).__name__, type(expected).__name__))
+        return
+    a_usage = dict(actual.get("usage") or {})
+    e_usage = dict(expected.get("usage") or {})
+    a_windows, e_windows = a_usage.pop("windows", None), e_usage.pop("windows", None)
+    check("questions/%s reproduces the answers of the direct call" % name,
+          actual.get("answers"), expected.get("answers"))
+    check("questions/%s reproduces everything but the pass count" % name,
+          ({k: v for k, v in actual.items() if k != "usage"}, a_usage),
+          ({k: v for k, v in expected.items() if k != "usage"}, e_usage))
+    # `usage.windows` deliberately not compared; both values are read above only to strip them.
+    del a_windows, e_windows
+
+
+question_rewrites = [
+    ("append", {**QUESTIONS, "review": QUESTIONS["urgent"]}),
+    ("replace", {"review": QUESTIONS["urgent"]}),
+    ("delete", {"urgent": QUESTIONS["urgent"]}),
+    ("clear", {}),
+    ("choice to noul", {**QUESTIONS, "dept": QUESTIONS["urgent"]}),
+    ("noul to choice", {**QUESTIONS, "urgent": QUESTIONS["dept"]}),
+]
+for name, rewritten_questions in question_rewrites:
+    expected = _bare_onnx().predict_long(LONG_STATE, rewritten_questions)
+    try:
+        actual = _bare_onnx().predict_long(
+            LONG_STATE, QUESTIONS,
+            on_predict_start=lambda ctx: setattr(ctx, "questions", rewritten_questions))
+    except Exception as exc:
+        FAIL.append("questions/%s raised %r" % (name, exc))
+    else:
+        _rewrite_agrees(name, actual, expected)
+
+check("questions/no-op preserves the unhooked result",
+      _bare_onnx().predict_long(LONG_STATE, QUESTIONS, on_predict_start=lambda ctx: None),
+      _bare_onnx().predict_long(LONG_STATE, QUESTIONS))
+
+
+# A hook that widens a question IN PLACE must be refused here exactly as on the torch agent
+# (tests/test_predict_long.py, "an in-place question rewrite is refused"). Compared against the
+# caller's own mapping it cannot be seen: the hook mutates the same nested dict, so
+# `questions == asked` stays True and the scan proceeds with windows `build_sequence` re-truncates.
+# Measured on this fixture, 8 added options cut the room from 28 to 12 state tokens: all 14 windows
+# were truncated and 32 of 200 tokens reached no model, and a 24-token state that fit one window
+# lost 12 while reporting `windows: 1`. The guard's own message is asserted, because too many
+# options for max_len raise a different ValueError from `_encode_state` that would pass a bare
+# `check_raises`. Fresh mappings per call, because the hook mutates what it is handed.
+def _inplace_questions():
+    return {"dept": {"type": "choice", "instructions": "?", "criteria": {"a": "x", "b": "y"}},
+            "urgent": dict(QUESTIONS["urgent"])}
+
+
+def _widen_in_place(ctx):
+    ctx.questions["dept"]["criteria"].update({"opt%02d" % i: "d" * 20 for i in range(8)})
+
+
+for name, inplace_state in (("a windowed state", LONG_STATE),
+                            ("a one-window state", LONG_STATE[:24])):
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _bare_onnx().predict_long(inplace_state, _inplace_questions(),
+                                      on_predict_start=_widen_in_place)
+    except ValueError as exc:
+        check_true("questions/an in-place widening rewrite is refused on %s" % name,
+                   "after the start hooks ran" in str(exc), repr(exc))
+    else:
+        FAIL.append("questions/an in-place widening rewrite is refused on %s: did not raise" % name)
+
+
+def _annotate_first_window(ctx):
+    ctx.results[0]["answers"]["review"] = {"type": "noul", "noul": 0.9, "answer_confidence": 0.9}
+
+
+expected = _bare_onnx().predict_long(LONG_STATE, QUESTIONS)
+try:
+    actual = _bare_onnx().predict_long(LONG_STATE, QUESTIONS, on_predict_end=_annotate_first_window)
+except Exception as exc:
+    FAIL.append("questions/a first-window end annotation raised %r" % exc)
+else:
+    check("questions/a first-window end annotation preserves the scan's answers", actual, expected)
+
+for malformed in (None, [], {"bad": None}, {"bad": {}}, {"bad": {"type": "unknown"}}):
+    errors = []
+    for method in ("system_one", "predict_long"):
+        try:
+            getattr(_bare_onnx(), method)(LONG_STATE, malformed)
+        except Exception as exc:
+            errors.append((type(exc).__name__, str(exc)))
+        else:
+            errors.append(None)
+    check("questions/invalid input keeps the validator's error: %r" % malformed, errors[1], errors[0])
 
 
 # ---------------------------------------------------------------- report

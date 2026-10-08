@@ -162,6 +162,21 @@ else:
 check_true("extractor/ran wherever tomllib exists",
            ran or sys.version_info < (3, 11), "the executable checks were skipped on a 3.11+ run")
 
+# ---------------------------------------------------------------- what ships
+# The image installs the [serve] extra and no other, which is what the strict audit of the shipped
+# scope covers and why no advisory there may be accepted. If the Dockerfile ever reads
+# `pip install ".[serve,onnx]"`, onnx would ship in the image while only the extras audits saw it.
+# (Ported from the original project's #694 review.)
+dockerfile = read("Dockerfile")
+image_extras = sorted({e.strip()
+                       for group in re.findall(r"pip install[^\n]*?\.\[([^\]]*)\]", dockerfile)
+                       for e in group.split(",") if e.strip()})
+check("Dockerfile/the image installs only the [serve] extra", image_extras, ["serve"])
+check_true("security.yml/the shipped scope (core + serve) is audited on its own, with no exceptions",
+           "requirements-audit-shipped.txt" in deps_job
+           and re.search(r"--shipped requirements-audit-shipped\.json", deps_job) is not None,
+           "the image's packages must fail on any advisory, accepted or not")
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 for note in NOTES:
     print("  NOTE " + note)

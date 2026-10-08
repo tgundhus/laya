@@ -71,6 +71,123 @@ msgs = [
 check("extract/messages_list", _extract_text(msgs), "second human message")
 check("extract/dict_with_messages", _extract_text({"messages": msgs}), "second human message")
 
+
+# A message `content` is not only a string. langchain-core accepts
+# `HumanMessage(content=[{"type": "text", "text": ...}])` and keeps `.content` as a list, so
+# `str(content)` used to hand Laya a Python repr -- braces, quotes, and the literal field
+# names -- as the state to decide on. Nothing raised, so the guardrail just answered about a
+# string the caller never wrote. `DummyMessage` is the local stand-in for that shape.
+TXT = "I was billed twice for the same plan."
+BLOCKS = [{"type": "text", "text": TXT}]
+
+check("extract/blocks_human_message", _extract_text([DummyMessage("human", BLOCKS)]), TXT)
+check("extract/blocks_ai_message_fallback", _extract_text([DummyMessage("ai", BLOCKS)]), TXT)
+check("extract/blocks_newest_human_wins",
+      _extract_text([DummyMessage("human", BLOCKS), DummyMessage("ai", BLOCKS)]), TXT)
+check("extract/blocks_dict_messages",
+      _extract_text({"messages": [DummyMessage("human", BLOCKS)]}), TXT)
+check("extract/blocks_dict_content", _extract_text({"content": BLOCKS}), TXT)
+check("extract/blocks_dict_input", _extract_text({"input": BLOCKS}), TXT)
+check("extract/blocks_bare_list", _extract_text(BLOCKS), TXT)
+
+# Several text blocks are read in order; the separator is a newline so two sentences do not
+# fuse into one token the model reads differently than the caller wrote.
+check("extract/blocks_multiple_joined",
+      _extract_text([DummyMessage("human", [{"type": "text", "text": "first part."},
+                                            {"type": "text", "text": "second part."}])]),
+      "first part.\nsecond part.")
+
+# A block with no text carries nothing to score. Rather than invent prose, the value is
+# passed through as the caller shaped it, so a structured state stays structured.
+check("extract/blocks_non_text_only_preserved",
+      _extract_text([DummyMessage("human", [{"type": "image_url", "image_url": {"url": "x"}}])]),
+      [{"type": "image_url", "image_url": {"url": "x"}}])
+check("extract/blocks_empty_list_preserved", _extract_text([]), "")
+
+# Mixed blocks: only the text-bearing ones are read, and their order is kept.
+check("extract/blocks_mixed_skips_non_text",
+      _extract_text([DummyMessage("human", [{"type": "image_url", "image_url": {"url": "x"}},
+                                            {"type": "text", "text": TXT}])]),
+      TXT)
+
+# --- why `block.get("text")` is not too broad -------------------------------------------
+# A dict block is read on the strength of its `text` field, with no `type` gate. That is safe
+# against langchain-core's own vocabulary rather than by luck: of the standard content blocks,
+# exactly two declare a `text` field -- TextContentBlock (`type: "text"`) and
+# PlainTextContentBlock (`type: "text-plain"`, a document body). Every other one carries its
+# payload elsewhere or not at all: image/video/audio/file hold `url`/`base64`/`file_id`,
+# ReasoningContentBlock holds `reasoning`, NonStandardContentBlock holds `value`, and the
+# tool-call and server-tool blocks hold `name`/`args`/`id`. None of them has a `text` field, so
+# there is no standard non-text block this heuristic can mistake for prose.
+#
+# The check below fails if a future langchain-core adds a non-text block that does declare one.
+# That is the moment to gate on `type` -- and the reason to have the check rather than a
+# comment asserting the vocabulary cannot change.
+#
+# Guarded because this suite is written to run *without* langchain-core installed: `DummyMessage`
+# stands in for a real message throughout, and the Windows job does not install the optional
+# dependency. An unguarded import here aborts the whole file at import time, taking the other
+# 200+ checks with it -- the same shape as the `decision/lcel` block at the end of this file.
+try:
+    try:  # module layout moved between langchain-core versions
+        from langchain_core.messages import content_blocks as _cb
+    except ImportError:
+        import importlib
+        _cb = importlib.import_module("langchain_core.messages.content")
+except ImportError:
+    _cb = None
+
+if _cb is None:
+    PASS.append("std/block-vocabulary skipped (langchain-core not installed)")
+else:
+    _TEXT_BEARING = sorted(n for n in dir(_cb)
+                           if isinstance(getattr(_cb, n, None), type)
+                           and n.endswith(("Block", "Result", "Annotation", "Call"))
+                           and "text" in (getattr(getattr(_cb, n), "__annotations__", {}) or {}))
+    check("std/only_two_standard_blocks_declare_a_text_field",
+          _TEXT_BEARING, ["PlainTextContentBlock", "TextContentBlock"])
+
+# A `type` gate would also be a regression in the other direction: langchain-core accepts a
+# text block that carries no discriminator at all, and it keeps `.content` as a list.
+for _shape, _label in (([{"text": TXT}], "untyped_text_block"),
+                       ([{"type": "text-plain", "text": TXT}], "text_plain_block")):
+    check("extract/blocks_%s" % _label, _extract_text([DummyMessage("human", _shape)]), TXT)
+
+# A `text` field that is not a string is payload, not prose, and must not be flattened.
+check("extract/blocks_non_string_text_is_not_prose",
+      _extract_text([DummyMessage("human", [{"type": "x", "text": {"nested": 1}}])]),
+      [{"type": "x", "text": {"nested": 1}}])
+
+# --- the return annotation has to admit what the function can actually return -------------
+# `_content_text` passes a content value back untouched when it holds no text block, so this
+# helper returns a list for a message carrying only structured content, and the entry itself
+# for a list entry with no `.content`. Both are accepted by `Agent._encode_state`
+# (`state: Union[str, dict, list]`) and already declared by the public `_extract_text`. An
+# annotation of `-> str` was therefore wrong, and could drift back unnoticed without this.
+import typing as _typing  # noqa: E402
+
+# `langchain_module` is the module this file already imports; `_extract_from_messages_list` is
+# private, so it is reached through the module rather than the from-import above.
+_ANNOTATED = _typing.get_type_hints(langchain_module._extract_from_messages_list).get("return")
+if _typing.get_origin(_ANNOTATED) is _typing.Union:
+    _ALLOWED = _typing.get_args(_ANNOTATED)
+else:  # a bare annotation admits only that one type
+    _ALLOWED = (_ANNOTATED,)
+
+_RUNTIME = [
+    (str, [DummyMessage("human", "plain")]),
+    (str, [DummyMessage("human", [{"type": "text", "text": TXT}])]),
+    (list, [DummyMessage("human", [{"type": "image_url", "image_url": {"url": "x"}}])]),
+    (list, [DummyMessage("ai", "prior"), DummyMessage("human", [{"type": "file", "file_id": "f"}])]),
+    (dict, [{"kind": "a"}, {"kind": "b"}]),
+    (str, []),
+]
+for _want, _msgs in _RUNTIME:
+    _got = langchain_module._extract_from_messages_list(_msgs)
+    check("contract/messages_list_returns_%s" % _want.__name__, _got.__class__, _want)
+    check("contract/annotation_admits_%s" % _want.__name__,
+          _got.__class__ in _ALLOWED, True)
+
 # Custom callable extractor
 check("extract/custom_callable", _extract_text({"custom": "special"}, lambda x: x["custom"].upper()), "SPECIAL")
 
@@ -109,6 +226,7 @@ def mock_router_response(state, questions):
                 "choice": choice,
                 "probabilities": {"billing": conf, "technical": 1.0 - conf},
                 "confidence": conf,
+                "answer_confidence": conf,
             }
         },
     }
@@ -413,6 +531,36 @@ check("batch/router last_decision",
 check("batch/router empty inputs", batch_router_node.batch([]), [])
 check("batch/router empty skips the runner", len(batch_agent.batch_calls), 1)
 
+# batch() must forward `lang` and `min_confidence` the same way invoke() does, or the two paths
+# answer differently for a runnable configured with them. Agent convention: both are call kwargs.
+_crit = {"billing": "invoices, refunds", "technical": "bugs, errors"}
+ba_ctrl = MockBatchAgent(mock_router_response)
+LayaRouter(criteria=_crit, agent=ba_ctrl, lang="de", min_confidence=0.4).batch(ROUTER_INPUTS)
+check("batch/agent forwards lang", ba_ctrl.batch_calls[0]["kwargs"].get("lang"), "de")
+check("batch/agent forwards min_confidence", ba_ctrl.batch_calls[0]["kwargs"].get("min_confidence"), 0.4)
+
+# Router convention: lang rides on each request item; min_confidence is a call-level argument.
+rl_ctrl = MockRouterLike(mock_router_response)
+LayaRouter(criteria=_crit, agent=rl_ctrl, lang="de", min_confidence=0.4).batch(ROUTER_INPUTS)
+_reqs = rl_ctrl.batch_calls[0]["requests"]
+_kw = rl_ctrl.batch_calls[0]["kwargs"]
+check("batch/router item carries lang", all(r.get("lang") == "de" for r in _reqs), True)
+check("batch/router min_confidence is call-level", _kw.get("min_confidence"), 0.4)
+check("batch/router min_confidence not duplicated onto items",
+      any("min_confidence" in r for r in _reqs), False)
+check("batch/router lang not duplicated as a call kwarg", "lang" in _kw, False)
+
+# min_confidence=0.0 is a real gate (abstain over nothing), not an absence -- it must survive batch.
+ba_zero = MockBatchAgent(mock_router_response)
+LayaRouter(criteria=_crit, agent=ba_zero, min_confidence=0.0).batch(ROUTER_INPUTS)
+check("batch/agent keeps min_confidence=0.0", ba_zero.batch_calls[0]["kwargs"].get("min_confidence"), 0.0)
+# and an unset control stays unset -- no lang/min_confidence keys leak in
+ba_none = MockBatchAgent(mock_router_response)
+LayaRouter(criteria=_crit, agent=ba_none).batch(ROUTER_INPUTS)
+check("batch/agent omits unset controls",
+      ("lang" in ba_none.batch_calls[0]["kwargs"]) or ("min_confidence" in ba_none.batch_calls[0]["kwargs"]),
+      False)
+
 # LangChain hands batch() one config, a list of per-input configs (what RunnableSequence
 # and RunnableParallel do), or None. All three must reach the same outputs.
 one_config = {"tags": ["t"], "max_concurrency": 2}
@@ -709,6 +857,86 @@ try:
 finally:
     langchain_module._get_default_router = _real_default_router
 
+# --------------------------------------------------------------- 6b. LayaDecision per-call controls
+#
+# The other four nodes route through `_execute_decision`, which has forwarded the two token
+# budgets (#530) and the five hook arguments (#532) since they landed. `LayaDecision` bypasses
+# that executor and calls `decide` directly, so it historically forwarded only `model`: a schema
+# decision could not widen its own window or attach the cache/audit hook its siblings can. These
+# checks drive the whole control family through the bypass and read it back off the runner.
+import inspect  # noqa: E402
+from laya.agent import Agent  # noqa: E402
+from laya.integrations import _controls  # noqa: E402
+from laya.router import Router  # noqa: E402
+
+DECISION_ALL_CONTROLS = {"max_len": 1024, "head_max_len": 512, "hooks": ["H"],
+                         "on_predict_start": "S", "on_predict_end": "E",
+                         "hooks_raise": True, "hooks_timeout": 0.5}
+
+_dplain = RecordingAgent()
+LayaDecision(DECISION_SCHEMA, agent=_dplain).invoke("x")
+check("decision/controls default sends nothing", _dplain.calls[0]["kwargs"], {})
+
+_devery = RecordingAgent()
+LayaDecision(DECISION_SCHEMA, agent=_devery, **DECISION_ALL_CONTROLS).invoke("x")
+check("decision/controls forwards every control", _devery.calls[0]["kwargs"],
+      DECISION_ALL_CONTROLS)
+
+_dbudget = RecordingAgent()
+LayaDecision(DECISION_SCHEMA, agent=_dbudget, head_max_len=256).invoke("x")
+check("decision/controls forwards one budget alone", _dbudget.calls[0]["kwargs"],
+      {"head_max_len": 256})
+
+# 0 and [] are decisions, not absences: a truthiness test would silently drop them.
+_dfalsy = RecordingAgent()
+LayaDecision(DECISION_SCHEMA, agent=_dfalsy, head_max_len=0, hooks=[], hooks_raise=False).invoke("x")
+check("decision/controls keeps falsy values", _dfalsy.calls[0]["kwargs"],
+      {"head_max_len": 0, "hooks": [], "hooks_raise": False})
+
+_dmixed = RecordingAgent()
+LayaDecision(DECISION_SCHEMA, agent=_dmixed, model="laya-multilingual", max_len=1024).invoke("x")
+check("decision/controls alongside model", _dmixed.calls[0]["kwargs"],
+      {"model": "laya-multilingual", "max_len": 1024})
+
+# The names it reads out of the shared module are the names it actually forwards -- a control
+# added to `._controls` without reaching this bypass fails here rather than being dropped silently.
+check("decision/controls reads both budgets", set(_controls.PREDICT_CONTROLS),
+      {"max_len", "head_max_len"})
+_dag = set(inspect.signature(Agent.system_one).parameters)
+_dr = set(inspect.signature(Router.predict).parameters)
+for _c in DECISION_ALL_CONTROLS:
+    check_true("decision/controls/%s accepted by Agent" % _c, _c in _dag)
+    check_true("decision/controls/%s accepted by Router.predict" % _c, _c in _dr)
+
+# Remote mode: the two budgets travel in the request body; a hook is a Python callable that runs
+# inside `predict` and no wire format carries it, so refuse rather than report a success that
+# never called it.
+_dremote = []
+
+
+def _dspy_remote(base_url, state, questions, api_key=None, model=None, **extras):
+    _dremote.append(dict({"model": model}, **extras))
+    return {"model": "mock", "answers": dict(DECISION_ANSWERS)}
+
+
+_dreal = langchain_module._call_remote
+langchain_module._call_remote = _dspy_remote
+try:
+    LayaDecision(DECISION_SCHEMA, base_url="http://laya:8000",
+                 max_len=1024, head_max_len=384).invoke("x")
+    check("decision/remote forwards both budgets", _dremote[-1],
+          {"model": None, "max_len": 1024, "head_max_len": 384})
+    LayaDecision(DECISION_SCHEMA, base_url="http://laya:8000").invoke("x")
+    check("decision/remote omits an unset budget", _dremote[-1], {"model": None})
+    _drefused = False
+    try:
+        LayaDecision(DECISION_SCHEMA, base_url="http://laya:8000", hooks=[object()]).invoke("x")
+    except ValueError as exc:
+        _drefused = "hooks" in str(exc) and "laya-serve" in str(exc)
+    check_true("decision/remote refuses a hook", _drefused)
+finally:
+    langchain_module._call_remote = _dreal
+
 # A pydantic model is a schema too, so the same class can type a chain and a call site. Note
 # `Literal[0, 1, 2]` plans as an enum choice rather than a score scale, so the answer carries a
 # label and the value comes back as the schema's own int.
@@ -877,6 +1105,120 @@ try:
                "max_len" not in _sent["body"] and "head_max_len" not in _sent["body"])
 finally:
     langchain_module.urllib.request.build_opener = _real_build_opener
+
+
+# --------------------------------------------------------------- 7b. Per-request lang / abstention
+#
+# `lang` and `min_confidence` are core's language routing and abstention gate (#361). Both are
+# read by `Agent.predict`/`system_one` AND `Router.predict`, and both are laya-serve
+# `BODY_CONTROLS`, so they are safe to forward on the local and the remote path alike -- unlike
+# `task` / `lang_guess`, which are Router-only. A wrapper that drops them cannot route a
+# non-English state or measure the abstention gate it is supposed to honor.
+from laya.integrations import _controls  # noqa: E402
+import inspect  # noqa: E402
+from laya.agent import Agent  # noqa: E402
+from laya.router import Router  # noqa: E402
+
+DECISION_CRITERIA = {"billing": "invoices", "tech": "bugs"}
+DECISION_NODES = (
+    ("router", lambda a, **kw: LayaRouter(DECISION_CRITERIA, agent=a, **kw)),
+    ("guardrail", lambda a, **kw: LayaGuardrail(
+        questions={"jailbreak": {"type": "noul", "instructions": "jailbreak?"}}, agent=a, **kw)),
+    ("triage", lambda a, **kw: LayaTriage(agent=a, **kw)),
+    ("evaluator", lambda a, **kw: LayaEvaluator(
+        questions={"faithful": {"type": "noul", "instructions": "faithful?"}}, agent=a, **kw)),
+)
+
+check("decision/_controls names the tuple", _controls.DECISION_CONTROLS, ("lang", "min_confidence"))
+for _c in _controls.DECISION_CONTROLS:
+    check_true("decision/%s accepted by Agent.system_one" % _c,
+               _c in set(inspect.signature(Agent.system_one).parameters))
+    check_true("decision/%s accepted by Router.predict" % _c,
+               _c in set(inspect.signature(Router.predict).parameters))
+
+for name, build in DECISION_NODES:
+    plain = BudgetAgent()
+    build(plain).invoke("some state")
+    check("decision/%s default sends nothing" % name, plain.kwargs[0], {})
+
+    both = BudgetAgent()
+    build(both, lang="fr", min_confidence=0.4).invoke("some state")
+    check("decision/%s forwards both" % name, both.kwargs[0],
+          {"lang": "fr", "min_confidence": 0.4})
+
+    # Each knob works alone; an override built from one must not carry the other.
+    one = BudgetAgent()
+    build(one, lang="es").invoke("some state")
+    check("decision/%s forwards lang alone" % name, one.kwargs[0], {"lang": "es"})
+
+    # A 0.0 abstention gate is a real decision ("abstain over nothing"), not an absence.
+    zero = BudgetAgent()
+    build(zero, min_confidence=0.0).invoke("some state")
+    check("decision/%s keeps min_confidence=0.0" % name, zero.kwargs[0], {"min_confidence": 0.0})
+
+    mixed = BudgetAgent()
+    build(mixed, model="laya-multilingual", lang="de").invoke("some state")
+    check("decision/%s with model" % name, mixed.kwargs[0],
+          {"model": "laya-multilingual", "lang": "de"})
+
+
+# A remote node forwards them in the request body instead of dropping them.
+decision_remote_calls = []
+_decision_real_call_remote = langchain_module._call_remote
+
+
+def decision_spy_call_remote(base_url, state, questions, api_key=None, model=None, **extras):
+    decision_remote_calls.append(dict({"model": model}, **extras))
+    return {"answers": {"route": {"type": "choice", "choice": "billing", "confidence": 0.9}}}
+
+
+langchain_module._call_remote = decision_spy_call_remote
+try:
+    for field, value in (("lang", "it"), ("min_confidence", 0.25), ("min_confidence", 0.0)):
+        LayaRouter(DECISION_CRITERIA, base_url="http://laya:8000", **{field: value}).invoke("x")
+        check("decision/remote forwards %s=%r" % (field, value), decision_remote_calls[-1],
+              {"model": None, field: value})
+    # Nothing set sends nothing.
+    LayaRouter(DECISION_CRITERIA, base_url="http://laya:8000").invoke("x")
+    check_true("decision/remote omits unset decision controls",
+               not any(k in decision_remote_calls[-1] for k in _controls.DECISION_CONTROLS),
+               repr(decision_remote_calls[-1]))
+finally:
+    langchain_module._call_remote = _decision_real_call_remote
+
+# ...and the real `_call_remote` writes them into the JSON body.
+_decision_sent = {}
+
+
+class _DecisionFakeResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return b'{"answers": {}}'
+
+
+class _DecisionFakeOpener:
+    def open(self, req, timeout=None):
+        _decision_sent["body"] = json.loads(req.data.decode("utf-8"))
+        return _DecisionFakeResponse()
+
+
+_decision_real_build_opener = langchain_module.urllib.request.build_opener
+langchain_module.urllib.request.build_opener = lambda *a, **k: _DecisionFakeOpener()
+try:
+    langchain_module._call_remote("http://laya:8000", "x", {}, lang="fr", min_confidence=0.0)
+    check("decision/_call_remote sends lang", _decision_sent["body"].get("lang"), "fr")
+    check("decision/_call_remote keeps min_confidence=0.0",
+          _decision_sent["body"].get("min_confidence"), 0.0)
+    langchain_module._call_remote("http://laya:8000", "x", {})
+    check_true("decision/_call_remote omits unset decision controls",
+               "lang" not in _decision_sent["body"] and "min_confidence" not in _decision_sent["body"])
+finally:
+    langchain_module.urllib.request.build_opener = _decision_real_build_opener
 
 
 # --------------------------------------------------------------- 7. Prediction hooks

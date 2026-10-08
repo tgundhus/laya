@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { cleanEmailBody } from "../src/email.js";
+import { cleanEmailBody, emailState } from "../src/email.js";
 import { triageQuestions, guardQuestions } from "../src/presets.js";
 describe("email+presets", () => {
   it("cuts quoted history", () => {
     const out = cleanEmailBody("Refund please\n\nOn Mon, Bob wrote:\nold text");
     expect(out).toContain("Refund please"); expect(out).not.toContain("old text");
+  });
+  it("emailState passes maxChars to the body budget, as Python does (#589)", () => {
+    const body = "word ".repeat(1000) + "please wire the money today";
+    expect(emailState("s", body).body).toHaveLength(3000);
+    const long = emailState("s", body, null, true, {}, 8000);
+    expect(long.body).toContain("wire the money");
+    expect(long).not.toHaveProperty("max_chars");
+    expect(emailState("s", body, null, false, {}, 10).body).toBe(body);
   });
   it("triage preset has 5 questions", () => {
     expect(Object.keys(triageQuestions()).sort()).toEqual(
@@ -14,6 +22,33 @@ describe("email+presets", () => {
     const out = cleanEmailBody("Please refund my order\n\nSent from my iPhone");
     expect(out).toContain("Please refund my order");
     expect(out).not.toContain("iPhone");
+  });
+  it("cuts extended device footers (Python parity)", () => {
+    const request = "Please refund my order";
+    for (const footer of [
+      "Sent from my iPhone 15 Pro",
+      "Sent from my Android phone",
+      "Sent from my iPad Pro",
+      "Sent from my iPhone using Tapatalk",
+      "Sent from my iPhone device",
+      "Sent from my iPhone Max",
+      "Sent from my iPhone mini",
+      "Sent from my iPhone Plus",
+    ]) {
+      expect(cleanEmailBody(`${request}\n\n${footer}`), footer).toBe(request);
+    }
+  });
+  it("keeps device mentions inside the request (Python parity)", () => {
+    for (const sentence of [
+      "Sent from my iPhone by mistake.",
+      "Sent from my iPad yesterday.",
+      "Sent from my Android by mistake.",
+      "Sent from my mobile yesterday.",
+      "Sent from my iPhone using Tapatalk to report a problem.",
+    ]) {
+      const body = `Hi support,\n${sentence}\nPlease cancel the duplicate order.`;
+      expect(cleanEmailBody(body), sentence).toBe(body);
+    }
   });
   it("keeps a closing sentence that is not a sign-off (Python parity)", () => {
     const body = "Please review the draft when you can.\nIt is two pages.\nThanks for the quick reply.";
@@ -110,6 +145,86 @@ describe("email+presets", () => {
     expect(
       cleanEmailBody("Please unlock it. This email is confidential and intended solely for the named addressee."),
     ).toBe("Please unlock it.");
+  });
+  // French mail, the cases tests/test_email.py checks on the Python side (#736, #913)
+  it("cleans a French reply the way Python does (Python parity)", () => {
+    const body = [
+      "Bonjour,",
+      "",
+      "J'ai été facturé deux fois sur la facture de mars. Merci de rembourser le double paiement aujourd'hui.",
+      "",
+      "Cordialement,",
+      "Jean Dupont",
+      "",
+      "Envoyé depuis mon iPhone",
+      "",
+      "Ce message peut contenir des informations confidentielles. Si vous avez reçu ce message par erreur, merci de le supprimer.",
+      "",
+      "Le lun. 22 sept. 2026 à 10:14, Support <support@x.com> a écrit :",
+      "> Bonjour Jean, nous avons reçu votre demande d'annulation du contrat Enterprise.",
+      "",
+    ].join("\n");
+    expect(cleanEmailBody(body)).toBe(
+      "Bonjour,\n\nJ'ai été facturé deux fois sur la facture de mars. " +
+        "Merci de rembourser le double paiement aujourd'hui.",
+    );
+  });
+  it("cuts French device footers and keeps French device sentences (Python parity)", () => {
+    const request = "Merci de rembourser la facture.";
+    for (const footer of [
+      "Envoyé depuis mon iPhone",
+      "Envoyé de mon iPad.",
+      "Envoyé depuis iPhone",
+      "Envoyé de iPad",
+      "ENVOYÉ DEPUIS MON IPHONE",
+    ]) {
+      expect(cleanEmailBody(`${request}\n\n${footer}`), footer).toBe(request);
+    }
+    for (const sentence of ["Envoyé depuis mon iPhone par erreur.", "Envoyé de mon iPad hier."]) {
+      const body = `Bonjour,\n${sentence}\n${request}`;
+      expect(cleanEmailBody(body), sentence).toBe(body);
+    }
+  });
+  it("cuts French quoted history and sign-offs (Python parity)", () => {
+    const cases: Array<[string, string]> = [
+      [
+        "Voici le justificatif de paiement.\n\n-----Message d'origine-----\n" +
+          "De : Marie <marie@acme.com>\nObjet : résilier le contrat\nNous voulons résilier le contrat.",
+        "Voici le justificatif de paiement.",
+      ],
+      [
+        "Voici le justificatif.\n\nDe : Marie Dupont\nEnvoyé : lundi 22 septembre 2026\n" +
+          "Objet : résilier le contrat\nNous voulons résilier le contrat.",
+        "Voici le justificatif.",
+      ],
+      [
+        "L'accès est rétabli, merci.\n\nLe lun. 22 sept. 2026 à 10:14, Support Technique <\n" +
+          "support@acme.com> a écrit :\n> ancien texte",
+        "L'accès est rétabli, merci.",
+      ],
+      ["Bonjour,\nLa facture de mars n'est pas arrivée.\nMerci,\nJean", "Bonjour,\nLa facture de mars n'est pas arrivée."],
+      [
+        "Bonjour,\nLa facture de mars n'est pas arrivée.\nBien à vous,\nMarie",
+        "Bonjour,\nLa facture de mars n'est pas arrivée.",
+      ],
+      [
+        "J'ai besoin de la facture de mars.\n\nSi vous avez reçu ce message par erreur, supprimez-le.",
+        "J'ai besoin de la facture de mars.",
+      ],
+      ["Voici le devis demandé.\n\nCe document est à l'usage exclusif du destinataire.", "Voici le devis demandé."],
+    ];
+    for (const [body, expected] of cases) expect(cleanEmailBody(body), body).toBe(expected);
+  });
+  it("keeps French requests that only look like markers (Python parity)", () => {
+    for (const body of [
+      "Le contrat confidentiel doit être signé avant vendredi.",
+      "Bonjour,\nMerci pour votre aide.\nRappelez-moi.",
+      "Bonjour,\nLe rapport que vous avez écrit :\nla commande 4411 n'est pas arrivée.",
+      "Le montant est destiné exclusivement au paiement de la facture. Pouvez-vous confirmer ?",
+      "J'ai besoin de congés.\nDe : 10/09 à 15/09\nC'est possible ?",
+    ]) {
+      expect(cleanEmailBody(body), body).toBe(body);
+    }
   });
   it("guard preset has jailbreak and harm_severity", () => {
     const g = guardQuestions() as Record<string, any>;

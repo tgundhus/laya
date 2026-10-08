@@ -97,6 +97,15 @@ check("project/false noul",
                       {"type": "object", "properties": {"x": {"type": "boolean"}}})["x"],
       False)
 
+# A score answer with no `probabilities` -- a cached/replayed decision, or a minimal runner
+# that only reports the expected level index -- must still add `minimum`: `score` is the
+# 0-based level index (DecisionModel._decode_answers), not the absolute field value, so a
+# schema whose levels do not start at 0 must not be projected as if they did.
+SEVERITY_SCHEMA = {"type": "object", "properties": {"x": {"type": "integer", "minimum": 3, "maximum": 7}}}
+for score, want in ((0, 3), (2.4, 5), (4, 7)):
+    got = answers_to_json({"x": {"type": "score", "score": score}}, SEVERITY_SCHEMA)["x"]
+    check("project/score with no probabilities honours minimum (score=%r)" % score, got, want)
+
 
 # --------------------------------------------------------------- rejections
 def _bad(schema):
@@ -163,6 +172,8 @@ check("decide/details routing", details.routing, {"model": "english"})
 
 runner = FakeRunner({"a": {"type": "noul", "noul": 0.9, "confidence": 0.9}})
 out = decide(runner, "s", questions={"a": {"type": "noul", "instructions": "?"}})
+# The pass-through is the raw answer, and no `min_confidence` was passed, so it comes back exactly
+# as the runner produced it -- the gate adds nothing to a call it was not asked to gate.
 check("decide/questions pass-through returns answers", out,
       {"a": {"type": "noul", "noul": 0.9, "confidence": 0.9}})
 
@@ -201,6 +212,65 @@ check("decide/details raw confidence preserved", det.confidence["urgency"], 0.5)
 check_true("decide/details answers flag set", det.answers["urgency"].get("low_confidence") is True)
 check("decide/details high conf value kept", det.values["department"], "billing")
 check_true("decide/details high conf flag unset", det.answers["department"].get("low_confidence") is not True)
+
+# --------------------------------------------------------------------- answer_confidence
+# The decision: "which of my structured decisions are safe to automate?" is answered by filtering
+# the details artifact, so the number that filter reads has to be the one the gate uses.
+#
+# `DecisionResult.confidence` is built from the answer's `confidence` field, which is normalized
+# entropy: `laya/common.py` calls it "not calibrated: it is not what temperature scaling fits and
+# not what the reported ECE measures", `tests/test_confidence.py` pins that a two-option
+# distribution reads 0.90 on a `noul` and 0.53 on an equivalent `choice`, and #394 is an open issue
+# saying a confidence threshold does not transfer across option counts -- which is the entropy
+# definition's failure mode, since `log(k)` is in the denominator.
+#
+# So a caller filtering `details.confidence` to decide what to escalate filters on a different
+# quantity from the one `min_confidence` compares against, and on one that moves with the shape of
+# the question rather than with how right the answer is.
+#
+# Terminology, deliberately careful: `answer_confidence` is `max(p)`, the quantity calibration
+# fits and every calibration figure is computed on, and the quantity the gate is defined against.
+# That makes it the right number to *filter* on. It is NOT a claim that the number is right --
+# "about c of the answers returned at c are correct" holds only after temperatures are fitted and
+# validated for that checkpoint and question shape, and the shipped checkpoints are over-confident
+# as shipped (README, Calibration).
+CAL = {"department": {"type": "choice", "choice": "billing", "confidence": 0.30, "answer_confidence": 0.95},
+       "urgency": {"type": "score", "score": 2.0, "confidence": 0.90, "answer_confidence": 0.40,
+                   "probabilities": {"0": 0.1, "1": 0.5, "2": 0.4}, "legend": {}}}
+cal_det = decide(FakeRunner(CAL), "s", schema=SCHEMA, return_details=True)
+
+# The two numbers differ on the same field, which is the whole point: the entropy value ranks
+# `urgency` above `department` and max(p) reverses it.
+check_true("details/the two confidences really do disagree",
+           cal_det.confidence["department"] < cal_det.confidence["urgency"])
+check_true("details/…and answer_confidence reverses that order",
+           cal_det.answer_confidence["department"] > cal_det.answer_confidence["urgency"])
+check("details/answer_confidence is reported per field", cal_det.answer_confidence["department"], 0.95)
+
+# The name means what it says, so a caller that sorts by it sorts on the same quantity the gate
+# and the eval harness use.
+check("details/entropy field is left exactly as it was", cal_det.confidence["department"], 0.30)
+
+# A field with no usable answer_confidence is `None`, not 0.0. `confidence` defaults to 0.0, so
+# today an absent confidence and a genuinely zero one are the same value, and a caller filtering on
+# "below 0.4, escalate" escalates both without being able to tell why.
+NO_CONF = {"department": {"type": "choice", "choice": "billing", "confidence": 0.0}}
+no_det = decide(FakeRunner(NO_CONF), "s", schema=SCHEMA, return_details=True)
+check("details/absent answer_confidence is None, not 0.0", no_det.answer_confidence["department"], None)
+check_true("details/…and stays distinct from a reported zero",
+           no_det.answer_confidence["department"] is not cal_det.answer_confidence["urgency"])
+
+# A `bool` is not a confidence, and a NaN is not a decision.
+BAD_CONF = {"department": {"type": "choice", "choice": "billing", "answer_confidence": True}}
+bad_det = decide(FakeRunner(BAD_CONF), "s", schema=SCHEMA, return_details=True)
+check("details/a bool is not reported as a confidence", bad_det.answer_confidence["department"], None)
+NAN_CONF = {"department": {"type": "choice", "choice": "billing", "answer_confidence": float("nan")}}
+nan_det = decide(FakeRunner(NAN_CONF), "s", schema=SCHEMA, return_details=True)
+check("details/a NaN is not reported as a confidence", nan_det.answer_confidence["department"], None)
+
+# Every field is accounted for, so a caller can iterate `answer_confidence` without a KeyError on
+# a field the model did not answer.
+check_true("details/one entry per field", set(cal_det.answer_confidence) == set(CAL))
 
 # Direct projection with low_confidence: True in answer
 answers_with_flag = {
@@ -280,7 +350,8 @@ check("batch/details routing", details[0].routing, {"model": "english"})
 # questions= is the raw-answers pass-through, exactly like decide()
 raw = decide_batch(FakeBatchRunner({"a": {"x": {"type": "noul", "noul": 0.9, "confidence": 0.9}}}),
                    ["a"], questions={"x": {"type": "noul", "instructions": "?"}})
-check("batch/questions pass-through", raw, [{"x": {"type": "noul", "noul": 0.9, "confidence": 0.9}}])
+check("batch/questions pass-through", raw,
+      [{"x": {"type": "noul", "noul": 0.9, "confidence": 0.9}}])
 
 
 class FakeRouterLike:
@@ -401,6 +472,149 @@ check("nullable/oneOf enum is a choice",
 check_raises("nullable/two real branches rejected", SchemaError,
              _bad({"type": "object",
                    "properties": {"a": {"anyOf": [{"type": "boolean"}, {"type": "integer"}]}}}))
+
+
+# --------------------------------------------------------------- local $ref (pydantic Enum)
+# Pydantic renders every `Enum` field as `{"$ref": "#/$defs/<Name>"}` (v1 and draft-07 use
+# `#/definitions/`, and wrap a described ref in a one-item `allOf`), so a local ref to an enum
+# definition must plan as the enum it points at, with the property's own keys kept on top.
+def _schema_with_defs(props, key="$defs"):
+    return {"type": "object", "properties": props, key: {
+        "Dept": {"enum": ["billing", "support"], "type": "string", "title": "Dept",
+                 "description": "The team that owns it."},
+        "Prio": {"enum": [0, 1, 2], "type": "integer", "title": "Prio"},
+        "Alias": {"$ref": "#/%s/Prio" % key},
+        "Node": {"type": "object", "properties": {"next": {"$ref": "#/%s/Node" % key}}},
+        "Loop": {"$ref": "#/%s/Loop" % key},
+        "Maybe": {"anyOf": [{"$ref": "#/%s/Maybe" % key}, {"type": "null"}]},
+    }}
+
+
+def _ref_error(prop, key="$defs"):
+    try:
+        plan_from_json_schema(_schema_with_defs({"a": prop}, key))
+    except SchemaError as exc:
+        return str(exc)
+    return None
+
+
+REFS = _schema_with_defs({
+    "dept": {"$ref": "#/$defs/Dept"},
+    "described": {"$ref": "#/$defs/Dept", "description": "Which team?"},
+    "optional": {"anyOf": [{"$ref": "#/$defs/Dept"}, {"type": "null"}], "default": None,
+                 "description": "Which team, if any?"},
+    "wrapped": {"allOf": [{"$ref": "#/$defs/Dept"}], "description": "Which team (v1)?"},
+    "prio": {"$ref": "#/$defs/Prio", "default": 0},
+    "alias": {"$ref": "#/$defs/Alias"},
+})
+rq = questions_from_json_schema(REFS)
+check("ref/enum definition is a choice", rq["dept"]["type"], "choice")
+check("ref/enum labels come from the definition", list(rq["dept"]["criteria"]), ["billing", "support"])
+# The definition's description is pydantic's copy of the enum docstring ("An enumeration." on v1
+# when there is none): it describes the type, not this field, so it is not the question wording.
+check("ref/definition's own description is not the wording", rq["dept"]["instructions"],
+      "What is `dept`?")
+check("ref/sibling description is the wording", rq["described"]["instructions"], "Which team?")
+check("ref/Optional ref is a choice", rq["optional"]["type"], "choice")
+check("ref/Optional ref carries the outer description", rq["optional"]["instructions"], "Which team, if any?")
+check("ref/allOf-wrapped ref is a choice", rq["wrapped"]["type"], "choice")
+check("ref/allOf-wrapped ref keeps the sibling description", rq["wrapped"]["instructions"], "Which team (v1)?")
+check("ref/integer enum labels", list(rq["prio"]["criteria"]), ["0", "1", "2"])
+check("ref/a ref to a ref resolves", list(rq["alias"]["criteria"]), ["0", "1", "2"])
+check("ref/draft-07 #/definitions/ resolves",
+      questions_from_json_schema(_schema_with_defs({"a": {"$ref": "#/definitions/Dept"}}, "definitions"))
+      ["a"]["type"], "choice")
+check("ref/allOf wraps an inline schema too",
+      questions_from_json_schema({"type": "object", "properties": {"a": {"allOf": [{"type": "boolean"}]}}})
+      ["a"]["type"], "noul")
+rv = answers_to_json({"dept": {"choice": "support"}, "prio": {"choice": "2"}, "alias": {"choice": "1"}}, REFS)
+check("ref/projects the definition's values", rv, {"dept": "support", "prio": 2, "alias": 1})
+_before = repr(REFS)
+plan_from_json_schema(REFS)
+check("ref/planning does not mutate the schema", repr(REFS), _before)
+
+check("ref/missing definition is rejected", _ref_error({"$ref": "#/$defs/Nope"}),
+      "properties.a: $ref '#/$defs/Nope' does not resolve to an entry of this schema's '$defs' or 'definitions'")
+check("ref/wrong definitions key is rejected", _ref_error({"$ref": "#/definitions/Dept"}),
+      "properties.a: $ref '#/definitions/Dept' does not resolve to an entry of this schema's '$defs' or "
+      "'definitions'")
+check("ref/non-local ref is rejected", _ref_error({"$ref": "other.json#/$defs/Dept"}),
+      "properties.a: $ref 'other.json#/$defs/Dept' does not resolve to an entry of this schema's '$defs' or "
+      "'definitions'")
+check("ref/a ref with no definitions at all is rejected", _ref_error({"$ref": "#/$defs/X"}, "unused"),
+      "properties.a: $ref '#/$defs/X' does not resolve to an entry of this schema's '$defs' or 'definitions'")
+check("ref/self-reference is rejected", _ref_error({"$ref": "#/$defs/Loop"}),
+      "properties.a: $ref '#/$defs/Loop' is recursive; flatten the schema")
+check("ref/recursion through Optional is rejected", _ref_error({"$ref": "#/$defs/Maybe"}),
+      "properties.a: $ref '#/$defs/Maybe' is recursive; flatten the schema")
+check("ref/an object definition is a nested object", _ref_error({"$ref": "#/$defs/Node"}),
+      "properties.a: nested objects are not supported; flatten the schema")
+
+try:
+    import enum
+    from typing import Optional
+
+    import pydantic
+
+    class Dept(str, enum.Enum):
+        billing = "billing"
+        support = "support"
+        sales = "sales"
+
+    class Prio(enum.IntEnum):
+        low = 0
+        high = 1
+
+    class Colour(enum.Enum):
+        red = "red"
+        blue = "blue"
+
+    class EnumTicket(pydantic.BaseModel):
+        department: Dept = pydantic.Field(description="Which team should handle this?")
+        prio: Prio
+        colour: Colour
+        backup: Optional[Dept] = None
+
+    eq = questions_from_pydantic(EnumTicket)
+    check("pydantic-enum/str Enum is a choice", eq["department"]["type"], "choice")
+    check("pydantic-enum/Field description is the wording", eq["department"]["instructions"],
+          "Which team should handle this?")
+    check("pydantic-enum/labels are the member values", list(eq["department"]["criteria"]),
+          ["billing", "support", "sales"])
+    check("pydantic-enum/IntEnum is a choice", (eq["prio"]["type"], list(eq["prio"]["criteria"])),
+          ("choice", ["0", "1"]))
+    check("pydantic-enum/plain Enum is a choice", eq["colour"]["type"], "choice")
+    check("pydantic-enum/Optional[Enum] is a choice", eq["backup"]["type"], "choice")
+
+    enum_answers = {
+        "department": {"type": "choice", "choice": "support", "confidence": 0.9, "probabilities": {}},
+        "prio": {"type": "choice", "choice": "1", "confidence": 0.8, "probabilities": {}},
+        "colour": {"type": "choice", "choice": "blue", "confidence": 0.8, "probabilities": {}},
+    }
+    et = answer_to_pydantic(EnumTicket, enum_answers)
+    check("pydantic-enum/round trip to members", (et.department, et.prio, et.colour, et.backup),
+          (Dept.support, Prio.high, Colour.blue, None))
+    check_true("pydantic-enum/IntEnum comes back as the member", et.prio is Prio.high)
+    et = answer_to_pydantic(EnumTicket, dict(enum_answers, backup={"type": "choice", "choice": "sales"}))
+    check("pydantic-enum/Optional[Enum] answered", et.backup, Dept.sales)
+    check("pydantic-enum/decide projects values",
+          decide(FakeRunner(enum_answers), "s", schema=EnumTicket),
+          {"department": "support", "prio": 1, "colour": "blue"})
+
+    class Inner(pydantic.BaseModel):
+        flag: bool
+
+    class Outer(pydantic.BaseModel):
+        inner: Inner
+
+    try:
+        questions_from_pydantic(Outer)
+        FAIL.append("pydantic-enum/nested model: did not raise")
+    except SchemaError as exc:
+        check("pydantic-enum/nested model is still a nested object", str(exc),
+              "properties.inner: nested objects are not supported; flatten the schema")
+except ImportError:
+    PASS.append("pydantic-enum/skipped (not installed)")
 
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))

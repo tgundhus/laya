@@ -26,6 +26,16 @@ except ImportError:
     RunnableSerializable = object  # type: ignore
     RunnableConfig = Any  # type: ignore
 
+# The per-call control rules live in `._controls` because the CrewAI and LlamaIndex wrappers end
+# at the same `predict` call and the same laya-serve body; keeping the rule in three places is how
+# two of them ended up forwarding only `model`.
+from ..confidence import _gate_confidence
+from ._controls import budget_kwargs as _budget_kwargs, hook_kwargs as _hook_kwargs
+from ._controls import decision_kwargs as _decision_kwargs
+from ._controls import predict_kwargs as _predict_kwargs
+from ._controls import reject_remote_hooks as _reject_remote_hooks
+from ._guard import score_violation_probability as _score_violation_probability
+
 
 class LayaGuardrailError(ValueError):
     """Raised when an input violates a Laya guardrail policy."""
@@ -56,29 +66,72 @@ def _extract_text(input_val: Any, state_key: Optional[Union[str, Callable[[Any],
         return input_val
 
     if isinstance(input_val, list):
+        text = _content_text(input_val)
+        if text is not input_val:
+            return text
         return _extract_from_messages_list(input_val)
 
     return str(input_val)
 
 
+def _content_text(val: Any) -> Any:
+    """The text of a message `content` value, unwrapped from a content-block list.
+
+    `content` is not only a string. A `HumanMessage(content=[{"type": "text", "text": ...}])`
+    is accepted by langchain-core and keeps `.content` as a list, so `str(content)` produced a
+    Python repr -- braces, quotes, and the literal field names `type` and `text` -- and that
+    repr is what Laya scored. Nothing raised; the guardrail simply answered about a string the
+    caller never wrote.
+
+    Text-bearing blocks are concatenated in the order they appear, which is how such a list is
+    meant to be read. A list carrying no text block is returned **unchanged**, so a genuinely
+    structured state still reaches the caller as the caller shaped it instead of being
+    flattened into invented prose; callers distinguish "extracted" from "unchanged" by identity.
+    A plain string is returned untouched.
+    """
+    if not isinstance(val, list):
+        return val
+    parts = []
+    for block in val:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict):
+            text = block.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+    if not parts:
+        return val
+    return "".join(parts) if len(parts) == 1 else "\n".join(parts)
+
+
 def _extract_from_message_or_value(val: Any) -> Any:
     if hasattr(val, "content"):
-        return str(val.content)
+        return _content_text(val.content)
     if isinstance(val, list):
+        # a content-block list is already text; a list of messages is not
+        text = _content_text(val)
+        if text is not val:
+            return text
         return _extract_from_messages_list(val)
     return val
 
 
-def _extract_from_messages_list(msgs: Sequence[Any]) -> str:
+def _extract_from_messages_list(msgs: Sequence[Any]) -> Union[str, dict, list]:
+    # Not `-> str`. `_content_text` hands a content value back untouched when it holds no
+    # text block, so a message carrying only structured content returns that list, and a list
+    # entry with no `.content` returns the entry itself. Both are states `Agent._encode_state`
+    # already accepts (`state: Union[str, dict, list]`, documented as a conversation turn list),
+    # and the public `_extract_text` above already declares the same three types -- so this
+    # widens the annotation to match the behaviour, not the behaviour to match the annotation.
     if not msgs:
         return ""
     # Search backwards for the most recent human/user message
     for m in reversed(msgs):
         role = getattr(m, "type", None) or getattr(m, "role", None)
         if role in ("human", "user"):
-            return str(getattr(m, "content", m))
+            return _content_text(getattr(m, "content", m))
     last = msgs[-1]
-    return str(getattr(last, "content", last))
+    return _content_text(getattr(last, "content", last))
 
 
 class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -107,11 +160,15 @@ def _call_remote(
     timeout: float = 10.0,
     max_len: Optional[int] = None,
     head_max_len: Optional[int] = None,
+    lang: Optional[str] = None,
+    min_confidence: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Send decision request to a remote laya-serve HTTP instance using standard library urllib.
 
     `max_len` / `head_max_len` travel in the body; laya-serve applies them up to its
-    `LAYA_MAX_TOKEN_BUDGET` ceiling and answers a larger value with 422.
+    `LAYA_MAX_TOKEN_BUDGET` ceiling and answers a larger value with 422. `lang` / `min_confidence`
+    ride in the same body (they are laya-serve `BODY_CONTROLS` too): the language codes the state
+    for routing and calibration, and the abstention gate flags a low-confidence answer.
     """
     url = base_url.rstrip("/")
     if not url.endswith("/v1/systemone"):
@@ -124,6 +181,10 @@ def _call_remote(
         payload["max_len"] = max_len
     if head_max_len is not None:
         payload["head_max_len"] = head_max_len
+    if lang is not None:
+        payload["lang"] = lang
+    if min_confidence is not None:
+        payload["min_confidence"] = min_confidence
 
     data = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"}
@@ -156,48 +217,6 @@ def _get_default_router():
     return _DEFAULT_ROUTER
 
 
-def _predict_kwargs(model: Optional[str] = None, max_len: Optional[int] = None,
-                    head_max_len: Optional[int] = None) -> Dict[str, Any]:
-    """The per-request overrides a local runner accepts, with the unset ones omitted."""
-    kwargs: Dict[str, Any] = {}
-    if model:
-        kwargs["model"] = model
-    if max_len is not None:
-        kwargs["max_len"] = max_len
-    if head_max_len is not None:
-        kwargs["head_max_len"] = head_max_len
-    return kwargs
-
-
-def _reject_remote_hooks(hook_kwargs: Dict[str, Any], base_url: Optional[str]) -> None:
-    """Refuse hooks on a remote node rather than dropping them silently.
-
-    A hook is a Python callable that runs inside `predict` -- it can cache a decision, gate one or
-    rewrite its state. `laya-serve` has no way to receive or run one, so a node with a `base_url`
-    and hooks configured would report success while never calling them.
-    """
-    if base_url and hook_kwargs:
-        raise ValueError(
-            "%s run in the local runner and cannot be sent to a laya-serve endpoint; "
-            "install them where serve runs, or drop them" % ", ".join(sorted(hook_kwargs))
-        )
-
-
-def _hook_kwargs(hooks: Optional[Any] = None, on_predict_start: Optional[Any] = None,
-                 on_predict_end: Optional[Any] = None, hooks_raise: Optional[bool] = None,
-                 hooks_timeout: Optional[float] = None) -> Dict[str, Any]:
-    """The per-call hook overrides, with the unset ones omitted.
-
-    Core reads `None` as "inherit whatever the runner was built with", so an unset hook has to be
-    absent rather than passed as `None`. Note the `is not None` tests: `hooks=[]` means "no hooks
-    for this call", and `hooks_raise=False` means "keep deciding after a hook fails" -- both are
-    decisions a caller made, not absences.
-    """
-    given = {"hooks": hooks, "on_predict_start": on_predict_start, "on_predict_end": on_predict_end,
-             "hooks_raise": hooks_raise, "hooks_timeout": hooks_timeout}
-    return {k: v for k, v in given.items() if v is not None}
-
-
 def _execute_decision(
     state: Any,
     questions: Dict[str, Any],
@@ -207,6 +226,8 @@ def _execute_decision(
     model: Optional[str] = None,
     max_len: Optional[int] = None,
     head_max_len: Optional[int] = None,
+    lang: Optional[str] = None,
+    min_confidence: Optional[float] = None,
     hooks: Optional[Any] = None,
     on_predict_start: Optional[Any] = None,
     on_predict_end: Optional[Any] = None,
@@ -216,12 +237,12 @@ def _execute_decision(
     hook_kwargs = _hook_kwargs(hooks, on_predict_start, on_predict_end, hooks_raise, hooks_timeout)
     if base_url:
         _reject_remote_hooks(hook_kwargs, base_url)
-        # Only what was set, so a stand-in `_call_remote` without the budget keywords still works.
-        budget = {k: v for k, v in (("max_len", max_len), ("head_max_len", head_max_len))
-                  if v is not None}
-        return _call_remote(base_url, state, questions, api_key=api_key, model=model, **budget)
+        budget = _budget_kwargs(max_len, head_max_len)
+        decision = _decision_kwargs(lang, min_confidence)
+        return _call_remote(base_url, state, questions, api_key=api_key, model=model,
+                            **budget, **decision)
     runner = agent if agent is not None else _get_default_router()
-    kwargs = _predict_kwargs(model, max_len, head_max_len)
+    kwargs = _predict_kwargs(model, max_len, head_max_len, lang, min_confidence)
     kwargs.update(hook_kwargs)
     return runner.predict(state, questions, **kwargs)
 
@@ -250,20 +271,28 @@ def _execute_batch(
     model: Optional[str] = None,
     max_len: Optional[int] = None,
     head_max_len: Optional[int] = None,
+    lang: Optional[str] = None,
+    min_confidence: Optional[float] = None,
     hook_kwargs: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Evaluate one question set over many states, packing them into shared forward passes.
 
     The local sibling of `_execute_decision`; results come back in input order. `Agent`
     and `Router` disagree about how `predict_batch` is called (states plus one question
-    set, versus one request dict each), so both forms are built here. The token budget
-    rides on each request for a Router and as call arguments for an Agent.
+    set, versus one request dict each), so both forms are built here. The token budget,
+    `lang` and `min_confidence` ride the same way they do on `_execute_decision`, so
+    `.batch()` answers identically to `.invoke()` instead of silently dropping them.
     """
     runner = agent if agent is not None else _get_default_router()
-    overrides = _predict_kwargs(model, max_len, head_max_len)
     if hasattr(runner, "route_batch"):
-        requests = [dict({"state": state, "questions": questions}, **overrides) for state in states]
-        return runner.predict_batch(requests)
+        # Router: `lang` is a per-request control it lifts off each item, `min_confidence` is a
+        # call-level argument -- the same split laya-serve's batch endpoint makes between
+        # BATCH_BODY_ITEM_CONTROLS and BATCH_BODY_CALL_CONTROLS.
+        item_overrides = _predict_kwargs(model, max_len, head_max_len, lang)
+        requests = [dict({"state": state, "questions": questions}, **item_overrides) for state in states]
+        return runner.predict_batch(requests, **_decision_kwargs(None, min_confidence))
+    # Agent: `lang` and `min_confidence` are both call-level keyword arguments of `predict_batch`.
+    overrides = _predict_kwargs(model, max_len, head_max_len, lang, min_confidence)
     return runner.predict_batch(list(states), questions, **overrides, **(hook_kwargs or {}))
 
 
@@ -331,7 +360,9 @@ class _BatchedRunnable:
         states = [_extract_text(item, self.state_key) for item in inputs]
         results = _execute_batch(
             states, self._questions(), agent=self.agent, model=self.model,
-            max_len=self.max_len, head_max_len=self.head_max_len, hook_kwargs=hook_kwargs,
+            max_len=self.max_len, head_max_len=self.head_max_len,
+            lang=getattr(self, "lang", None), min_confidence=getattr(self, "min_confidence", None),
+            hook_kwargs=hook_kwargs,
         )
         return [self._finish(result, item) for result, item in zip(results, inputs)]
 
@@ -380,6 +411,8 @@ class LayaRouter(_BatchedRunnable, RunnableSerializable):
     model: Optional[str] = None
     max_len: Optional[int] = None
     head_max_len: Optional[int] = None
+    lang: Optional[str] = None
+    min_confidence: Optional[float] = None
     hooks: Optional[Any] = None
     on_predict_start: Optional[Any] = None
     on_predict_end: Optional[Any] = None
@@ -405,6 +438,8 @@ class LayaRouter(_BatchedRunnable, RunnableSerializable):
         model: Optional[str] = None,
         max_len: Optional[int] = None,
         head_max_len: Optional[int] = None,
+        lang: Optional[str] = None,
+        min_confidence: Optional[float] = None,
         hooks: Optional[Any] = None,
         on_predict_start: Optional[Any] = None,
         on_predict_end: Optional[Any] = None,
@@ -425,6 +460,8 @@ class LayaRouter(_BatchedRunnable, RunnableSerializable):
                 model=model,
                 max_len=max_len,
                 head_max_len=head_max_len,
+                lang=lang,
+                min_confidence=min_confidence,
                 hooks=hooks,
                 on_predict_start=on_predict_start,
                 on_predict_end=on_predict_end,
@@ -444,6 +481,8 @@ class LayaRouter(_BatchedRunnable, RunnableSerializable):
             self.model = model
             self.max_len = max_len
             self.head_max_len = head_max_len
+            self.lang = lang
+            self.min_confidence = min_confidence
             self.hooks = hooks
             self.on_predict_start = on_predict_start
             self.on_predict_end = on_predict_end
@@ -465,9 +504,13 @@ class LayaRouter(_BatchedRunnable, RunnableSerializable):
         self.last_decision = result
         ans = result["answers"][self.question_id]
         choice = ans["choice"]
-        confidence = ans.get("answer_confidence")
+        # Gate on the same number core's `flag_low_confidence` gates on: `answer_confidence`
+        # first, falling back to the entropy `confidence` so an answer that carries only the
+        # older field is still gated rather than silently passed (fail-closed). An answer with
+        # no usable number at all is treated as fully confident.
+        confidence = _gate_confidence(ans)
         if confidence is None:
-            confidence = ans.get("confidence", 1.0)
+            confidence = 1.0
 
         if self.confidence_threshold > 0.0 and confidence < self.confidence_threshold:
             if self.fallback is not None:
@@ -487,6 +530,8 @@ class LayaRouter(_BatchedRunnable, RunnableSerializable):
             model=self.model,
             max_len=self.max_len,
             head_max_len=self.head_max_len,
+            lang=self.lang,
+            min_confidence=self.min_confidence,
             hooks=self.hooks,
             on_predict_start=self.on_predict_start,
             on_predict_end=self.on_predict_end,
@@ -526,6 +571,8 @@ class LayaGuardrail(_BatchedRunnable, RunnableSerializable):
     model: Optional[str] = None
     max_len: Optional[int] = None
     head_max_len: Optional[int] = None
+    lang: Optional[str] = None
+    min_confidence: Optional[float] = None
     hooks: Optional[Any] = None
     on_predict_start: Optional[Any] = None
     on_predict_end: Optional[Any] = None
@@ -549,6 +596,8 @@ class LayaGuardrail(_BatchedRunnable, RunnableSerializable):
         model: Optional[str] = None,
         max_len: Optional[int] = None,
         head_max_len: Optional[int] = None,
+        lang: Optional[str] = None,
+        min_confidence: Optional[float] = None,
         hooks: Optional[Any] = None,
         on_predict_start: Optional[Any] = None,
         on_predict_end: Optional[Any] = None,
@@ -571,6 +620,8 @@ class LayaGuardrail(_BatchedRunnable, RunnableSerializable):
                 model=model,
                 max_len=max_len,
                 head_max_len=head_max_len,
+                lang=lang,
+                min_confidence=min_confidence,
                 hooks=hooks,
                 on_predict_start=on_predict_start,
                 on_predict_end=on_predict_end,
@@ -590,6 +641,8 @@ class LayaGuardrail(_BatchedRunnable, RunnableSerializable):
             self.model = model
             self.max_len = max_len
             self.head_max_len = head_max_len
+            self.lang = lang
+            self.min_confidence = min_confidence
             self.hooks = hooks
             self.on_predict_start = on_predict_start
             self.on_predict_end = on_predict_end
@@ -617,16 +670,9 @@ class LayaGuardrail(_BatchedRunnable, RunnableSerializable):
                 }
             elif t == "score":
                 # `score` is the expected level (0..k-1), not a probability: gate on the
-                # probability that the level is at or above the middle of the scale. Without
-                # a distribution, the normalised expected level stands in for it.
-                probs = ans.get("probabilities") or {}
-                k = len(probs) or len(self._questions().get(qid, {}).get("criteria") or [])
-                if k < 2:
-                    p_violation = 0.0
-                elif probs:
-                    p_violation = sum(float(probs.get(str(i), 0.0)) for i in range(k // 2, k))
-                else:
-                    p_violation = ans.get("score", 0.0) / (k - 1)
+                # probability that the level is at or above the middle of the scale.
+                levels = len(self._questions().get(qid, {}).get("criteria") or [])
+                p_violation = _score_violation_probability(ans, levels)
                 if p_violation >= self.threshold:
                     violations[qid] = {
                         "score": ans.get("score", 0.0),
@@ -683,6 +729,8 @@ class LayaGuardrail(_BatchedRunnable, RunnableSerializable):
             model=self.model,
             max_len=self.max_len,
             head_max_len=self.head_max_len,
+            lang=self.lang,
+            min_confidence=self.min_confidence,
             hooks=self.hooks,
             on_predict_start=self.on_predict_start,
             on_predict_end=self.on_predict_end,
@@ -710,6 +758,8 @@ class LayaTriage(_BatchedRunnable, RunnableSerializable):
     model: Optional[str] = None
     max_len: Optional[int] = None
     head_max_len: Optional[int] = None
+    lang: Optional[str] = None
+    min_confidence: Optional[float] = None
     hooks: Optional[Any] = None
     on_predict_start: Optional[Any] = None
     on_predict_end: Optional[Any] = None
@@ -729,6 +779,8 @@ class LayaTriage(_BatchedRunnable, RunnableSerializable):
         model: Optional[str] = None,
         max_len: Optional[int] = None,
         head_max_len: Optional[int] = None,
+        lang: Optional[str] = None,
+        min_confidence: Optional[float] = None,
         hooks: Optional[Any] = None,
         on_predict_start: Optional[Any] = None,
         on_predict_end: Optional[Any] = None,
@@ -745,6 +797,8 @@ class LayaTriage(_BatchedRunnable, RunnableSerializable):
                 model=model,
                 max_len=max_len,
                 head_max_len=head_max_len,
+                lang=lang,
+                min_confidence=min_confidence,
                 hooks=hooks,
                 on_predict_start=on_predict_start,
                 on_predict_end=on_predict_end,
@@ -760,6 +814,8 @@ class LayaTriage(_BatchedRunnable, RunnableSerializable):
             self.model = model
             self.max_len = max_len
             self.head_max_len = head_max_len
+            self.lang = lang
+            self.min_confidence = min_confidence
             self.hooks = hooks
             self.on_predict_start = on_predict_start
             self.on_predict_end = on_predict_end
@@ -803,6 +859,8 @@ class LayaTriage(_BatchedRunnable, RunnableSerializable):
             model=self.model,
             max_len=self.max_len,
             head_max_len=self.head_max_len,
+            lang=self.lang,
+            min_confidence=self.min_confidence,
             hooks=self.hooks,
             on_predict_start=self.on_predict_start,
             on_predict_end=self.on_predict_end,
@@ -830,6 +888,8 @@ class LayaEvaluator(_BatchedRunnable, RunnableSerializable):
     model: Optional[str] = None
     max_len: Optional[int] = None
     head_max_len: Optional[int] = None
+    lang: Optional[str] = None
+    min_confidence: Optional[float] = None
     hooks: Optional[Any] = None
     on_predict_start: Optional[Any] = None
     on_predict_end: Optional[Any] = None
@@ -850,6 +910,8 @@ class LayaEvaluator(_BatchedRunnable, RunnableSerializable):
         model: Optional[str] = None,
         max_len: Optional[int] = None,
         head_max_len: Optional[int] = None,
+        lang: Optional[str] = None,
+        min_confidence: Optional[float] = None,
         hooks: Optional[Any] = None,
         on_predict_start: Optional[Any] = None,
         on_predict_end: Optional[Any] = None,
@@ -867,6 +929,8 @@ class LayaEvaluator(_BatchedRunnable, RunnableSerializable):
                 model=model,
                 max_len=max_len,
                 head_max_len=head_max_len,
+                lang=lang,
+                min_confidence=min_confidence,
                 hooks=hooks,
                 on_predict_start=on_predict_start,
                 on_predict_end=on_predict_end,
@@ -883,6 +947,8 @@ class LayaEvaluator(_BatchedRunnable, RunnableSerializable):
             self.model = model
             self.max_len = max_len
             self.head_max_len = head_max_len
+            self.lang = lang
+            self.min_confidence = min_confidence
             self.hooks = hooks
             self.on_predict_start = on_predict_start
             self.on_predict_end = on_predict_end
@@ -901,6 +967,8 @@ class LayaEvaluator(_BatchedRunnable, RunnableSerializable):
             model=self.model,
             max_len=self.max_len,
             head_max_len=self.head_max_len,
+            lang=self.lang,
+            min_confidence=self.min_confidence,
             hooks=self.hooks,
             on_predict_start=self.on_predict_start,
             on_predict_end=self.on_predict_end,
@@ -926,6 +994,8 @@ class LayaEvaluator(_BatchedRunnable, RunnableSerializable):
             model=self.model,
             max_len=self.max_len,
             head_max_len=self.head_max_len,
+            lang=self.lang,
+            min_confidence=self.min_confidence,
             hooks=self.hooks,
             on_predict_start=self.on_predict_start,
             on_predict_end=self.on_predict_end,
@@ -959,8 +1029,11 @@ class _RemoteDecisionRunner:
         self.base_url = base_url
         self.api_key = api_key
 
-    def predict(self, state: Any, questions: Dict[str, Any], model: Optional[str] = None) -> Dict[str, Any]:
-        return _call_remote(self.base_url, state, questions, api_key=self.api_key, model=model)
+    def predict(self, state: Any, questions: Dict[str, Any], **overrides: Any) -> Dict[str, Any]:
+        # `overrides` carries only the controls that were actually set -- `LayaDecision.invoke`
+        # builds it with the shared omit-unset helpers -- so an unset budget never reaches
+        # `_call_remote` and never shadows what the endpoint was started with.
+        return _call_remote(self.base_url, state, questions, api_key=self.api_key, **overrides)
 
 
 class LayaDecision(RunnableSerializable):
@@ -982,6 +1055,13 @@ class LayaDecision(RunnableSerializable):
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
+    max_len: Optional[int] = None
+    head_max_len: Optional[int] = None
+    hooks: Optional[Any] = None
+    on_predict_start: Optional[Any] = None
+    on_predict_end: Optional[Any] = None
+    hooks_raise: Optional[bool] = None
+    hooks_timeout: Optional[float] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -996,6 +1076,13 @@ class LayaDecision(RunnableSerializable):
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        max_len: Optional[int] = None,
+        head_max_len: Optional[int] = None,
+        hooks: Optional[Any] = None,
+        on_predict_start: Optional[Any] = None,
+        on_predict_end: Optional[Any] = None,
+        hooks_raise: Optional[bool] = None,
+        hooks_timeout: Optional[float] = None,
         **kwargs: Any,
     ):
         _validate_decision_schema(decision_schema)
@@ -1008,6 +1095,13 @@ class LayaDecision(RunnableSerializable):
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
+                max_len=max_len,
+                head_max_len=head_max_len,
+                hooks=hooks,
+                on_predict_start=on_predict_start,
+                on_predict_end=on_predict_end,
+                hooks_raise=hooks_raise,
+                hooks_timeout=hooks_timeout,
                 **kwargs,
             )
         else:
@@ -1018,23 +1112,34 @@ class LayaDecision(RunnableSerializable):
             self.base_url = base_url
             self.api_key = api_key
             self.model = model
+            self.max_len = max_len
+            self.head_max_len = head_max_len
+            self.hooks = hooks
+            self.on_predict_start = on_predict_start
+            self.on_predict_end = on_predict_end
+            self.hooks_raise = hooks_raise
+            self.hooks_timeout = hooks_timeout
 
     def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
         """Decide ``input`` against the schema and return its values, or a ``DecisionResult``."""
         from ..structured import decide
 
         text = _extract_text(input, self.state_key)
+        hook_kwargs = _hook_kwargs(self.hooks, self.on_predict_start, self.on_predict_end,
+                                   self.hooks_raise, self.hooks_timeout)
+        overrides = _predict_kwargs(self.model, self.max_len, self.head_max_len)
         if self.base_url:
+            _reject_remote_hooks(hook_kwargs, self.base_url)
             runner: Any = _RemoteDecisionRunner(self.base_url, self.api_key)
         else:
             runner = self.agent if self.agent is not None else _get_default_router()
-        kwargs = {"model": self.model} if self.model else {}
+            overrides.update(hook_kwargs)
         return decide(
             runner,
             text,
             schema=self.decision_schema,
             return_details=self.return_details,
-            **kwargs,
+            **overrides,
         )
 
     def __call__(self, state: Any) -> Any:
