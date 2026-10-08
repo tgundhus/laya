@@ -61,7 +61,7 @@ This does not establish CUDA, Apple MPS or TileLang behavior.
 
 The shared Python suite list, required lint and compile gates, SDK tests, packed-package
 consumers and the strict documentation build were run. The built site contains 47 sitemap
-URLs on `laya.xgnd.me`; a runnable check verifies descriptions, canonical URLs and crawl
+URLs under `tgundhus.github.io/laya-pro/`; a runnable check verifies descriptions, canonical URLs and crawl
 directives on its entry pages.
 
 | Check | Result |
@@ -191,13 +191,16 @@ Published pretrained accuracy tables are not recomputed by synthetic SDK tests. 
 ## Publishing the documentation
 
 The documentation workflow is scoped to `tgundhus/laya-pro`, with canonical site URL
-`https://laya.xgnd.me/`. At review time, GitHub Pages still used a legacy build of repository
-root content, rather than the generated documentation. Select **GitHub Actions** as the
-Pages publishing source after merging these changes, then run the Docs workflow.
+`https://tgundhus.github.io/laya-pro/`. GitHub Pages now uses **GitHub Actions** to publish
+the generated documentation. The earlier `laya.xgnd.me` address had no public DNS records;
+the working GitHub Pages address is used instead, with HTTPS enforced.
 
-The domain and HTTPS configuration need verification in repository settings. A root CNAME
-file alone does not configure an Actions-based Pages deployment. See [GitHub's publishing
+To move to a custom domain later, configure it in Pages settings and DNS, then update the
+site URL, documentation links, robots sitemap and `scripts/check_site.py` together. A root
+CNAME file alone does not configure an Actions-based Pages deployment. See [GitHub's publishing
 source guide](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
-After deployment, verify the domain in Google Search Console and submit the sitemap. Canonical
-URLs and sitemap entries communicate the preferred pages; they do not guarantee indexing or
+Verify the site in Google Search Console and submit `/laya-pro/sitemap.xml`. The project
+`robots.txt` is published for reference; crawler rules apply only to the host's root
+`/robots.txt`. [Google's robots.txt specification](https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec).
+Canonical URLs and sitemap entries communicate the preferred pages; they do not guarantee indexing or
 ranking. [Google's canonical URL guidance](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls).

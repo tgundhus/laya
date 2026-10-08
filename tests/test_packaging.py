@@ -42,9 +42,9 @@ setup_py = read("setup.py")
 
 check_true("fork/distribution has its own name", re.search(r'^name\s*=\s*"laya-pro"$', pyproject, re.M) is not None)
 check_true("fork/metadata points to this repository", 'Repository = "https://github.com/tgundhus/laya-pro"' in pyproject)
-check_true("fork/metadata points to its documentation", 'Documentation = "https://laya.xgnd.me/"' in pyproject)
+check_true("fork/metadata points to its documentation", 'Documentation = "https://tgundhus.github.io/laya-pro/"' in pyproject)
 site_config = read("zensical.toml")
-check_true("fork/site has its own canonical domain", 'site_url = "https://laya.xgnd.me/"' in site_config)
+check_true("fork/site has its own canonical URL", 'site_url = "https://tgundhus.github.io/laya-pro/"' in site_config)
 check_true("fork/docs workflow deploys this repository",
            "github.repository == 'tgundhus/laya-pro'" in read(".github/workflows/docs.yml"))
 
