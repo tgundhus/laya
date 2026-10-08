@@ -292,6 +292,12 @@ class LayaSingleSelector(BaseSelector):
         """Select a single choice synchronously."""
         if not choices:
             raise ValueError("No choices provided to select from.")
+        if self.fallback_index is not None and (
+            isinstance(self.fallback_index, bool)
+            or not isinstance(self.fallback_index, int)
+            or not 0 <= self.fallback_index < len(choices)
+        ):
+            raise ValueError("fallback_index must be an integer within the provided choices.")
 
         query_str = _extract_query_str(query)
         criteria = _format_choices_criteria(choices)
@@ -327,16 +333,6 @@ class LayaSingleSelector(BaseSelector):
         chosen_key = ans.get("choice")
         conf = _gated_confidence(ans)
 
-        # Map "choice_i" back to index i
-        chosen_idx: int = 0
-        if chosen_key and chosen_key.startswith("choice_"):
-            try:
-                chosen_idx = int(chosen_key.split("_")[1])
-            except (ValueError, IndexError):
-                chosen_idx = 0
-        elif chosen_key in criteria:
-            chosen_idx = list(criteria.keys()).index(chosen_key)
-
         # Confidence gating
         if self.confidence_threshold > 0.0 and conf < self.confidence_threshold:
             if self.fallback_index is not None:
@@ -354,6 +350,9 @@ class LayaSingleSelector(BaseSelector):
                     raw_decision=res,
                 )
 
+        if not isinstance(chosen_key, str) or chosen_key not in criteria:
+            raise ValueError(f"Laya returned an unknown selector choice: {chosen_key!r}.")
+        chosen_idx = list(criteria.keys()).index(chosen_key)
         choice_obj = choices[chosen_idx]
         choice_name = getattr(choice_obj, "name", None) or f"choice_{chosen_idx}"
         reason = f"Selected '{choice_name}' via Laya System 1 decision (confidence: {conf:.3f})."

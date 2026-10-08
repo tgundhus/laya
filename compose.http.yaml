@@ -54,6 +54,13 @@ services:
       # Empty keeps Router's own default (2). Set 3 when LAYA_AUTO_TASK is on: that adds a
       # third checkpoint routing can choose on demand, and a cap below it reloads one per switch.
       LAYA_MAX_LOADED: "${LAYA_MAX_LOADED:-}"
+      LAYA_EXTRA_MODELS: "${LAYA_EXTRA_MODELS:-}"
+      # Decision caching is opt-in. A path under /home/laya/decisions persists in its own volume.
+      LAYA_CACHE: "${LAYA_CACHE:-0}"
+      LAYA_CACHE_PATH: "${LAYA_CACHE_PATH:-}"
+      LAYA_CACHE_TTL: "${LAYA_CACHE_TTL:-86400}"
+      LAYA_CACHE_MAXSIZE: "${LAYA_CACHE_MAXSIZE:-10000}"
+      LAYA_CACHE_RENEW_ON_HIT: "${LAYA_CACHE_RENEW_ON_HIT:-0}"
       # Requests admitted at once; one that arrives with every slot taken is refused with 503
       # instead of queued, which is what bounds the bodies a burst holds in memory. Empty keeps
       # the server's own default (16), so this line changes nothing until it is set.
@@ -77,6 +84,7 @@ services:
       OMP_NUM_THREADS: "${OMP_NUM_THREADS:-4}"
     volumes:
       - model-cache:/home/laya/.cache/huggingface
+      - decision-cache:/home/laya/decisions
       # Optional token files, readable by UID 10001. Never put a secret value in the
       # environment; these paths are read once at startup and the *_FILE variable is
       # then removed before the server execs.
@@ -95,5 +103,6 @@ services:
       start_interval: 2s
 
 volumes:
+  decision-cache:
   model-cache:
     name: "${LAYA_CACHE_VOLUME:-${COMPOSE_PROJECT_NAME}_model-cache}"

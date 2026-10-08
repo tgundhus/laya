@@ -290,6 +290,20 @@ def validate_task(task: Any) -> str | None:
     return task
 
 
+def _routed_control(value, validator, router):
+    try:
+        return validator(value)
+    except ToolError:
+        resolve = getattr(router, "resolve", None)
+        if not callable(resolve) or not isinstance(value, str):
+            raise
+        try:
+            return resolve(value)
+        except ValueError as error:
+            code = "invalid_task" if validator is validate_task else "invalid_model"
+            raise ToolError(code, str(error)) from None
+
+
 def validate_lang(lang: Any) -> str | None:
     """A language code for core's ``lang`` override, or ``None`` for "not set".
 
@@ -434,10 +448,10 @@ def laya_predict(
     """
     state_d = validate_state(state)
     questions_d = validate_questions(questions)
-    model_name = validate_model(model)
+    model_name = _routed_control(model, validate_model, router)
     auto_without_router = False
     budget = _overrides(
-        validate_task(task),
+        _routed_control(task, validate_task, router),
         validate_lang(lang),
         validate_budget(max_len, "max_len"),
         validate_budget(head_max_len, "head_max_len"),
@@ -558,8 +572,8 @@ def laya_route(
     questions_d = validate_questions(questions)
     # `auto` is this layer's word for "do not pin"; core has no such name, so it becomes an absent
     # override rather than a ValueError from normalise_name.
-    model_name = validate_model(model)
-    task_name = validate_task(task)
+    model_name = _routed_control(model, validate_model, router)
+    task_name = _routed_control(task, validate_task, router)
     lang_guess_code = validate_lang_guess(lang_guess)
     # Same rule as the decision tools: `_route` checks an explicit model first and never reaches
     # the task, so a call that sets both is asking a question with two answers.
@@ -720,8 +734,8 @@ def laya_shortlist(
 
     state_d = validate_state(state)
     questions_d = validate_questions(questions)
-    model_name = validate_model(model)
-    routing_overrides = _overrides(validate_task(task), validate_lang(lang), None, None)
+    model_name = _routed_control(model, validate_model, router)
+    routing_overrides = _overrides(_routed_control(task, validate_task, router), validate_lang(lang), None, None)
     lang_guess_code = validate_lang_guess(lang_guess)
     if lang_guess_code is not None:
         routing_overrides["lang_guess"] = lang_guess_code
@@ -910,13 +924,15 @@ def _remote_status(router: Any, preload: bool) -> dict:
     out["server"] = health
     loaded = health.get("loaded")
     out["loaded"] = [v for v in loaded if isinstance(v, str)] if isinstance(loaded, list) else []
-    for key in ("device", "device_is_preference", "checkpoint_devices"):
+    for key in ("device", "device_is_preference", "checkpoint_devices", "decision_cache"):
         if key in health:
             out[key] = health[key]
     return out
 
 
 def laya_status(*, router: Any = None, loaded: list[str] | None = None, preload: bool = True) -> dict:
+    from ..serve import _decision_cache_report
+
     if router is not None and hasattr(router, "base_url") and hasattr(router, "health"):
         return _remote_status(router, preload)
     report = device_report()
@@ -951,6 +967,7 @@ def laya_status(*, router: Any = None, loaded: list[str] | None = None, preload:
 
     return {
         **report,
+        **_decision_cache_report(router),
         "device": actual or report["device"],
         "device_is_preference": actual is None,
         "checkpoint_devices": checkpoint_devices,
@@ -963,7 +980,7 @@ def laya_status(*, router: Any = None, loaded: list[str] | None = None, preload:
 
 # --- batch tools ----------------------------------------------------------
 
-def _validate_batch_model(value: Any, where: str) -> str | None:
+def _validate_batch_model(value: Any, where: str, router=None) -> str | None:
     """``model`` as a Router routing override: "auto" (or absent) means None so
     Router.route resolves the checkpoint per request; a name pins it. Kept
     separate from ``validate_model``, whose "auto" means "answer via
@@ -972,7 +989,7 @@ def _validate_batch_model(value: Any, where: str) -> str | None:
     if value is None:
         return None
     try:
-        name = validate_model(value)
+        name = _routed_control(value, validate_model, router)
     except ToolError as error:
         raise ToolError("invalid_model", "%s['model']: %s" % (where, error)) from None
     return None if name == AUTO else name
@@ -998,7 +1015,7 @@ def _validate_batch_budget(value: Any, name: str, where: str) -> int | None:
         raise ToolError("invalid_%s" % name, "%s[%r]: %s" % (where, name, error)) from None
 
 
-def _validate_batch_item(request: Any, i: int) -> dict:
+def _validate_batch_item(request: Any, i: int, router=None) -> dict:
     where = "requests[%d]" % i
     if not isinstance(request, dict):
         raise ToolError("invalid_request", "%s must be an object with 'state' and 'questions'" % where)
@@ -1007,7 +1024,7 @@ def _validate_batch_item(request: Any, i: int) -> dict:
         "questions": validate_questions(request.get("questions")),
     }
     if "model" in request:
-        model = _validate_batch_model(request["model"], where)
+        model = _validate_batch_model(request["model"], where, router)
         if model is not None:
             item["model"] = model
     for key in ("task", "lang"):
@@ -1053,12 +1070,16 @@ def validate_batch_requests(requests: Any) -> list[dict]:
     optional model/task/lang/lang_guess/max_len/head_max_len overrides), run before any model
     loads so one malformed item fails the whole call instead of a partial batch.
     """
+    return _validate_registered_batch_requests(requests)
+
+
+def _validate_registered_batch_requests(requests, router=None):
     if not isinstance(requests, list) or not requests:
         raise ToolError(
             "invalid_request",
             "requests must be a non-empty array of %s" % batch_item_key_doc(),
         )
-    return [_validate_batch_item(request, i) for i, request in enumerate(requests)]
+    return [_validate_batch_item(request, i, router) for i, request in enumerate(requests)]
 
 
 def _validate_batch_size(batch_size: Any) -> int | None:
@@ -1109,7 +1130,7 @@ def laya_predict_batch(
     fields as ``laya_predict``. Requests are validated up front, so one
     malformed item errors before any model loads.
     """
-    items = validate_batch_requests(requests)
+    items = _validate_registered_batch_requests(requests, router)
     size = _validate_batch_size(batch_size)
     # Validate the call-level controls up front, the way every sibling tool does, so a bad value is
     # a clean ToolError the client can read -- not an `internal_error: ValueError` that escapes the
@@ -1187,7 +1208,7 @@ def laya_route_batch(requests: Any, hooks_timeout: Any = None, *, router: Any = 
     ``on_route`` dispatch, exactly as it does for ``laya_predict_batch``: an
     operator-installed hook that hangs should not stall a whole routing sweep.
     """
-    items = validate_batch_requests(requests)
+    items = _validate_registered_batch_requests(requests, router)
     timeout = _validate_hooks_timeout(hooks_timeout)
     if router is None:
         raise ToolError("models_not_ready", "Router is not loaded")
@@ -1239,7 +1260,7 @@ def laya_decide(
     from laya.structured import SchemaError, decide
 
     state_d = validate_state(state)
-    model_name = validate_model(model)
+    model_name = _routed_control(model, validate_model, router)
     min_conf = validate_min_confidence(min_confidence)
     try:
         # `decide` validates the schema itself (SchemaError names the offending

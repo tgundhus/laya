@@ -30,11 +30,21 @@ env var                    meaning                                        defaul
                            routing can choose, one reloads per switch.
 ``LAYA_IDLE_UNLOAD_SECONDS`` unload checkpoints after this many idle     0 (off)
                            seconds; the next request loads them again.
+``LAYA_CACHE``             enable an in-memory decision cache             0 (off)
+``LAYA_CACHE_PATH``        SQLite decision file; also enables caching      (none)
+``LAYA_CACHE_TTL``         retention in seconds, or "none" for no expiry   86400
+``LAYA_CACHE_MAXSIZE``     maximum decisions in the built-in store        10000
+``LAYA_CACHE_RENEW_ON_HIT`` renew retention when a decision is replayed    0
 ``LAYA_API_KEY``           if set, require ``Authorization: Bearer <it>``  (none)
 ``LAYA_ROOT_PATH``         public URL prefix behind a reverse proxy        (none)
 ``LAYA_LOG_LEVEL``         uvicorn log level                              info
 ``LAYA_MAX_CONCURRENT``    cap on requests past auth at once; excess      16
                            gets 503 (see below)
+``LAYA_EXTRA_MODELS``      JSON object ``{name: source}`` registering     (none)
+                           extra checkpoints beside the bundled ones --
+                           a Hub repo id, a local checkpoint directory, or
+                           a ``["repo", "subfolder"]`` pair. Served under
+                           explicit ``model=`` like a built-in.
 ``LAYA_MAX_TOKEN_BUDGET``  cap on per-request max_len / head_max_len       8192
 ``LAYA_JEV_STRICT``        if set, serve the strict Jev wire contract: no   0
                            root `routing`, no per-answer `action` /
@@ -227,7 +237,7 @@ def _names_unpublished_source(text: str) -> bool:
     return "/" in text or "\\" in text
 
 
-def _resolve_model(model: Optional[str]) -> Optional[str]:
+def _resolve_model(model: Optional[str], resolve=None) -> Optional[str]:
     """Map a client's `model` field onto a Laya checkpoint, or None to auto-route.
 
     A Jev id such as ``jev-1``, and the bundle id ``convaiinnovations/laya``, stay None:
@@ -247,15 +257,19 @@ def _resolve_model(model: Optional[str]) -> Optional[str]:
     # It contains a slash, so the path check below would otherwise refuse it.
     if text.lower() == BUNDLE_REPO:
         return None
-    # normalise_name raises ValueError on anything that is not a known checkpoint
-    # or alias, and returns a name from router.DEFAULT_MODELS when it does accept one --
-    # so it is the only list of accepted names this needs. A Jev client's `model` field
-    # (e.g. "jev-1") is expected to miss; treat that as "no explicit checkpoint" and let
-    # the router auto-select. A path or unpublished Hub id is not that miss: the caller
-    # named a checkpoint this server cannot load, the same refusal `validate_model` gives
-    # an MCP client, reported as this endpoint's 422.
+    # The resolver raises ValueError on anything that is not a known checkpoint or
+    # alias. `resolve` defaults to the built-in table's `normalise_name`; the request
+    # handlers pass the app's `Router.resolve`, so a checkpoint registered on the
+    # Router -- `Router.register`, `Router(models=...)`, or `LAYA_EXTRA_MODELS` --
+    # pins here too, and its "unknown model" error lists the full set the server
+    # actually serves. A Jev client's `model` field (e.g. "jev-1") is expected to
+    # miss; treat that as "no explicit checkpoint" and let the router auto-select.
+    # A path or unpublished Hub id is not that miss: the caller named a checkpoint
+    # this server cannot load, the same refusal `validate_model` gives an MCP
+    # client, reported as this endpoint's 422.
+    resolver = normalise_name if resolve is None else resolve
     try:
-        return normalise_name(model)
+        return resolver(model)
     except ValueError as error:
         if _names_unpublished_source(text):
             from fastapi import HTTPException
@@ -483,7 +497,44 @@ def _resolve_max_loaded() -> Optional[int]:
     return n if n > 0 else None
 
 
-def _default_model_option() -> Dict[str, str]:
+def _extra_models_option() -> Dict[str, Any]:
+    """Checkpoint registrations from ``LAYA_EXTRA_MODELS``, as the ``Router`` ``models`` keyword.
+
+    The variable is a JSON object mapping a checkpoint name to its source -- the same
+    shapes ``Router.register`` accepts: a Hub repo id or local checkpoint directory as a
+    plain string, or a ``["repo", "subfolder"]`` pair. ``Router._add`` applies the same
+    name rules as ``register`` (lowercase letters, digits, ``.``, ``_``, ``-``; never
+    ``auto``), and a name that matches a bundled checkpoint re-points it -- which is how
+    an operator serves a fine-tune under ``english`` without a code change.
+
+    As with ``_default_model_option``, a malformed value has no harmless fallback: a
+    checkpoint silently missing from the registry would auto-route its requests to a
+    different one, so this raises ``SystemExit`` and the caller refuses to start.
+    """
+    raw = os.environ.get("LAYA_EXTRA_MODELS", "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError as error:
+        raise SystemExit("invalid LAYA_EXTRA_MODELS: not a JSON object (%s)" % error) from None
+    if not isinstance(data, dict):
+        raise SystemExit("invalid LAYA_EXTRA_MODELS: a JSON object "
+                         "{name: source}, got %s" % type(data).__name__)
+    out = {}
+    for name, source in data.items():
+        if isinstance(source, list):
+            out[name] = tuple(source)          # JSON has no tuple: [repo, subfolder]
+        elif isinstance(source, str):
+            out[name] = source
+        else:
+            raise SystemExit("invalid LAYA_EXTRA_MODELS: source for %r must be a repo "
+                             "id, a local path, or a [repo, subfolder] pair; got %s"
+                             % (name, type(source).__name__))
+    return out
+
+
+def _default_model_option(extra_models: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     """Routing fallback from ``LAYA_DEFAULT_MODEL``, as a ``Router`` keyword; unset sends nothing.
 
     ``Router.default`` answers the two states that carry no language evidence at all: no letters,
@@ -493,22 +544,28 @@ def _default_model_option() -> Dict[str, str]:
     of the constructor when unset, so the value cannot drift from ``Router``'s own default -- the
     same reasoning as ``_resolve_max_loaded`` above.
 
-    The name goes through ``normalise_name``, so the accepted set and its aliases are core's and
-    not a list restated here. Unlike the numeric knobs, a typo here has no harmless fallback: a
-    silently-ignored value would keep routing the ambiguous states to the checkpoint the operator
-    just said cannot read them, so this raises and the caller refuses to start rather than serve a
-    configuration nobody asked for. ``laya.mcp.server`` turns the same error into a ``ToolError``,
-    because a stdio server has no startup to refuse.
+    The name is checked against the built-in table and its aliases plus any
+    ``LAYA_EXTRA_MODELS`` registrations, which is the set the Router ends up
+    serving -- not a list restated here. Unlike the numeric knobs, a typo here has
+    no harmless fallback: a silently-ignored value would keep routing the
+    ambiguous states to the checkpoint the operator just said cannot read them,
+    so this raises and the caller refuses to start rather than serve a
+    configuration nobody asked for. ``laya.mcp.server`` turns the same error into
+    a ``ToolError``, because a stdio server has no startup to refuse.
     """
     raw = os.environ.get("LAYA_DEFAULT_MODEL")
     if raw is None or not raw.strip():
         return {}
-    from .router import normalise_name
+    from .router import canonical_name, normalise_name
 
     try:
         name = normalise_name(raw)
     except ValueError as error:
-        raise ValueError("invalid LAYA_DEFAULT_MODEL %r: %s" % (raw.strip(), error)) from None
+        # A LAYA_EXTRA_MODELS name is a valid default once the Router registers it.
+        key = canonical_name(raw)
+        if not extra_models or key not in {canonical_name(registered) for registered in extra_models}:
+            raise ValueError("invalid LAYA_DEFAULT_MODEL %r: %s" % (raw.strip(), error)) from None
+        name = key
     return {"default": name}
 
 
@@ -852,14 +909,77 @@ def build_router():
         options["max_loaded"] = max_loaded
     # Resolved before the Router is built: a name `Router` would reject is a configuration error,
     # and `_resolve_port`'s idiom applies -- exit with the message, not a traceback.
+    extra_models = _extra_models_option()
     try:
-        options.update(_default_model_option())
+        options.update(_default_model_option(extra_models))
     except ValueError as error:
         raise SystemExit(str(error)) from None
-    router = Router(**options)
-    if _env_bool("LAYA_PRELOAD", True):
-        router.preload(preload_names)
+    if extra_models:
+        options["models"] = extra_models
+    try:
+        router = Router(**options)
+    except (ValueError, TypeError) as error:
+        raise SystemExit(str(error)) from None
+    try:
+        _configure_decision_cache(router)
+        if _env_bool("LAYA_PRELOAD", True):
+            router.preload(preload_names)
+    except BaseException:
+        _close_decision_cache(router)
+        raise
     return router
+
+
+def _configure_decision_cache(router):
+    """Install the deployment's opt-in decision cache on its local Router."""
+    import math
+
+    from .consistency import DecisionCache
+
+    path = os.environ.get("LAYA_CACHE_PATH", "").strip() or None
+    if not path and not _env_bool("LAYA_CACHE", False):
+        return
+    raw_ttl = os.environ.get("LAYA_CACHE_TTL", "86400").strip()
+    try:
+        ttl = None if raw_ttl.lower() == "none" else float(raw_ttl)
+        if ttl is not None and (not math.isfinite(ttl) or ttl <= 0):
+            raise ValueError
+    except ValueError:
+        raise ValueError("LAYA_CACHE_TTL must be finite positive seconds or 'none'") from None
+    try:
+        maxsize = int(os.environ.get("LAYA_CACHE_MAXSIZE", "10000"))
+        if maxsize < 1:
+            raise ValueError
+    except ValueError:
+        raise ValueError("LAYA_CACHE_MAXSIZE must be a positive integer") from None
+    cache = DecisionCache(path, ttl=ttl, maxsize=maxsize,
+                          renew_on_hit=_env_bool("LAYA_CACHE_RENEW_ON_HIT", False))
+    try:
+        router.add_hook(cache)
+    except BaseException:
+        cache.close()
+        raise
+    router._laya_decision_cache = cache
+
+
+def _close_decision_cache(router):
+    cache = getattr(router, "_laya_decision_cache", None)
+    if cache is not None:
+        router.remove_hook(cache)
+        cache.close()
+        router._laya_decision_cache = None
+
+
+def _decision_cache_report(router):
+    cache = getattr(router, "_laya_decision_cache", None)
+    if cache is None:
+        return {}
+    try:
+        info = cache.cache_info()
+    except Exception:
+        return {"decision_cache": {"enabled": True, "available": False}}
+    return {"decision_cache": {"enabled": True, "ttl_seconds": cache.ttl,
+                               "renew_on_hit": cache.renew_on_hit, **info}}
 
 
 def create_app(router: Optional[Any] = None):
@@ -873,6 +993,7 @@ def create_app(router: Optional[Any] = None):
 
     from .mcp.device import agent_device, resolve_device, router_agent
 
+    owns_router = router is None
     if router is None:
         router = build_router()
     api_key = os.environ.get("LAYA_API_KEY") or None
@@ -885,6 +1006,7 @@ def create_app(router: Optional[Any] = None):
     # predictions can share a checkpoint -- a GPU-shaped choice this endpoint does not
     # rely on). `loop.run_in_executor` is the API the issue asked for.
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="laya-infer")
+    pool_closed = False
     # Created on first request, not here: an `asyncio.Lock` binds to the loop that is
     # running when it is first awaited, and `create_app` may be called before that loop
     # exists (module scope, TestClient startup, a preload script).
@@ -934,6 +1056,17 @@ def create_app(router: Optional[Any] = None):
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        nonlocal pool, pool_closed, gate, admission
+        # A host can run one app's lifespan more than once (a TestClient per test, an embedding
+        # server that restarts it). The previous shutdown closed the pool, and the gate and the
+        # admission semaphore bind to the loop they first waited on, which a restart replaces.
+        if pool_closed:
+            if owns_router:
+                _configure_decision_cache(router)
+            pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="laya-infer")
+            pool_closed = False
+        gate = None
+        admission = None
         reaper = asyncio.create_task(_idle_reaper()) if idle_unload_seconds else None
         try:
             yield
@@ -947,10 +1080,13 @@ def create_app(router: Optional[Any] = None):
             # TestClient, embedded ASGI apps, and process supervisors all need
             # the executor to drain when the app stops.
             pool.shutdown(wait=True, cancel_futures=True)
+            pool_closed = True
+            if owns_router:
+                _close_decision_cache(router)
 
     app = FastAPI(
-        title="laya-serve",
-        summary="Laya System-1 decisions over the TypeSafe Jev /v1/systemone protocol",
+        title="Laya-Pro local decision server",
+        summary="Local decisions with cache retention over the Jev-compatible /v1/systemone protocol",
         root_path=os.environ.get("LAYA_ROOT_PATH", ""),
         lifespan=lifespan,
     )
@@ -1014,6 +1150,7 @@ def create_app(router: Optional[Any] = None):
                  "idle_seconds": round(time.monotonic() - last_request, 1)} if idle_unload_seconds else {})
         return {
             "status": "ok",
+            **_decision_cache_report(router),
             "loaded": router.loaded,
             "revisions": getattr(router, "loaded_revisions", {}),
             "device": actual or resolve_device(),
@@ -1065,7 +1202,11 @@ def create_app(router: Optional[Any] = None):
         # the time `json.loads` is done, so only lone ones are rejected here.
         if _has_lone_surrogate(body):
             raise HTTPException(status_code=400, detail=_LONE_SURROGATE_DETAIL)
-        model = _resolve_model(body.get("model"))
+        # `getattr` rather than `router.resolve`: test doubles injected through
+        # `create_app(router=...)` predate the registry-aware resolver, and a fake
+        # that cannot resolve names falls back to the built-in table, which is the
+        # registry such a fake is asserting anyway.
+        model = _resolve_model(body.get("model"), getattr(router, "resolve", None))
         max_budget_cap = _resolve_max_token_budget()
         max_len = _validate_budget_param(body, "max_len", max_budget_cap)
         head_max_len = _validate_budget_param(body, "head_max_len", max_budget_cap)
@@ -1159,7 +1300,9 @@ def create_app(router: Optional[Any] = None):
         # and `MAX_QUESTIONS` bound what the walk can reach.
         if _has_lone_surrogate(body):
             raise HTTPException(status_code=400, detail=_LONE_SURROGATE_DETAIL)
-        model = _resolve_model(body.get("model"))
+        # Same resolver fallback as `_systemone_inner`: a test double without a
+        # registry-aware `resolve` keeps the built-in table it was written against.
+        model = _resolve_model(body.get("model"), getattr(router, "resolve", None))
         max_budget_cap = _resolve_max_token_budget()
         max_len = _validate_budget_param(body, "max_len", max_budget_cap)
         head_max_len = _validate_budget_param(body, "head_max_len", max_budget_cap)

@@ -128,9 +128,17 @@ def test_http_errors_map_to_tool_error_codes(serve, status, code):
     assert "criteria must be an object" in info.value.message
 
 
-def test_unreachable_server_is_a_clean_error():
+def test_unreachable_server_is_a_clean_error(monkeypatch):
+    from urllib.error import URLError
+
+    router = RemoteRouter("http://127.0.0.1:9", timeout=2)
+
+    def refused(*args, **kwargs):
+        raise URLError(ConnectionRefusedError("connection refused"))
+
+    monkeypatch.setattr(router._opener, "open", refused)
     with pytest.raises(RemoteError) as info:
-        RemoteRouter("http://127.0.0.1:9", timeout=2).predict("x", _questions())
+        router.predict("x", _questions())
     assert info.value.code == "unreachable"
 
 
@@ -341,10 +349,9 @@ def test_remote_timeout_is_forwarded_and_http_failures_are_validated(monkeypatch
     assert router.timeout == 0.25
     assert RemoteRouter(serve, timeout=3).timeout == 3
     from urllib.error import URLError
-    import urllib.request
     def timed_out(*args, **kwargs):
         raise URLError(TimeoutError("test timeout"))
-    monkeypatch.setattr(urllib.request, "urlopen", timed_out)
+    monkeypatch.setattr(router._opener, "open", timed_out)
     with pytest.raises(RemoteError) as info:
         router.predict("x", _questions())
     assert info.value.code == "timeout"
@@ -364,12 +371,35 @@ def test_remote_transport_preserves_options_and_all_wire_controls(serve):
 def test_remote_transport_reports_malformed_responses(monkeypatch, raw):
     from contextlib import contextmanager
     from types import SimpleNamespace
-    import urllib.request
 
     @contextmanager
     def response(*args, **kwargs):
         yield SimpleNamespace(read=lambda: raw)
-    monkeypatch.setattr(urllib.request, "urlopen", response)
+    router = RemoteRouter("http://localhost:8000")
+    monkeypatch.setattr(router._opener, "open", response)
     with pytest.raises(RemoteError) as info:
-        RemoteRouter("http://localhost:8000").predict("x", _questions())
+        router.predict("x", _questions())
     assert info.value.code == "upstream_error"
+
+
+def test_remote_transport_refuses_redirects_before_forwarding_bearer(serve):
+    class Redirect(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", serve + "/health")
+            self.end_headers()
+
+    httpd = HTTPServer(("127.0.0.1", 0), Redirect)
+    thread = threading.Thread(target=lambda: httpd.serve_forever(poll_interval=0.01), daemon=True)
+    thread.start()
+    try:
+        router = RemoteRouter("http://127.0.0.1:%d" % httpd.server_address[1], api_key="private-key")
+        with pytest.raises(RemoteError, match="refusing HTTP redirect"):
+            router.health()
+        assert FakeServe.requests == []
+    finally:
+        httpd.shutdown()
+        httpd.server_close()

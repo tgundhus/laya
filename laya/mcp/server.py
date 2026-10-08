@@ -1,6 +1,7 @@
 """MCP stdio server exposing the Laya typed-decision tools.
 
-Part of the optional ``laya[mcp]`` extra. Speaks MCP over stdio, so it can be
+Part of the optional ``laya-pro[mcp]`` extra; install from this checkout with
+``pip install -e '.[mcp]'``. Speaks MCP over stdio, so it can be
 wired to any MCP client (OpenClaw, Claude Desktop, cursor, ...):
 
     laya-mcp-server
@@ -18,6 +19,10 @@ Environment (same meaning as laya.serve where it exists):
   LAYA_DEFAULT_MODEL  the checkpoint a state with no language evidence falls back to
                   (same as laya.serve, including its aliases); an unset value leaves
                   it to Router, an unresolvable one is a tool error.
+  LAYA_MAX_LOADED  cap on resident local checkpoints (same as laya.serve)
+  LAYA_EXTRA_MODELS  JSON checkpoint registrations (same as laya.serve)
+  LAYA_CACHE / LAYA_CACHE_PATH / LAYA_CACHE_TTL / LAYA_CACHE_MAXSIZE /
+  LAYA_CACHE_RENEW_ON_HIT  local decision retention (same as laya.serve)
   LAYA_BASE_URL  answer from a running laya-serve over HTTP; unset keeps models local
   LAYA_REMOTE_TIMEOUT  HTTP timeout in seconds for remote mode (default 300)
 """
@@ -36,13 +41,16 @@ try:
     from mcp.server.mcpserver.exceptions import ToolError as McpToolError
 except ImportError as exc:  # mcp extra not installed
     raise ImportError(
-        "the laya[mcp] extra (mcp>=2.2.0) is required to run the MCP server: "
-        "pip install 'laya[mcp]'"
+        "the laya-pro[mcp] extra (mcp>=2.2.0) is required to run the MCP server; "
+        "from the Laya-Pro checkout, run: pip install -e '.[mcp]'"
     ) from exc
 
 # laya.serve only imports os/typing at module level, so reusing its helpers
 # keeps one meaning for LAYA_PRELOAD / LAYA_THREADS / LAYA_DEFAULT_MODEL across the package.
-from laya.serve import _apply_thread_limit, _default_model_option, _env_bool
+from laya.serve import (
+    _apply_thread_limit, _close_decision_cache, _configure_decision_cache,
+    _default_model_option, _env_bool, _extra_models_option, _resolve_max_loaded,
+)
 
 from .device import env_device
 from .tools import (
@@ -60,13 +68,13 @@ from .tools import (
 )
 
 try:
-    _LAYA_VERSION = _metadata.version("laya")
+    _LAYA_VERSION = _metadata.version("laya-pro")
 except Exception:  # running from a source checkout without install metadata
     import laya as _laya
 
     _LAYA_VERSION = getattr(_laya, "__version__", "")
 
-server = MCPServer("laya", version=_LAYA_VERSION)
+server = MCPServer("laya-pro", version=_LAYA_VERSION)
 
 _ROUTER: Any = None
 _ROUTER_LOCK = threading.Lock()
@@ -80,8 +88,8 @@ _DEFAULT_MODELS = ("english", "multilingual")
 # of deciding, so it does not carry them.
 _GUARDRAILS = (
     "Use for structured decisions only: choice (finite labels), score (ordinal rubric), "
-    "noul (calibrated P(true)). One forward pass ~33ms (GPU) / ~200ms (CPU). "
-    "No text generation, so no hallucination. Do NOT use for open Q&A, summarization, "
+    "noul (P(true)). Answers in one forward pass; latency depends on hardware and input size. "
+    "No text generation; predictions can still be wrong. Do NOT use for open Q&A, summarization, "
     "rewriting, code, or multi-hop reasoning. Do NOT use for >20-option choice "
     "questions without shortlisting (use the laya_shortlist tool)."
 )
@@ -167,10 +175,14 @@ def _ensure_router() -> Any:
             # routes locally (pure Python) and answers over HTTP from a running laya-serve.
             try:
                 from .remote import RemoteRouter
+                extra_models = _extra_models_option()
+                options = _default_model_option(extra_models)
+                if extra_models:
+                    options["models"] = extra_models
                 router = RemoteRouter(base_url, api_key=os.environ.get("LAYA_API_KEY") or None,
                                       auto_task_detection=_env_bool("LAYA_AUTO_TASK", False),
-                                      **_default_model_option())
-            except Exception as exc:
+                                      **options)
+            except (Exception, SystemExit) as exc:
                 raise ToolError("internal_error", f"remote router construction failed: {exc}") from exc
             _ROUTER = router
             return router
@@ -180,12 +192,22 @@ def _ensure_router() -> Any:
             raise ToolError("internal_error", f"cannot import laya: {exc}") from exc
         try:
             _apply_thread_limit()
-            router = Router(device=env_device(),
-                            auto_task_detection=_env_bool("LAYA_AUTO_TASK", False),
-                            **_default_model_option())
+            extra_models = _extra_models_option()
+            options = {"device": env_device(),
+                       "auto_task_detection": _env_bool("LAYA_AUTO_TASK", False),
+                       **_default_model_option(extra_models)}
+            max_loaded = _resolve_max_loaded()
+            if max_loaded is not None:
+                options["max_loaded"] = max_loaded
+            if extra_models:
+                options["models"] = extra_models
+            router = Router(**options)
+            _configure_decision_cache(router)
             if _env_bool("LAYA_PRELOAD", True):
                 router.preload(_models_from_env())
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:
+            if "router" in locals():
+                _close_decision_cache(router)
             raise ToolError("internal_error", f"router construction failed: {exc}") from exc
         _ROUTER = router
         return router
@@ -522,7 +544,10 @@ def main() -> None:
             _ensure_router()
         except Exception as exc:
             print(f"[laya-mcp] preload failed (will retry on demand): {exc}", file=sys.stderr)
-    server.run()
+    try:
+        server.run()
+    finally:
+        _close_decision_cache(_ROUTER)
 
 
 if __name__ == "__main__":

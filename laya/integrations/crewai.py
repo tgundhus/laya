@@ -295,6 +295,12 @@ class LayaCrewRouter:
         """Evaluate task and route to the best matching crew agent in ~33ms."""
         if not agents:
             raise ValueError("No agents provided to route task to.")
+        if self.fallback_agent_index is not None and (
+            isinstance(self.fallback_agent_index, bool)
+            or not isinstance(self.fallback_agent_index, int)
+            or not 0 <= self.fallback_agent_index < len(agents)
+        ):
+            raise ValueError("fallback_agent_index must be an integer within the provided agents.")
 
         task_str = _extract_task_str(task)
         criteria = _format_agent_criteria(agents)
@@ -336,16 +342,6 @@ class LayaCrewRouter:
         if conf is None:
             conf = 1.0
 
-        # Map agent_i back to integer index i
-        chosen_idx: int = 0
-        if chosen_key and chosen_key.startswith("agent_"):
-            try:
-                chosen_idx = int(chosen_key.split("_")[1])
-            except (ValueError, IndexError):
-                chosen_idx = 0
-        elif chosen_key in criteria:
-            chosen_idx = list(criteria.keys()).index(chosen_key)
-
         # Confidence gating
         if self.confidence_threshold > 0.0 and conf < self.confidence_threshold:
             if self.fallback_agent_index is not None:
@@ -372,6 +368,9 @@ class LayaCrewRouter:
                     raw_decision=res,
                 )
 
+        if not isinstance(chosen_key, str) or chosen_key not in criteria:
+            raise ValueError(f"Laya returned an unknown delegation choice: {chosen_key!r}.")
+        chosen_idx = list(criteria.keys()).index(chosen_key)
         selected_agent = agents[chosen_idx]
         role_name = _get_agent_role(selected_agent, chosen_idx)
         reason = f"Delegated to '{role_name}' via Laya System 1 decision (confidence: {conf:.3f})."

@@ -574,6 +574,31 @@ kept = LayaCrewRouter(agent=DisagreeingAgent(_silent), confidence_threshold=0.80
 check("gate/missing confidence still passes", kept.agent_index, 2)
 
 
+# A malformed response must not silently delegate work to the first or last agent.
+for _invalid_choice in (None, "unknown", "agent_-1", "agent_999", "agent_1_extra", 1, []):
+    def _invalid_response(state, questions, choice=_invalid_choice):
+        return {"answers": {"delegation": {"choice": choice, "confidence": 0.95}}}
+    try:
+        LayaCrewRouter(agent=MockLayaAgent(_invalid_response)).route("anything", agents)
+        check_true("choice/rejects %r" % (_invalid_choice,), False, "no error raised")
+    except ValueError as err:
+        check_true("choice/rejects %r" % (_invalid_choice,), "delegation choice" in str(err))
+
+for _invalid_index in (-1, len(agents), True, 0.5, "1"):
+    try:
+        _disagreeing_router(fallback_agent_index=_invalid_index).route("anything", agents)
+        check_true("fallback/rejects %r" % (_invalid_index,), False, "no error raised")
+    except ValueError as err:
+        check_true("fallback/rejects %r" % (_invalid_index,), "fallback_agent_index" in str(err))
+
+def _abstained_delegation(state, questions):
+    return {"answers": {"delegation": {"choice": None, "answer_confidence": 0.1}}}
+
+check("fallback/abstention can use configured agent",
+      LayaCrewRouter(agent=MockLayaAgent(_abstained_delegation), confidence_threshold=0.8,
+                     fallback_agent_index=1).route("anything", agents).agent_index, 1)
+
+
 # --------------------------------------------------------------- Results Summary
 print(f"PASS: {len(PASS)}")
 print(f"FAIL: {len(FAIL)}")

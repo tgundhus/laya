@@ -39,6 +39,11 @@ DEFAULT_TIMEOUT_S = 300.0
 _WIRE_CONTROLS = BODY_CONTROLS
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.URLError("refusing HTTP redirect; configure the server's final base URL")
+
+
 class RemoteError(RuntimeError):
     """An HTTP-level failure talking to laya-serve. ``code`` is a tool-error style slug."""
 
@@ -75,12 +80,14 @@ class RemoteRouter(Router):
         super().__init__(**router_kwargs)
         self.base_url = base_url.rstrip("/")
         parsed = urllib.parse.urlsplit(self.base_url)
-        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.query or parsed.fragment:
-            raise ValueError("base_url must be an HTTP(S) server URL without a query or fragment")
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.query or parsed.fragment
+                or parsed.username or parsed.password):
+            raise ValueError("base_url must be an HTTP(S) server URL without credentials, a query or fragment")
         self.api_key = api_key or None
         self.timeout = _timeout_from_env() if timeout is None else float(timeout)
         if not math.isfinite(self.timeout) or self.timeout <= 0:
             raise ValueError("timeout must be a finite positive number")
+        self._opener = urllib.request.build_opener(_NoRedirectHandler())
 
     # ------------------------------------------------------------------ transport
     def _request(self, path: str, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -93,7 +100,7 @@ class RemoteRouter(Router):
         req = urllib.request.Request(self.base_url + path, data=data, headers=headers,
                                      method="POST" if data is not None else "GET")
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with self._opener.open(req, timeout=self.timeout) as resp:
                 raw = resp.read()
         except urllib.error.HTTPError as exc:
             detail = _error_detail(exc)

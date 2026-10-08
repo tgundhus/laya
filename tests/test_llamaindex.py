@@ -624,6 +624,28 @@ check("gate/missing confidence still passes",
       kept.selections[0].index if hasattr(kept, "selections") else kept, 2)
 
 
+# A malformed response must not silently select the first or last candidate tool.
+for _invalid_choice in (None, "unknown", "choice_-1", "choice_999", "choice_1_extra", 1, []):
+    def _invalid_response(state, questions, choice=_invalid_choice):
+        return {"answers": {"selector": {"choice": choice, "confidence": 0.95}}}
+    try:
+        LayaSingleSelector(agent=MockLayaAgent(_invalid_response)).select(tools, "anything")
+        check_true("choice/rejects %r" % (_invalid_choice,), False, "no error raised")
+    except ValueError as err:
+        check_true("choice/rejects %r" % (_invalid_choice,), "selector choice" in str(err))
+
+for _invalid_index in (-1, len(tools), True, 0.5, "1"):
+    try:
+        LayaSingleSelector(agent=_disagree({}), fallback_index=_invalid_index).select(tools, "anything")
+        check_true("fallback/rejects %r" % (_invalid_index,), False, "no error raised")
+    except ValueError as err:
+        check_true("fallback/rejects %r" % (_invalid_index,), "fallback_index" in str(err))
+
+abstained = LayaSingleSelector(agent=_disagree({"choice": None, "answer_confidence": 0.1}),
+                              confidence_threshold=0.8, fallback_index=1).select(tools, "anything")
+check("fallback/abstention can use configured tool", abstained.selections[0].index, 1)
+
+
 # --------------------------------------------------------------- Results Summary
 print(f"PASS: {len(PASS)}")
 print(f"FAIL: {len(FAIL)}")

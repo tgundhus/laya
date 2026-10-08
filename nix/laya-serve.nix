@@ -301,6 +301,43 @@ in
       '';
     };
 
+    extraModels = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "JSON map of additional checkpoint names to paths or model IDs (LAYA_EXTRA_MODELS).";
+    };
+
+    cache = lib.mkOption {
+      type = lib.types.nullOr lib.types.bool;
+      default = null;
+      description = "Enable memory decision caching (LAYA_CACHE); cachePath enables SQLite instead.";
+    };
+
+    cachePath = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/var/lib/laya-serve/decisions.sqlite";
+      description = "SQLite decision cache path (LAYA_CACHE_PATH), within a writable service directory.";
+    };
+
+    cacheTtl = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Decision lifetime in seconds, or none for indefinite retention (LAYA_CACHE_TTL).";
+    };
+
+    cacheMaxsize = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.positive;
+      default = null;
+      description = "Maximum decisions stored (LAYA_CACHE_MAXSIZE).";
+    };
+
+    cacheRenewOnHit = lib.mkOption {
+      type = lib.types.nullOr lib.types.bool;
+      default = null;
+      description = "Renew decision retention on cache hits (LAYA_CACHE_RENEW_ON_HIT).";
+    };
+
     apiKeyFile = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
@@ -367,6 +404,18 @@ in
         LAYA_REVISION = cfg.revision;
       } // lib.optionalAttrs (cfg.defaultModel != null) {
         LAYA_DEFAULT_MODEL = cfg.defaultModel;
+      } // lib.optionalAttrs (cfg.extraModels != null) {
+        LAYA_EXTRA_MODELS = cfg.extraModels;
+      } // lib.optionalAttrs (cfg.cache != null) {
+        LAYA_CACHE = if cfg.cache then "1" else "0";
+      } // lib.optionalAttrs (cfg.cachePath != null) {
+        LAYA_CACHE_PATH = cfg.cachePath;
+      } // lib.optionalAttrs (cfg.cacheTtl != null) {
+        LAYA_CACHE_TTL = cfg.cacheTtl;
+      } // lib.optionalAttrs (cfg.cacheMaxsize != null) {
+        LAYA_CACHE_MAXSIZE = toString cfg.cacheMaxsize;
+      } // lib.optionalAttrs (cfg.cacheRenewOnHit != null) {
+        LAYA_CACHE_RENEW_ON_HIT = if cfg.cacheRenewOnHit then "1" else "0";
       } // {
         HF_HOME = "/var/lib/${cfg.stateDirectory}/huggingface";
         # torch-bin bundles its own CUDA runtime but still needs the host

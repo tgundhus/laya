@@ -38,8 +38,8 @@ FROM ${PYTHON_IMAGE} AS runtime
 ARG MODELSCOPE_MODEL=""
 ARG MODELSCOPE_REVISION="master"
 
-LABEL org.opencontainers.image.title="Laya Docker quickstart" \
-      org.opencontainers.image.source="https://github.com/tgundhus/laya" \
+LABEL org.opencontainers.image.title="Laya-Pro Docker quickstart" \
+      org.opencontainers.image.source="https://github.com/tgundhus/laya-pro" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 # torch 2.14 swaps some eager CUDA ops (bmm, topk, sum, norms) for Triton kernels that it
@@ -59,8 +59,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 RUN groupadd --gid 10001 laya \
     && useradd --uid 10001 --gid laya --create-home laya \
-    && mkdir -p /home/laya/.cache/huggingface \
-    && chown -R laya:laya /home/laya/.cache
+    && mkdir -p /home/laya/.cache/huggingface /home/laya/decisions \
+    && chown -R laya:laya /home/laya/.cache /home/laya/decisions
 
 COPY --from=build /opt/venv /opt/venv
 COPY LICENSE /usr/share/doc/laya/LICENSE
