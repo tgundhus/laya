@@ -1,0 +1,75 @@
+name: Native SDKs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-sdks-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# These lanes build source and test the committed Python fixtures. Tests requiring
+# tokenizer checkpoints or ONNX weights skip explicitly; CI never downloads them.
+env:
+  HF_HUB_OFFLINE: "1"
+  LAYA_CHECKPOINTS: ""
+  LAYA_ONNX_GRAPH: ""
+  LAYA_TYPED_ONNX_GRAPH: ""
+  LAYA_PREDICT_GOLDEN: ""
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "true"
+
+jobs:
+  java:
+    name: Java (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ["17", "21"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        if: matrix.java != '17'
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - name: Build and test on the selected JDK
+        working-directory: laya-java
+        run: >-
+          ./gradlew build --no-daemon --console=plain
+          -PtestJavaVersion=${{ matrix.java }}
+          -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
+
+  dotnet:
+    name: .NET (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: laya-dotnet
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: laya-dotnet/global.json
+      - name: Build library, samples and tests
+        run: dotnet build Laya.slnx --configuration Release
+      - name: Run SDK tests
+        run: dotnet test Laya.slnx --configuration Release --no-build
