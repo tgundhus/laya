@@ -58,10 +58,8 @@ jobs:
   deploy:
     name: docs (deploy)
     needs: build
-    # Only this repository has Pages configured (Settings -> Pages -> Source: GitHub Actions). A
-    # fork of it would try to create a deployment it is not allowed to (404) and go red on every
-    # push to main; the strict build above still runs there, so the docs are checked everywhere and
-    # published in one place.
+    # Select Settings -> Pages -> Source: GitHub Actions before deploying this fork's docs.
+    # Other repositories still run the strict build above.
     if: github.event_name != 'pull_request' && github.repository == 'tgundhus/laya-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 10

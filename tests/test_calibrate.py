@@ -360,6 +360,8 @@ with tempfile.TemporaryDirectory() as atomic_dir:
     agent.save_calibration(atomic_path)
     check("atomic/success preserves JSON format", atomic_path.read_bytes(), original_bytes)
     if os.name != "nt":
+        # A temporary synthetic calibration file tests preservation of an existing group-readable mode.
+        # codeql[py/overly-permissive-file]
         os.chmod(atomic_path, 0o640)
         agent.save_calibration(atomic_path)
         check("atomic/preserves mode", atomic_path.stat().st_mode & 0o777, 0o640)

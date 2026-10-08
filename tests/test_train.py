@@ -518,6 +518,8 @@ class EndToEndTests(unittest.TestCase):
         cls.tok = make_tokenizer()
         make_checkpoint(cls.root / "base", cls.tok)
         cls.data = cls.root / "train.jsonl"
+        # rows() generates fixed fictional tickets and labels in this temporary test directory.
+        # codeql[py/clear-text-storage-sensitive-data]
         cls.data.write_text("\n".join(json.dumps(r) for r in rows()), encoding="utf-8")
 
     def run_finetune(self, out, **overrides):

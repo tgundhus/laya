@@ -94,6 +94,11 @@ Docker and Nix deployment files passed static contract checks; this Windows envi
 not have Docker or Nix for runtime builds. Hardware-specific fast paths and the full labelled
 accuracy sweep remain outside the measurements performed here.
 
+Three CodeQL alerts were assessed statically as fixture false positives: fixed fictional billing
+text in two tests and an intentional `0640` permission-preservation test. Query-specific comments
+explain those sinks; production paths remain scanned. This triage is not a separate exhaustive
+security audit.
+
 ### English checkpoint on CPU
 
 The checkpoint is `convaiinnovations/laya` at revision
