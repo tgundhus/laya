@@ -3,6 +3,7 @@
 Text parsing, not tomllib: the floor is 3.10 and tomllib arrives in 3.11.
 """
 import ast
+import fnmatch
 import os
 import re
 import shlex
@@ -38,6 +39,25 @@ def version_tuple(text):
 
 pyproject = read("pyproject.toml")
 setup_py = read("setup.py")
+
+# An explicit package list keeps setuptools from treating assets/, research/ and notebooks/ as
+# top-level packages, but it also means a new importable subpackage can disappear from wheels
+# while editable installs and source-tree tests keep passing. Derive both sides so additions and
+# removals stay in lockstep.
+package_list = re.search(r"^packages\s*=\s*(\[[^\]]*\])", pyproject, re.M)
+check_true("setuptools/declares an explicit package list", package_list is not None)
+try:
+    declared_packages = set(ast.literal_eval(package_list.group(1))) if package_list else set()
+except (SyntaxError, ValueError):
+    declared_packages = set()
+source_packages = set()
+for package_root, _dirs, files in os.walk(os.path.join(ROOT, "laya")):
+    if "__init__.py" not in files:
+        continue
+    relative = os.path.relpath(package_root, ROOT)
+    source_packages.add(relative.replace(os.sep, "."))
+check("setuptools/packages match every importable laya package",
+      sorted(declared_packages), sorted(source_packages))
 
 requires_python = re.search(r'requires-python\s*=\s*"[>=~^]*\s*([\d.]+)"', pyproject)
 check_true("pyproject/declares requires-python", requires_python is not None)
@@ -94,6 +114,22 @@ missing_from_ci = [
     ".".join(str(p) for p in v) for v in classifier_versions if v not in ci_versions
 ]
 check("ci/tests every advertised Python version", missing_from_ci, [])
+
+# ------------------------------------------------- workflows pin every action by a full SHA
+# `.github/dependabot.yml` states the policy, and every job but `typescript-sdk` followed it. That
+# job runs `npm ci` and starts a live server, so a moved major tag executes in a privileged job --
+# the supply-chain risk the pins exist to remove. Enforced here so the next `uses:` cannot float.
+_workflow_dir = os.path.join(ROOT, ".github", "workflows")
+_unpinned = []
+for _wf_name in sorted(os.listdir(_workflow_dir)):
+    if not _wf_name.endswith((".yml", ".yaml")):
+        continue
+    _wf_text = read(os.path.join(".github", "workflows", _wf_name))
+    for _line_no, _line in enumerate(_wf_text.splitlines(), 1):
+        _uses = re.search(r"\buses:\s*(\S+)", _line)
+        if _uses and not re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", _uses.group(1)):
+            _unpinned.append("%s:%d %s" % (_wf_name, _line_no, _uses.group(1)))
+check("workflows/pin every action by SHA", _unpinned, [])
 
 # Every test in tests/ must be wired into CI workflows (ci.yml or docker.yml),
 # unless explicitly exempted with a documented rationale (#399).
@@ -160,17 +196,37 @@ def _invoked_workflow_tests(yaml_text):
                 invoked.update(re.findall(r"\btests/(test_[a-zA-Z0-9_]+\.py)\b", part))
             elif re.search(r"\bpython(?:\d+(?:\.\d+)?)?\s+.*?tests/(test_[a-zA-Z0-9_]+\.py)\b", part):
                 invoked.update(re.findall(r"\btests/(test_[a-zA-Z0-9_]+\.py)\b", part))
+            else:
+                # `unittest discover` runs a whole glob rather than naming files, so expand it
+                # against the tree. A lane that discovers `test_zh_*.py` has wired every suite
+                # the glob matches, and naming them again in the workflow would only drift.
+                found = re.search(r"\bunittest\s+discover\b.*?-s\s+tests\b"
+                                  r".*?-p\s+'?\"?([^'\" ]+)", part)
+                if found:
+                    invoked.update(fnmatch.filter(os.listdir(os.path.join(ROOT, "tests")),
+                                                  found.group(1)))
     return invoked
 
 
 docker_workflow = read(os.path.join(".github", "workflows", "docker.yml"))
-registered_test_files = _invoked_workflow_tests(workflow) | _invoked_workflow_tests(docker_workflow)
+release_workflow = read(os.path.join(".github", "workflows", "release.yml"))
+# The Linux `test` job and the release gate both invoke `scripts/test_suites.py` instead of naming
+# their suites inline, so that shared list is a source of suite names too. Without this the
+# "every suite is wired" check would fail for every suite the workflows no longer name.
+shared_suites = read(os.path.join("scripts", "test_suites.py"))
+registered_test_files = (
+    _invoked_workflow_tests(workflow)
+    | _invoked_workflow_tests(docker_workflow)
+    | set(re.findall(r"\btests/(test_[a-zA-Z0-9_]+\.py)\b", shared_suites))
+)
 
 EXEMPT_TEST_SUITES = {
     "test_local_e2e.py": "Requires local checkpoints under ~/laya_models (AGENTS.md)",
     "test_mcp_local_e2e.py": "Requires local checkpoints under ~/laya_models (AGENTS.md)",
     "test_onnx.py": "Requires onnx extra; skip-guarded on lane without it (AGENTS.md)",
     "test_fast.py": "Requires CUDA and tilelang extra (AGENTS.md)",
+    "test_fast_cpu.py": "Requires tilelang extra and a C++ compiler; optional CUDA parity",
+    "test_compile_cuda.py": "Requires CUDA; CI installs CPU-only torch",
     "test_server_example.py": "Requires cached or downloaded weights for examples/server.py",
 }
 
@@ -183,6 +239,10 @@ untested_suites = [
     if f not in EXEMPT_TEST_SUITES and f not in registered_test_files
 ]
 check("ci/wires every non-exempt test suite", untested_suites, [])
+# The point of the shared list is that CI and the publish gate run the same suites. Both invoking
+# the script is the entire mechanism, so assert neither workflow dropped back to an inline list.
+check_true("ci and the release gate share one suite list",
+           "scripts/test_suites.py" in workflow and "scripts/test_suites.py" in release_workflow, "")
 
 
 # --------------------------------------------------------------- markdown links
@@ -209,9 +269,11 @@ def _headings(path):
 _md = []
 for _dirpath, _dirnames, _filenames in os.walk("."):
     # `.pytest_cache` ships a README of its own and `.venv` is where CONTRIBUTING tells
-    # contributors to install; neither is part of the repository.
+    # contributors to install; neither is part of the repository. `.hf-cache` holds
+    # third-party dataset cards downloaded by setup_laya.sh (gitignored).
     _dirnames[:] = [d for d in _dirnames
-                    if d not in (".git", "__pycache__", "node_modules", ".pytest_cache", ".venv")]
+                    if d not in (".git", "__pycache__", "node_modules", ".pytest_cache",
+                                 ".venv", ".hf-cache")]
     _md.extend(os.path.normpath(os.path.join(_dirpath, f))
                for f in _filenames if f.endswith(".md"))
 _md = sorted(_md)
@@ -237,6 +299,19 @@ for _path in _md:
 
 check("md/no link to a file that does not exist", _broken_files, [])
 check("md/no anchor that matches no heading", _broken_anchors, [])
+
+# ------------------------------------------------- published READMEs link absolutely
+# `pyproject.toml` uses README.md as the PyPI long description, and PyPI renders it standalone, so a
+# repo-relative target 404s there; the same is true of the npm-published `sdk/typescript` and
+# `laya-ts` READMEs. The check above only proves the target exists in-repo, which is exactly why
+# this went unnoticed -- a relative link is a local success and a published failure.
+for _pub in ("README.md", "sdk/typescript/README.md", "laya-ts/README.md"):
+    if not os.path.exists(os.path.join(ROOT, _pub)):
+        continue
+    _rel = [u for _, u in re.findall(r"\[([^\]]*)\]\(([^)\s]+?)(?:\s+\"[^\"]*\")?\)", read(_pub))
+            if not u.startswith(("http://", "https://", "mailto:", "data:", "#"))]
+    check("published/%s links absolutely" % _pub, _rel, [])
+
 # ---------------------------------------------------------------- Compose layout
 # `compose.http.yaml` is an override, so it is merged onto `compose.yaml` rather than
 # read on its own. These checks are textual because the suite takes no third-party
@@ -269,6 +344,8 @@ check_true("compose.http/the server reads the same variable",
 # unreachable for the documented compose path -- `docker run -e` still works, compose does not.
 check_true("compose.http/forwards the resident-checkpoint cap",
            'LAYA_MAX_LOADED: "${LAYA_MAX_LOADED:-}"' in http)
+check_true("compose.http/forwards the FastAPI root path",
+           'LAYA_ROOT_PATH: "${LAYA_ROOT_PATH:-}"' in http)
 check_true("compose.http/shares the model cache",
            "model-cache:/home/laya/.cache/huggingface" in http)
 # The base service is what `docker compose run --rm laya` uses; publishing it a port or
@@ -292,7 +369,7 @@ check_true("compose.cuda/covers laya-serve too",
            re.search(r"^\s{2}laya-serve:", cuda, re.M) is not None,
            "compose.cuda.yaml does not mention laya-serve, so GPU serving would be CPU")
 check("compose.cuda/repeats the torch index for the base service",
-      len(re.findall(r'TORCH_INDEX: "\$\{LAYA_TORCH_INDEX:-cu128\}"', cuda)), 2)
+      len(re.findall(r'TORCH_INDEX: "\$\{LAYA_TORCH_INDEX:-cu130\}"', cuda)), 2)
 check("compose.cuda/repeats the device reservation for both services",
       len(re.findall(r"driver: nvidia", cuda)), 2)
 check_true("compose.cuda/no stale reference to a missing file",
@@ -301,8 +378,48 @@ check_true("compose.cuda/no stale reference to a missing file",
 
 # Every file the Docker workflow validates must exist.
 for name in ("compose.yaml", "compose.example.yml", "compose.cuda.yaml", "compose.http.yaml",
-             "compose.spark.yaml"):
+             "compose.spark.yaml", "compose.modelscope.yaml"):
     check_true("compose/%s exists" % name, os.path.exists(name))
+
+# The ModelScope bake is a build argument, so a deployment that wants it has to carry the
+# arguments into *both* services -- `laya-serve` is its own service and an override for `laya`
+# never reaches it, which is the same trap compose.cuda.yaml documents. And the image has to stay
+# offline: a baked snapshot is keyed by a ModelScope commit the Hub cannot confirm, so going online
+# downloads the same weights again instead of serving the baked copy.
+ms = read("compose.modelscope.yaml")
+check_true("compose.modelscope/covers laya-serve too",
+           re.search(r"^\s{2}laya-serve:", ms, re.M) is not None,
+           "compose.modelscope.yaml does not mention laya-serve, so served checkpoints come from "
+           "the Hub and a host without Hugging Face access cannot serve at all")
+# One argument selects the checkpoint, and it defaults to the multilingual one, the checkpoint
+# every Laya caller routes to without being asked.
+check("compose.modelscope/repeats the prefetch args for both services",
+      len(re.findall(r'MODELSCOPE_MODEL: "\$\{MODELSCOPE_MODEL:-multilingual\}"', ms)), 2)
+check("compose.modelscope/repeats the revision for both services",
+      len(re.findall(r'MODELSCOPE_REVISION: "\$\{MODELSCOPE_REVISION:-master\}"', ms)), 2)
+check("compose.modelscope/keeps every service on the baked cache",
+      len(re.findall(r'HF_HUB_OFFLINE: "\$\{HF_HUB_OFFLINE:-1\}"', ms)), 2)
+check_true("compose.modelscope/preloads only what can load offline",
+           'LAYA_MODELS: "${LAYA_MODELS:-multilingual}"' in ms,
+           "LAYA_PRELOAD=1 with the family-wide default would fail on the first checkpoint that "
+           "was not baked")
+
+# The default build must stay exactly what it was: no prefetch, so a plain
+# `docker build .` hits the Hub as before, and the RUN is a no-op for the empty argument.
+dockerfile_runtime = dockerfile.partition("AS runtime")[2]
+check_true("Dockerfile/prefetch args default to off",
+           re.search(r'^ARG MODELSCOPE_MODEL=""', dockerfile_runtime, re.M) is not None,
+           "a non-empty default would change every existing build")
+check_true("Dockerfile/copies the prefetch script",
+           "docker/prefetch_modelscope.py" in dockerfile, "the RUN below references a missing file")
+check_true("Dockerfile/prefetch step is conditional",
+           re.search(r'^\s*RUN if \[ -n "\$MODELSCOPE_MODEL" \]; then', dockerfile_runtime, re.M) is not None,
+           "an unconditional RUN would make every build depend on modelscope.cn")
+check_true("Dockerfile/prefetch hands the cache to the runtime user",
+           "chown -R laya:laya /home/laya/.cache" in dockerfile_runtime,
+           "the tokenizer-compatibility fix writes into the snapshot on first load, and the image "
+           "runs as UID 10001")
+check_true("docker/prefetch_modelscope.py exists", os.path.exists("docker/prefetch_modelscope.py"))
 
 
 # --------------------------------------------------------------- nix: the deployment layer
@@ -387,7 +504,9 @@ check_true("nix/module still joins models into LAYA_MODELS",
 #
 # This set is derived from the whole package, not from `laya/serve.py`. Reading serve.py alone is
 # a scope error that passed: the three runtime knobs below were invisible to it. A deployment unit
-# configures a *process*, and the process is `laya`.
+# configures a *process*. The MCP launcher and remote transport are separate entry points;
+# their exclusive variables do not configure the HTTP service. Shared helpers (mcp/device.py
+# included) still count, so excluding those two entry points does not hide device controls.
 #
 # Both regexes carry `[A-Z0-9_]` for the same reason: `LAYA_SHA256_DIGESTS`. `[A-Z_]+` matches a
 # prefix of that name, so a narrower pattern reports no gap rather than the one it cannot see.
@@ -397,7 +516,7 @@ _READ_PATTERNS = (r'environ\.get\("(LAYA_[A-Z0-9_]+)"', r'_env_bool\("(LAYA_[A-Z
                   r'environ\["(LAYA_[A-Z0-9_]+)"\]', r'_ENV_KEY = "(LAYA_[A-Z0-9_]+)"')
 
 
-def env_reads():
+def env_reads(excluded_paths=()):
     """Every `LAYA_*` name the package looks up, by walking laya/ rather than listing files."""
     found = set()
     for root, dirs, files in os.walk(os.path.join(ROOT, "laya")):
@@ -406,13 +525,17 @@ def env_reads():
             if not name.endswith(".py"):
                 continue
             rel = os.path.relpath(os.path.join(root, name), ROOT)
+            if rel.replace(os.sep, "/") in excluded_paths:
+                continue
             src = read(rel)
             for pat in _READ_PATTERNS:
                 found.update(re.findall(pat, src))
     return found
 
 
-read_names = env_reads()
+read_names = env_reads(("laya/mcp/server.py", "laya/mcp/remote.py"))
+check("nix/only the two MCP transport variables are excluded from the HTTP process",
+      sorted(env_reads() - read_names), ["LAYA_BASE_URL", "LAYA_REMOTE_TIMEOUT"])
 # An assignment only. The `models` description names `LAYA_MODELS` in prose, and prose that
 # mentions a variable sets nothing.
 assigned = sorted(set(re.findall(r'\b(LAYA_[A-Z0-9_]+)\s*=', nix_module))
@@ -431,7 +554,7 @@ check_true("nix/the derivation reaches a digit-bearing env var",
 # shell-quoting claim holds -- nothing in CI evaluates a NixOS module, so every check here is
 # textual. Listing the exception keeps the gap asserted at exactly one name.
 UNWIRED = {"LAYA_SHA256_DIGESTS"}
-check("nix/module reaches every env var laya reads",
+check("nix/module reaches every env var the HTTP process reads",
       sorted(read_names - set(assigned) - UNWIRED), [])
 # The other direction is the silent failure: a misspelled name is a perfectly good string,
 # systemd exports it, no Python ever looks at it, and the operator's setting does nothing.
@@ -470,8 +593,8 @@ def option_type(opt):
 
 # Every new knob is opt-in: unset means the unit exports nothing and the runtime's own default
 # applies, so a host that ignores them gets today's behaviour byte for byte.
-for opt in ("logLevel", "maxConcurrent", "cudaAmp", "cpuAmp", "mpsAmpMinRows",
-            "maxLoaded", "maxTokenBudget", "revision"):
+for opt in ("rootPath", "logLevel", "maxConcurrent", "cudaAmp", "cpuAmp", "mpsAmpMinRows",
+            "maxLoaded", "maxTokenBudget", "revision", "defaultModel", "idleUnloadSeconds"):
     _t = option_text(opt)
     check_true("nix/module declares %s" % opt, _t != "", "option not found")
     check_true("nix/%s is opt-in (nullOr, default null)" % opt,
@@ -480,6 +603,9 @@ for opt in ("logLevel", "maxConcurrent", "cudaAmp", "cpuAmp", "mpsAmpMinRows",
     check_true("nix/%s is guarded by a != null optionalAttrs" % opt,
                re.search(r"lib\.optionalAttrs \(cfg\.%s != null\)" % opt, nix_module) is not None,
                "the unit would export the variable even when the host left it unset")
+
+check("nix/idleUnloadSeconds accepts zero to disable unloading",
+      option_type("idleUnloadSeconds"), "lib.types.nullOr lib.types.ints.unsigned")
 
 # The same lesson as `models`, stated for the whole module: no option may carry a closed list of
 # names that somebody else validates. uvicorn checks the log level, laya checks the checkpoint
@@ -608,6 +734,39 @@ for _wf in _concurrency_workflows:
         _block != "" and _BARE_REF_GROUP.search(_block) is None,
         "a ref-only group collapses every push to main into one run",
     )
+
+# ------------------------------------------------- the eval gate is not cancelled mid-run
+# Scoped to evals.yml on purpose. A general "cancel-in-progress may only be false or name
+# pull_request" rule would also have to be right about every workflow a future change adds, and
+# nothing in the repository establishes it; the workflows that run on pull requests are already
+# covered by the per-commit group checks above.
+#
+# What is true here, and only here: no evals trigger makes an in-flight run obsolete.
+# `github.ref` is the default branch for `schedule` and for a `workflow_dispatch` on it, so the
+# weekly baseline shared a group with a manual re-run, as do two dispatches on one ref, and
+# `cancel-in-progress: true` made whichever started second kill the first. `release: published`
+# never collided: its ref is the tag (`refs/tags/<tag_name>`), so each release had its own group.
+# The job spends 60 minutes downloading weights and the dataset, and a cancelled run uploads no
+# report, so a cancellation reads as a clean gate.
+_EVALS_WORKFLOW = read(os.path.join(".github", "workflows", "evals.yml"))
+# Non-vacuity, independent of the concurrency block: if evals.yml is renamed or its triggers
+# change, this reports instead of the check below passing on a file it did not understand.
+check_true("evals.yml still declares its three triggers",
+           "schedule:" in _EVALS_WORKFLOW
+           and "release:" in _EVALS_WORKFLOW
+           and "workflow_dispatch:" in _EVALS_WORKFLOW)
+
+_EVALS_CANCEL = re.search(
+    r"(?m)^[ \t]*cancel-in-progress:\s*(.+?)\s*$", _concurrency_block(_EVALS_WORKFLOW))
+# An absent key means the Actions default, which is false, so nothing is cancelled. A bare `true`
+# is the only value that discards a run in flight.
+check_true(
+    "evals.yml/cancels no in-flight run",
+    _EVALS_CANCEL is None or _EVALS_CANCEL.group(1).strip().lower() in ("false", "no", "off"),
+    "cancel-in-progress: %s discards a 60-minute run that has already started; a cancelled run "
+    "uploads no report, so it reads as a clean gate"
+    % (_EVALS_CANCEL.group(1) if _EVALS_CANCEL else "true"),
+)
 
 # --------------------------------------------------------------- the API reference
 # `laya.__all__` is what `from laya import *` ships and what the README tells people to call, so

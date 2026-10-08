@@ -234,7 +234,10 @@ agent = laya.load("convaiinnovations/laya", on_predict_end=make_audit("acme"))
 
 ### Composition
 
-Several hooks of different kinds compose naturally; installed hooks run first, in order.
+Several hooks of different kinds compose naturally. Within one scope, `hooks=[...]` entries run in
+list order and the `on_predict_start=` / `on_predict_end=` convenience callables follow. Across
+scopes, process-wide default hooks come before an instance's hooks, and an instance's hooks before
+per-call hooks.
 
 ```python
 agent = laya.load(
@@ -287,7 +290,7 @@ or quietly makes the call worse:
 
 * A start hook's `ctx.head_max_len` *replaces* the budget for the call. What is in force before it
   is the caller's own per-call value, or the checkpoint default in `ctx.agent.cfg` -- so compare
-  against that, and writing a plain number can lower the budget a caller already set.
+  against that: writing a plain number can lower the budget a caller already set.
 * One call answers every question it carries, so size on the widest of them rather than on
   whichever happens to come first.
 * Once the options no longer fit the head, `laya/common.py` gives each of them

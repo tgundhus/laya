@@ -508,7 +508,10 @@ def make_fake():
 
     def _encode_state(state, ids, internal, **overrides):
         fake.encoded.append(state)
-        return [{"ids": [1, 2, 3], "markers": [0, 1], "qtype": 2, "state": state} for _ in ids]
+        # The per-row truncation report `predict_batch` reads (laya 0.3.29); nothing is cut here.
+        stats = {"state_tokens": 3, "state_tokens_used": 3, "state_tokens_dropped": 0, "truncated": False}
+        return [{"ids": [1, 2, 3], "markers": [0, 1], "qtype": 2, "state": state, "state_stats": stats}
+                for _ in ids]
 
     def _forward(b):
         n = b["input_ids"].shape[0]

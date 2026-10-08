@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0          # gitleaks needs history to scan every commit in the PR
       - name: gitleaks (diff)
@@ -51,8 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
       - run: pip install pip-audit
@@ -89,12 +89,16 @@ jobs:
           # the two largest installs that can exist, one without crewai and one without mcp.
           grep -v '^crewai' requirements-audit.txt > requirements-audit-without-crewai.txt
           grep -v '^mcp' requirements-audit.txt > requirements-audit-without-mcp.txt
+          # What the package and its image ship -- the core plus [serve], the one extra the
+          # Dockerfile installs -- is audited on its own too, and nothing in it may be accepted.
+          python -c 'import tomllib; p = tomllib.load(open("pyproject.toml", "rb"))["project"]; print("\n".join(p["dependencies"] + p["optional-dependencies"]["serve"]))' > requirements-audit-shipped.txt
           # pip-audit's verdict is every advisory it finds; scripts/pip_audit_policy.py gives this
           # repository's. It fails on an advisory nobody accepted, on an accepted one once a fix
           # exists, and on a dependency that could not be audited, and passes the reviewed,
           # unfixable ones in .github/accepted-advisories.toml with a warning.
           status=0
-          for req in requirements-audit-without-crewai.txt requirements-audit-without-mcp.txt; do
+          for req in requirements-audit-shipped.txt requirements-audit-without-crewai.txt \
+                     requirements-audit-without-mcp.txt; do
             report="${req%.txt}.json"
             pip-audit --strict --desc -r "$req" -f json -o "$report" || true
             if [ ! -s "$report" ]; then
@@ -103,6 +107,7 @@ jobs:
             fi
           done
           python scripts/pip_audit_policy.py --accepted .github/accepted-advisories.toml \
+            --shipped requirements-audit-shipped.json \
             requirements-audit-without-crewai.json requirements-audit-without-mcp.json || status=1
           exit $status
 
@@ -115,19 +120,19 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: python
           queries: security-extended
-      - uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
 
   supply_chain:
     name: no unsafe deserialization
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Weights must load through safetensors, never pickle
         run: |
           # torch.load / pickle execute arbitrary code during deserialization. Laya loads

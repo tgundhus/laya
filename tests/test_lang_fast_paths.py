@@ -9,6 +9,7 @@ Run: python tests/test_lang_fast_paths.py
 """
 import os
 import random
+from collections import Counter
 import sys
 import unicodedata
 
@@ -16,8 +17,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from laya import lang  # noqa: E402
 from laya.lang import (  # noqa: E402
-    _CODE_LINE, _IDENTIFIER, _JOINED, _LETTER_RUN, _NON_EN_DIACRITICS, _SCRIPT_RANGES, _SHARED_WORDS,
-    _STOP, _WORD, NON_EN_DIACRITIC_RATE, _english_rescued_by_words,
+    _CODE_LINE, _EN_COLLISION_WORDS, _EN_ONLY_WORDS, _IDENTIFIER, _JOINED, _LETTER_RUN,
+    _NON_EN_DIACRITICS, _NORDIC_OVERLAP_WORDS, _SCRIPT_RANGES, _SHARED_WORDS, _SHORT_SWEDISH_WORDS,
+    _STOP, _WORD, NON_EN_DIACRITIC_RATE, _english_rescued_by_words, _shouted, _shouted_evidence,
 )
 
 PASS, FAIL = [], []
@@ -50,16 +52,25 @@ def ref_script_counts(text):
     return counts
 
 
+# The references are the per-character code of the original project's release that Laya-Pro merged
+# (0.3.29): the same rules (Nordic overlap, short Swedish phrases, collision words counted once,
+# shouted lines), without the shortcuts. The shortcuts must give exactly what these give.
 def ref_latin_profile(text):
     words = _WORD.findall(_IDENTIFIER.sub(" ", text).replace("İ", "i").lower())
     lowered = text.lower()
     diac = sum(1 for ch in lowered if ch in _NON_EN_DIACRITICS)
     diac_rate = diac / max(1, len(lowered))
     non_english = diac_rate >= NON_EN_DIACRITIC_RATE
+    nordic_overlap = bool(set(words) & _NORDIC_OVERLAP_WORDS) and not bool(set(words) & _EN_ONLY_WORDS)
+    if 1 < len(words) < 4 and set(words) & _SHORT_SWEDISH_WORDS:
+        return {"language": "sv", "english_hits": 0, "diacritic_rate": diac_rate,
+                "looks_non_english": non_english}
     if len(words) < 4:
         return {"language": None, "english_hits": 0, "diacritic_rate": diac_rate,
-                "looks_non_english": non_english}
-    scores = {lg: sum(1 for w in words if w in sw) for lg, sw in _STOP.items()}
+                "looks_non_english": non_english or nordic_overlap}
+    counts = Counter(words)
+    scores = {lg: sum(1 if w in _EN_COLLISION_WORDS else n for w, n in counts.items() if w in sw)
+              for lg, sw in _STOP.items()}
     en = scores.get("en", 0)
     evidenced = {lg: s for lg, s in scores.items()
                  if lg != "en" and any(w not in _SHARED_WORDS for w in set(words) & _STOP[lg])}
@@ -67,25 +78,32 @@ def ref_latin_profile(text):
     language = None
     if best_lg and best >= max(2, en + 2):
         language = best_lg
+    elif (best_lg == "sv" and "inte" in words and "kan" in words
+          and words[0] in {"kan", "jag", "vi"} and en <= 1):
+        language = best_lg
     elif best_lg and non_english and best >= max(2, en):
         language = best_lg
     elif en and (not non_english or _english_rescued_by_words(words, diac_rate)):
         language = "en"
     return {"language": language, "english_hits": en, "diacritic_rate": diac_rate,
-            "looks_non_english": non_english}
+            "looks_non_english": non_english or (language is None and nordic_overlap)}
 
 
 def ref_named_prose_language(segment):
     if not segment.strip() or _CODE_LINE.search(segment):
         return None
     prose = " ".join(tok for tok in segment.split() if not _JOINED.search(tok))
-    if any(ch.islower() for ch in prose):
+    shouted = _shouted(prose)
+    if not shouted:
         prose = _LETTER_RUN.sub(lambda m: " " if m.group().isupper() else m.group(), prose)
     tokens = _WORD.findall(prose)
     if len(tokens) < 4:
         return None
-    language = ref_latin_profile(prose)["language"]
+    prof = ref_latin_profile(prose)
+    language = prof["language"]
     if language in (None, "en"):
+        return None
+    if shouted and not _shouted_evidence(tokens, language, float(prof["diacritic_rate"])):
         return None
     if len({w.lower() for w in tokens} & _STOP.get(language, set())) < 2:
         return None

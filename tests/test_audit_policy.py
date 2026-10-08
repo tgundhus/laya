@@ -132,7 +132,15 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         sys.stdout = stdout
         devnull.close()
+    # The same accepted chromadb advisory, once as an extras report and once as the shipped scope.
+    stdout, sys.stdout = sys.stdout, open(os.devnull, "w")
+    try:
+        shipped_code = policy.main(["--accepted", LIST, "--shipped", ok, ok])
+    finally:
+        sys.stdout.close()
+        sys.stdout = stdout
 check("the command passes an accepted report and fails one with a fixable advisory", codes, (0, 1))
+check("an accepted advisory in the shipped scope still fails", shipped_code, 1)
 
 with open(os.path.join(ROOT, ".github", "workflows", "security.yml"), encoding="utf-8") as fh:
     workflow = fh.read()

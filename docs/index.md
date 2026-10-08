@@ -24,6 +24,7 @@ is one copy to keep current. [Using Laya-Pro](guide.md) has the engine in detail
 | adopt Laya incrementally without granting execution permission | [Staged adoption](staged-adoption.md) |
 | give a repeated request the answer it got before, or see how close an answer is to flipping | [Decision consistency](consistency.md) |
 | route, screen or triage inside a LangChain or LangGraph app | [LangChain & LangGraph](langchain.md) |
+| run Laya from a terminal or connect its built-in MCP stdio server | [Command line and MCP server](cli-mcp.md) |
 | run the SDK or the `laya-serve` HTTP API in a container, on CPU or an NVIDIA GPU | [Docker quickstart](docker.md) |
 | build for ARM64 hosts or DGX Spark | [ARM64 and DGX Spark containers](docker-platforms.md) |
 | specialise a checkpoint for your own decisions | [Browser-agent fine-tuning example](finetune_browser_agent.md) and the [fine-tuning notebook](https://github.com/tgundhus/laya/blob/main/notebooks/laya_finetune_typed_decisions_2xT4_kaggle.ipynb) |

@@ -136,14 +136,21 @@ def _unpack(blob: bytes) -> Dict[str, Any]:
     return json.loads(raw.decode("utf-8", "surrogatepass"))
 
 
+# What a confidence gate writes on each answer for one call: the flag, the gate's state and the
+# threshold it used (see `laya.confidence.apply_confidence_gate`). The engine writes them again for
+# every call that asks, replays included, so they are never stored.
+_GATE_FIELDS = frozenset({"low_confidence", "abstention", "abstention_threshold"})
+
+
 def _storable(result: Dict[str, Any]) -> Dict[str, Any]:
-    """What is kept of a result: not `routing`, which a Router re-adds to a replay, nor the marks
-    one call's options put on its answers (`low_confidence` under `min_confidence`), which the
-    engine applies again to each call's results, replays included."""
+    """What is kept of a result: not `routing`, which a Router re-adds to a replay, nor the gate
+    state one call's `min_confidence` put on its answers, which the engine applies again to each
+    call's results, replays included."""
     payload = {k: v for k, v in result.items() if k != "routing"}
     answers = payload.get("answers")
-    if isinstance(answers, dict) and any(isinstance(a, dict) and "low_confidence" in a for a in answers.values()):
-        payload["answers"] = {q: {k: v for k, v in a.items() if k != "low_confidence"} if isinstance(a, dict) else a
+    if isinstance(answers, dict) and any(isinstance(a, dict) and not _GATE_FIELDS.isdisjoint(a)
+                                         for a in answers.values()):
+        payload["answers"] = {q: {k: v for k, v in a.items() if k not in _GATE_FIELDS} if isinstance(a, dict) else a
                               for q, a in answers.items()}
     return payload
 
@@ -155,10 +162,13 @@ def _fingerprint(agent: Any) -> List[Any]:
     cfg = getattr(agent, "cfg", None)
     if not isinstance(cfg, Mapping):
         cfg = {}
+    # `binning_map` (a fitted calibration) changes `answer_confidence` and so what a gate decides,
+    # and `option_layout` changes how options are encoded: neither shows in any other field here.
     return [__version__, getattr(agent, "model_id", None), getattr(agent, "revision", None),
             cfg.get("max_len"), cfg.get("head_max_len"),
             getattr(agent, "temperature", None), getattr(agent, "temperature_by_options", None),
-            getattr(agent, "lang_temperatures", None)]
+            getattr(agent, "lang_temperatures", None), getattr(agent, "binning_map", None),
+            cfg.get("option_layout")]
 
 
 class DecisionStore(Protocol):
