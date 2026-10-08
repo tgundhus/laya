@@ -265,6 +265,35 @@ check("DecisionCache/cache_info keys", list(laya.DecisionCache().cache_info()),
       ["size", "maxsize", "hits", "misses", "conflicts", "coalesced", "errors"])
 check_true("DecisionCache/accepted as a hook",
            len(__import__("laya.hooks", fromlist=["normalise_hooks"]).normalise_hooks([laya.DecisionCache()])) == 1)
+
+# A bundle can hold several checkpoints at the same revision. The automatic cache fingerprint
+# distinguishes their subfolders, while a caller's fixed fingerprint keeps its explicit policy.
+_bundle_agent = type("BundledAgent", (), {"model_id": "local/bundle", "revision": "r1", "subfolder": "english"})()
+_bundle_ctx = PredictContext(states=["state"], questions={"q": {"type": "noul", "instructions": "holds?"}},
+                             agent=_bundle_agent)
+_bundle_cache = laya.DecisionCache()
+_english_key = _bundle_cache._keys(_bundle_ctx, _bundle_ctx.states, False)[0]
+_fixed_cache = laya.DecisionCache(fingerprint="shared-policy")
+_fixed_key = _fixed_cache._keys(_bundle_ctx, _bundle_ctx.states, False)[0]
+_bundle_agent.subfolder = "multilingual"
+check_true("DecisionCache/automatic fingerprints distinguish bundled checkpoints",
+           _bundle_cache._keys(_bundle_ctx, _bundle_ctx.states, False)[0] != _english_key)
+check("DecisionCache/a fixed fingerprint still controls cross-checkpoint replay",
+      _fixed_cache._keys(_bundle_ctx, _bundle_ctx.states, False)[0], _fixed_key)
+_numeric_ctx = PredictContext(states=["state"], questions={1: {"type": "choice", "instructions": "pick",
+                                                               "criteria": {7: "first", "7": "second"}}})
+_numeric_key = _bundle_cache._keys(_numeric_ctx, _numeric_ctx.states, False)[0]
+_numeric_ctx.questions = {"1": _numeric_ctx.questions[1]}
+check_true("DecisionCache/numeric and string question ids are distinct requests",
+           _bundle_cache._keys(_numeric_ctx, _numeric_ctx.states, False)[0] != _numeric_key)
+
+from laya.train import optimizer_updates, update_budget_message  # noqa: E402
+
+for param in ("n_items", "micro_batch", "grad_accum", "epochs"):
+    check_param("optimizer_updates", optimizer_updates, param, inspect.Parameter.empty)
+for param in ("n_train", "config"):
+    check_param("update_budget_message", update_budget_message, param, inspect.Parameter.empty)
+check("optimizer_updates/counts a final partial accumulation", optimizer_updates(9, 2, 3, 2), 4)
 for method in ("get", "add", "renew", "prune", "__len__", "clear", "close"):
     check_true("DecisionStore/%s declared" % method, hasattr(laya.DecisionStore, method))
 for method, params in (("get", ["self", "key", "now"]), ("add", ["self", "items", "now"]),
@@ -457,6 +486,11 @@ Q_ORDER_A = {"ask": {"type": "choice", "instructions": "What does the customer w
 Q_ORDER_B = {"ask": {"type": "choice", "instructions": "What does the customer want?",
                      "criteria": {"other": CRITERIA["other"], "refund": CRITERIA["refund"],
                                   "cancel": CRITERIA["cancel"]}}}
+check_true("Router batching/numeric and string question ids keep distinct schemas",
+           _question_schema({1: Q_ORDER_A["ask"]}) != _question_schema({"1": Q_ORDER_A["ask"]}))
+check_true("Router batching/numeric and string choice labels keep distinct schemas",
+           _question_schema({"ask": {"type": "choice", "criteria": {7: "first"}}})
+           != _question_schema({"ask": {"type": "choice", "criteria": {"7": "first"}}}))
 BATCH = ["I was charged twice for the same invoice.",
          "The app crashes every time I open the export screen.",
          "Where do I change my notification settings?"]

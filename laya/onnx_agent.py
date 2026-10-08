@@ -99,6 +99,7 @@ class ONNXAgent(HookRegistry):
         self._hooks_lock = threading.RLock() if not hooks_concurrent else None
         self._hooks_mutex = threading.Lock()
         self.model_id = model_id_or_path
+        self.subfolder = subfolder
 
         import onnxruntime as ort
         from transformers import AutoTokenizer
@@ -157,8 +158,12 @@ class ONNXAgent(HookRegistry):
         # Load Tokenizer.  Keep this compatibility fix in sync with Agent: checkpoints
         # produced by newer Transformers versions can contain TokenizersBackend or a list-valued
         # extra_special_tokens field that older loaders cannot parse.
-        from .agent import _fix_tokenizer_config
+        from .agent import _checkpoint_signature, _fix_tokenizer_config
         _fix_tokenizer_config(model_dir)
+        source_weights = os.path.join(model_dir, "model.safetensors")
+        source_artifact = source_weights if os.path.isfile(source_weights) else onnx_path
+        self._checkpoint_signature = (_checkpoint_signature(model_dir, source_artifact, expected_sha256)
+                                      if self.revision is None else None)
         tok_dir = os.path.join(model_dir, "tokenizer")
         self.tok = AutoTokenizer.from_pretrained(tok_dir if os.path.exists(tok_dir) else self.cfg.get("encoder"))
 
@@ -784,12 +789,22 @@ class ONNXAgent(HookRegistry):
 
                 b = collate_items(per_state_items, self.tok.pad_token_id)
 
+                marker_pos = b["marker_pos"].numpy().astype(np.int64)
+                marker_mask = b["marker_mask"].numpy().astype(bool)
+                if marker_pos.shape[1] < 2:
+                    # The exported head traces topk(2), including when an eager one-option
+                    # forward would pad its second probability with zero. Supply the same
+                    # masked second slot; decoding still uses each question's own width.
+                    width = ((0, 0), (0, 2 - marker_pos.shape[1]))
+                    marker_pos = np.pad(marker_pos, width)
+                    marker_mask = np.pad(marker_mask, width)
+
                 # Prepare ONNX inputs as numpy arrays
                 ort_inputs = {
                     "input_ids": b["input_ids"].numpy().astype(np.int64),
                     "attention_mask": b["attention_mask"].numpy().astype(np.int64),
-                    "marker_pos": b["marker_pos"].numpy().astype(np.int64),
-                    "marker_mask": b["marker_mask"].numpy().astype(bool),
+                    "marker_pos": marker_pos,
+                    "marker_mask": marker_mask,
                     "qtype": b["qtype"].numpy().astype(np.int64),
                 }
 

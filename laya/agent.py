@@ -162,6 +162,46 @@ def _verify_compatibility(model: torch.nn.Module, cfg: Dict, weights: Dict[str, 
 
 _TOKENIZERS: Dict[tuple, Any] = {}
 _TOKENIZERS_LOCK = threading.Lock()
+_TOKENIZERS_MAX = 16
+
+
+def _tokenizer_files(tok_dir: str):
+    with os.scandir(tok_dir) as entries:
+        files = []
+        for entry in entries:
+            if entry.is_file():
+                stat = entry.stat()
+                files.append((entry.name, stat.st_size, stat.st_mtime_ns, stat.st_ino))
+    return tuple(sorted(files))
+
+
+def _checkpoint_signature(model_dir: str, artifact: str, expected=None):
+    """Load-time identity for an unversioned local checkpoint, without reading its weights again."""
+    if expected is None:
+        raw = os.environ.get("LAYA_SHA256_DIGESTS", "").strip()
+        expected = json.loads(raw) if raw else {}
+    expected = expected or {}
+    files = [("rl_agent_config.json", os.path.join(model_dir, "rl_agent_config.json")),
+             (os.path.basename(artifact), artifact)]
+    encoder_config = os.path.join(model_dir, "encoder", "config.json")
+    if os.path.isfile(encoder_config):
+        files.append(("encoder/config.json", encoder_config))
+    tok_dir = os.path.join(model_dir, "tokenizer")
+    if os.path.isdir(tok_dir):
+        files.extend(("tokenizer/" + name, os.path.join(tok_dir, name)) for name, *_ in _tokenizer_files(tok_dir))
+    signature = []
+    for name, path in files:
+        digest = expected.get(name)
+        if path == artifact and not name.endswith(".safetensors"):
+            digest = expected.get("onnx", expected.get("onnx_path"))
+            if digest is None and os.path.realpath(path) == os.path.realpath(os.path.join(model_dir, name)):
+                digest = expected.get(name)
+        if digest is not None:
+            signature.append([name, "sha256", str(digest).strip().lower()])
+        else:
+            stat = os.stat(path)
+            signature.append([name, "stat", stat.st_size, stat.st_mtime_ns, stat.st_ino])
+    return signature
 
 class _InferenceGate:
     """Read-write synchronization gate protecting shared model device placement (#649).
@@ -227,9 +267,10 @@ def _load_tokenizer(tok_dir: str, cfg: Dict) -> Any:
     read-only during inference, so one instance is shared by every Agent that wants the same
     directory -- including an Agent the Router has rebuilt after eviction.
 
-    Keyed on the tokenizer directory and its mtime, so a re-download or a config rewritten by
-    `_fix_tokenizer_config()` still produces a fresh parse. Non-directory sources (a hub id)
-    are not cached, so a caller cannot pin a stale remote revision.
+    Keyed on the tokenizer directory and its files' metadata, so changing a vocabulary or
+    tokenizer.json without rewriting the config still produces a fresh parse. The process keeps
+    at most 16 parsed tokenizers; Agents using an evicted one retain their own reference.
+    Non-directory sources (a hub id) are not cached.
     """
     from transformers import AutoTokenizer
 
@@ -237,16 +278,23 @@ def _load_tokenizer(tok_dir: str, cfg: Dict) -> Any:
         return AutoTokenizer.from_pretrained(cfg.get("encoder"))
 
     try:
-        stamp = (os.path.abspath(tok_dir), os.path.getmtime(os.path.join(tok_dir, "tokenizer_config.json")))
+        stamp = (os.path.normcase(os.path.realpath(tok_dir)), _tokenizer_files(tok_dir))
     except OSError:
         return AutoTokenizer.from_pretrained(tok_dir)
 
     with _TOKENIZERS_LOCK:
-        cached = _TOKENIZERS.get(stamp)
+        cached = _TOKENIZERS.pop(stamp, None)
         if cached is not None:
+            _TOKENIZERS[stamp] = cached
             return cached
         tokenizer = AutoTokenizer.from_pretrained(tok_dir)
+        # A changed directory replaces its older parse rather than retaining every revision.
+        for prior in list(_TOKENIZERS):
+            if prior[0] == stamp[0]:
+                del _TOKENIZERS[prior]
         _TOKENIZERS[stamp] = tokenizer
+        while len(_TOKENIZERS) > _TOKENIZERS_MAX:
+            del _TOKENIZERS[next(iter(_TOKENIZERS))]
         return tokenizer
 
 
@@ -642,6 +690,8 @@ class Agent(HookRegistry):
             raise FileNotFoundError(
                 f"Incompatible model: 'model.safetensors' not found in {model_id_or_path!r}."
             )
+        self._checkpoint_signature = (_checkpoint_signature(model_dir, weights_path, expected_sha256)
+                                      if self.revision is None else None)
 
         # 1. Device resolution with automatic fallback
         if isinstance(device, str) and device.strip().lower() == "auto":

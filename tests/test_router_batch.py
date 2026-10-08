@@ -281,6 +281,60 @@ def test_equal_questions_with_different_option_order_score_separately(fake_agent
     assert orders == [["zulu", "alpha"], ["alpha", "zulu"]]
 
 
+@pytest.mark.parametrize("numeric_id,string_id,numeric_label,string_label", [
+    (1, "1", "first", "first"),
+    ("intent", "intent", 7, "7"),
+])
+def test_typed_question_and_choice_keys_keep_their_own_batch_answers(
+        numeric_id, string_id, numeric_label, string_label):
+    calls = []
+
+    class Agent:
+        def predict_batch(self, states, questions, batch_size=None):
+            calls.append(list(states))
+            answers = {qid: {"type": "choice", "choice": next(iter(question["criteria"])),
+                             "probabilities": {key: 1.0 for key in question["criteria"]}}
+                       for qid, question in questions.items()}
+            return [{"answers": answers, "usage": {}} for _ in states]
+
+    numeric = {numeric_id: {"type": "choice", "instructions": "Pick one",
+                            "criteria": {numeric_label: "first option"}}}
+    string = {string_id: {"type": "choice", "instructions": "Pick one",
+                          "criteria": {string_label: "first option"}}}
+    router = Router()
+    router.attach("english", Agent())
+    results = router.predict_batch([
+        {"state": "one", "questions": numeric, "model": "english"},
+        {"state": "two", "questions": string, "model": "english"},
+        {"state": "three", "questions": numeric, "model": "english"},
+    ])
+    assert calls == [["one", "three"], ["two"]]
+    assert [list(result["answers"]) for result in results] == [[numeric_id], [string_id], [numeric_id]]
+    assert [list(next(iter(result["answers"].values()))["probabilities"]) for result in results] == [
+        [numeric_label], [string_label], [numeric_label],
+    ]
+
+
+def test_renderable_criteria_with_numeric_keys_share_their_rendered_schema(fake_agent):
+    from laya.router import _question_schema
+
+    class Description:
+        def __str__(self):
+            return "first option"
+
+    numeric = {1: {"type": "choice", "instructions": "Pick one", "criteria": {7: Description()}}}
+    rendered = {1: {"type": "choice", "instructions": "Pick one", "criteria": {7: "first option"}}}
+    assert isinstance(_question_schema(numeric), str)
+    assert _question_schema(numeric) == _question_schema(rendered)
+    _, calls = fake_agent
+    results = Router().predict_batch([
+        {"state": "one", "questions": numeric, "model": "english"},
+        {"state": "two", "questions": rendered, "model": "english"},
+    ])
+    assert [result["answers"]["seen"] for result in results] == ["one", "two"]
+    assert [call[1] for call in calls] == [["one", "two"]]
+
+
 def _lang_recording_router(monkeypatch, lang_temperatures):
     """A Router over a fake agent that records the `lang` each batch call received."""
     import laya.agent

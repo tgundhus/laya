@@ -386,7 +386,8 @@ NOTES.append("compose/%d of %d pinned defaults are off-row and cleared by a comm
 #    no Compose file here can select MPS. The day one does, this check fails and the decision has
 #    to be made again rather than quietly missing a name.
 agent_src = read(os.path.join("laya", "agent.py"))
-mps_names = sorted(set(NAME.findall(agent_src)) - set(names))
+# Checkpoint digests identify loaded artifacts; they do not select precision.
+mps_names = sorted(set(NAME.findall(agent_src)) - set(names) - {"LAYA_SHA256_DIGESTS"})
 check_true("core/MPS names are the only runtime names excluded", mps_names == ["LAYA_MPS_AMP_MIN_ROWS"],
            mps_names)
 devices = set()

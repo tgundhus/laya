@@ -23,7 +23,7 @@ sys.path.insert(0, ROOT)
 import laya  # noqa: E402
 import laya.consistency as consistency  # noqa: E402
 from laya import DecisionCache, Router, decision_margins  # noqa: E402
-from laya.agent import Agent  # noqa: E402
+from laya.agent import Agent, _checkpoint_signature  # noqa: E402
 from laya.onnx_agent import ONNXAgent  # noqa: E402
 
 PASS, FAIL = [], []
@@ -198,6 +198,46 @@ check("fingerprint/new calibration starts fresh decisions", len(en.calls), 2)
 en.revision = "r2"
 r.predict(STATE, Q)
 check("fingerprint/new revision starts fresh decisions", len(en.calls), 3)
+en.subfolder = "multilingual"
+r.predict(STATE, Q)
+check("fingerprint/another checkpoint subfolder starts fresh decisions", len(en.calls), 4)
+with tempfile.TemporaryDirectory() as directory:
+    config_path = os.path.join(directory, "rl_agent_config.json")
+    weights_path = os.path.join(directory, "model.safetensors")
+    with open(config_path, "w") as file:
+        file.write("{}")
+    with open(weights_path, "wb") as file:
+        file.write(b"first weights")
+    local = CountingAgent()
+    local.model_id, local.revision = directory, None
+    local._checkpoint_signature = _checkpoint_signature(directory, weights_path, {})
+    local_cache = DecisionCache()
+    local_router, _, _ = router_with(local_cache, english=local)
+    local_router.predict(STATE, Q)
+    with open(weights_path, "wb") as file:
+        file.write(b"replacement weights")
+    local._checkpoint_signature = _checkpoint_signature(directory, weights_path, {})
+    local_router.predict(STATE, Q)
+    check("fingerprint/replacing a local checkpoint starts fresh decisions", len(local.calls), 2)
+    encoder_dir = os.path.join(directory, "encoder")
+    os.mkdir(encoder_dir)
+    encoder_path = os.path.join(encoder_dir, "config.json")
+    with open(encoder_path, "w") as file:
+        file.write('{"hidden_act":"gelu"}')
+    local._checkpoint_signature = _checkpoint_signature(directory, weights_path, {})
+    local_router.predict(STATE, Q)
+    with open(encoder_path, "w") as file:
+        file.write('{"hidden_act":"relu"}')
+    stat = os.stat(encoder_path)
+    os.utime(encoder_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+    local._checkpoint_signature = _checkpoint_signature(directory, weights_path, {})
+    local_router.predict(STATE, Q)
+    check("fingerprint/a local encoder config change starts fresh decisions", len(local.calls), 4)
+    pinned_signature = _checkpoint_signature(directory, weights_path, {"model.safetensors": "a" * 64})
+    with open(weights_path, "wb") as file:
+        file.write(b"metadata changed")
+    check("fingerprint/a verified artifact digest outranks volatile file metadata",
+          _checkpoint_signature(directory, weights_path, {"model.safetensors": "a" * 64}), pinned_signature)
 pinned = DecisionCache(fingerprint="policy-v1")
 r, en, _ = router_with(pinned)
 r.predict(STATE, Q)
@@ -227,6 +267,23 @@ r.predict("one", Q)
 check("maxsize/the oldest decision left first", len(en.calls), 4)
 r.predict("three", Q)
 check("maxsize/newer decisions stay", len(en.calls), 4)
+
+cache = DecisionCache(maxsize=2, ttl=lambda questions, result: 1 if result["answers"]["billing"]["noul"] < 0.5 else 100)
+r, en, _ = router_with(cache)
+r.predict("live", Q)
+en.answer = 0.2
+r.predict("short-lived", Q)
+clock.t += 2
+en.answer = 0.7
+r.predict("fresh", Q)
+r.predict("live", Q)
+check("maxsize/expired entries are reclaimed before a live decision is evicted", len(en.calls), 3)
+check("maxsize/reclaiming expired entries keeps the bound", cache.cache_info()["size"], 2)
+
+memory = consistency._MemoryStore(2)
+memory.add([(b"expired", b"value", clock.t + 1)], clock.t)
+memory.renew(b"expired", clock.t + 100, clock.t + 2)
+check("renew/memory does not resurrect a decision that already expired", memory.get(b"expired", clock.t + 2), None)
 
 cache = DecisionCache(ttl=10)
 r, en, _ = router_with(cache)
@@ -267,6 +324,49 @@ with warnings.catch_warnings(record=True) as caught:
 check("json/the caller still gets the result", out["extra"], {1, 2})
 check("json/a result that cannot be replayed exactly is not cached", len(en.calls), 2)
 check("json/warned once", sum("not plain JSON" in str(w.message) for w in caught), 1)
+
+
+class LabelAgent(CountingAgent):
+    def predict_batch(self, states, questions, batch_size=None, **overrides):
+        results = super().predict_batch(states, questions, batch_size, **overrides)
+        for result in results:
+            result["answers"] = {
+                qid: {"type": "choice", "choice": next(iter(question["criteria"])),
+                      "probabilities": {label: 1.0 / len(question["criteria"]) for label in question["criteria"]}}
+                for qid, question in questions.items()}
+            result["extra"] = ("tuple", {False: "false", None: "none", 1.5: "decimal"})
+        return results
+
+
+class RenderableDescription:
+    def __str__(self):
+        return "first"
+
+
+numeric_schema = {1: {"type": "choice", "instructions": "Choose a label", "criteria": {7: "first", "7": "second"}}}
+string_schema = {"1": numeric_schema[1]}
+for label, make in (("memory", lambda path: DecisionCache()), ("sqlite", lambda path: DecisionCache(path))):
+    with tempfile.TemporaryDirectory() as directory:
+        cache = make(os.path.join(directory, "typed.sqlite"))
+        r, en, _ = router_with(cache, english=LabelAgent())
+        first = r.predict(STATE, numeric_schema, model="english")
+        replay = r.predict(STATE, numeric_schema, model="english")
+        check("json/%s: numeric keys and tuples replay without changing their types" % label, replay, first)
+        check("json/%s: numeric keys hit the cache" % label, len(en.calls), 1)
+        r.predict(STATE, string_schema, model="english")
+        check("json/%s: a string question id is a different schema" % label, len(en.calls), 2)
+        r.predict(STATE, {1: {**numeric_schema[1], "criteria": {"7": "first", 7: "second"}}}, model="english")
+        check("json/%s: numeric and string choice labels keep distinct keys" % label, len(en.calls), 3)
+        descriptor = RenderableDescription()
+        r.predict(STATE, {1: {**numeric_schema[1], "criteria": {7: descriptor, "7": "second"}}}, model="english")
+        check("json/%s: typed request keys retain renderable descriptor tolerance" % label, len(en.calls), 3)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            value = cache._encode({"answers": {1: {"type": "choice", "description": descriptor}}})
+        check("json/%s: typed result payloads still refuse a non-JSON object" % label, value, None)
+        check("json/%s: refusing a non-JSON typed result warns once" % label,
+              sum("not plain JSON" in str(w.message) for w in caught), 1)
+        cache.close()
 
 # --------------------------------------------------------------- Router.predict_batch
 cache = DecisionCache()
@@ -910,6 +1010,27 @@ check("fail-open/an undecodable decision is counted and warned about", (cache.ca
 check("fail-open/the new decision replaces the undecodable one", r.predict(STATE, Q)["answers"]["billing"]["noul"],
       0.7)
 check("fail-open/and is replayed from then on", len(en.calls), 2)
+
+for malformed in (b"j[]", b"jnull", b"j42", b'j{"answers":[]}', b'j{"answers":{},"usage":[]}',
+                  b'j{"answers":{},"usage":{"input_tokens":[1]}}',
+                  b'j{"answers":{},"usage":{"output_tokens":"bad"}}',
+                  b'j{"answers":{},"usage":{"input_tokens":NaN}}',
+                  b'j{"answers":{"billing":[]}}', b'j{"answers":{"billing":null}}',
+                  b'j{"answers":{"billing":{"probabilities":[]}}}',
+                  b'j{"answers":{"billing":{"legend":[]}}}',
+                  b'q{"answers":{},"usage":{}}'):
+    spy = SpyStore()
+    cache = DecisionCache(store=spy)
+    r, en, _ = router_with(cache)
+    r.predict(STATE, Q)
+    for key, (_, expires_at) in list(spy.data.items()):
+        spy.data[key] = (malformed, expires_at)
+    out, warned = quietly(lambda: r.predict(STATE, Q, min_confidence=0.9))
+    check("fail-open/foreign JSON %r is recomputed" % malformed,
+          (len(en.calls), out["answers"]["billing"]["noul"]), (2, 0.7))
+    check("fail-open/foreign JSON %r is counted once" % malformed, cache.cache_info()["errors"], 1)
+    r.predict(STATE, Q)
+    check("fail-open/foreign JSON %r is replaced" % malformed, len(en.calls), 2)
 
 # --------------------------------------------------------------- SQLite layout
 with tempfile.TemporaryDirectory() as tmp:

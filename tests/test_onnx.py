@@ -73,6 +73,20 @@ def test_onnx_graph_runs_at_any_batch(exported):
 
 
 @pytest.mark.skipif(not HAS_ONNX, reason="onnx and onnxruntime are required")
+def test_onnx_single_option_parity(exported):
+    """A traced TopK(2) graph accepts single-option choice and score rows through ONNXAgent."""
+    onnx_path, agent_pt = exported
+    agent_onnx = ONNXAgent(MODEL_ID, onnx_path)
+    for kind, criteria in (("choice", {"billing": "invoices and refunds"}), ("score", ["not urgent"])):
+        questions = {"q": {"type": kind, "instructions": "Classify this request", "criteria": criteria}}
+        eager = agent_pt.predict("Please refund the duplicate charge.", questions)["answers"]["q"]
+        exported_answer = agent_onnx.predict("Please refund the duplicate charge.", questions)["answers"]["q"]
+        assert exported_answer["probabilities"] == eager["probabilities"]
+        np.testing.assert_allclose(exported_answer["action"]["act_probability"],
+                                   eager["action"]["act_probability"], atol=5e-3)
+
+
+@pytest.mark.skipif(not HAS_ONNX, reason="onnx and onnxruntime are required")
 def test_onnx_numerical_parity(exported):
     """Verify that PyTorch and ONNX agents produce identical outputs for all 3 question types."""
     onnx_path, agent_pt = exported

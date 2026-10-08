@@ -227,11 +227,14 @@ def _detect(state: Any) -> Dict[str, Any]:
 def _question_schema(questions: Dict[str, Any]) -> str:
     """Order-sensitive signature of a question schema, for sharing forward passes.
 
-    sort_keys=False keeps insertion order significant at every nesting level, because
-    option order is positional in render_options. default=str matches render_criterion's
-    tolerance, so schemas that render identically still share a group.
+    Option order is positional, and question ids and choice labels retain their key types
+    in the answer. Use the decision cache's typed signature so numeric and string keys
+    cannot share a group and return one another's labels. Renderable descriptors still
+    use str(), matching render_criterion.
     """
-    return json.dumps(questions, sort_keys=False, ensure_ascii=False, default=str)
+    from .consistency import _canonical
+
+    return _canonical(questions).decode("ascii")
 
 
 # Subtags that mean "the English checkpoint can read this". Routing needs one bit -- is this
