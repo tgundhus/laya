@@ -552,7 +552,7 @@ router.hooks().addHook(new Hook() {
 | a throwing `on_evict` hook fails `Router.close()` | every freed checkpoint still receives its event; later failures are attached to the first as suppressed exceptions |
 | calling back into the router from `on_evict` **during `close()`** | throws `this Router is closed`: `close()` marks the router closed before unloading |
 | `concurrent(false)` with an `AsyncHook` | refused before the callback runs; use `concurrent(true)` for executor callbacks |
-| adding states to a batch request context | refused before inference: each request must contain exactly one state |
+| adding states to a batch request context | refused when inference is required; a complete skipped result bypasses inference |
 
 `on_route` carries its own context, not the predict pair's, so `runId` differs between them. Correlate
 on the model name. Route hooks observe the chosen model through `ctx.model()` and cannot replace it.
