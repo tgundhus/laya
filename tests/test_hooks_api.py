@@ -1105,7 +1105,10 @@ for _java_file, _java_method, _java_return, _java_overloads in (
             "List<?> states, Map<String, Question> questions",
             "List<?> states, Map<String, Question> questions, RouteOptions options",
             "List<Request> requests",
-            "List<Request> requests, int batchSize, boolean sortByLength"]),):
+            "List<Request> requests, int batchSize, boolean sortByLength"]),
+        ("Shortlist.java", "predictTournament", "Tournament", [
+            "Predictor predictor, Object state, Map<String, Question> questions, int groupSize",
+            "Predictor predictor, Object state, Map<String, Question> questions"])):
     with open(os.path.join(_java_source_dir, _java_file), encoding="utf-8") as _java_handle:
         _java_source = _java_handle.read()
     _java_pattern = r"public\s+(?:static\s+)?%s\s+%s\((.*?)\)\s*\{" % (
