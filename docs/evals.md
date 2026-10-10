@@ -29,6 +29,119 @@ Exit codes: `0` on success, `1` when a threshold or a baseline tolerance fails, 
 usage error. `run` prints the overall metrics and any requested slices to stdout, and writes
 the full report and a Markdown summary when `--json` / `--markdown` are given.
 
+## Comparing a student with repeated teacher decisions
+
+When a teacher gives different answers to the same input, a single saved answer
+does not describe its repeatability. `compare_agreement` compares a student and
+an independent teacher repeat against one fixed reference teacher observation.
+It takes three saved runs and needs no model weights or teacher service:
+
+```bash
+laya-evals agreement reference.json repeat.json student.json \
+    --bootstrap-samples 2000 --seed 0 --json agreement.json
+```
+
+Without `--json`, the command writes the report to stdout. `--seed` controls only
+the bootstrap, not model generation. Success exits `0`; malformed or misaligned
+runs exit `2`. This command does not apply a replacement or quality gate.
+
+Each input is a JSON object with the following shape:
+
+```json
+{
+  "schema": "laya-agreement-run/1",
+  "run_id": "teacher-reference",
+  "provenance": {
+    "model": "teacher-checkpoint",
+    "revision": null,
+    "settings": {"temperature": 0.7, "prompt_template": "Choose one label."},
+    "seed": 42
+  },
+  "cases": [{
+    "id": "ticket-001",
+    "state": "I was charged twice.",
+    "questions": {"route": {
+      "type": "choice",
+      "instructions": "Select the team responsible for this request.",
+      "criteria": ["billing", "support"]
+    }},
+    "answers": {"route": "billing"},
+    "language": "en",
+    "tags": ["duplicate-charge"]
+  }]
+}
+```
+
+Use a distinct `run_id` for each observation run. All three runs must contain
+exactly the same unique case IDs, states, question definitions, language and tags;
+row order may differ. A state must be non-null JSON. Question definitions preserve option order and accept
+non-empty criteria dictionaries or lists of distinct string labels. Answers must
+cover every question. A student answer may be `null` for abstention; teacher
+answers must be labels. Missing cases, unknown labels, non-finite JSON values and
+duplicate JSON object keys in CLI inputs are errors, rather than omitted samples.
+
+The two teacher runs must declare identical model, revision and settings. Put
+sampling parameters and the prompt template in `settings`, and repetition seeds
+outside it. Other metadata, such as the dataset revision and generation script,
+is preserved. Record immutable model revisions when available; explicitly use
+`null` when unknown. The report flags unknown revisions but cannot verify that
+the recorded provenance is accurate or that the teacher calls were independent.
+Input object order is significant, matching Laya's serialization of structured
+states and questions; keep it identical across the runs.
+
+To run a local student after validating the teacher records:
+
+```python
+import json
+import laya
+from laya.evals import evaluate_agreement
+
+with open("reference.json", encoding="utf-8") as handle:
+    reference = json.load(handle)
+with open("repeat.json", encoding="utf-8") as handle:
+    repeat = json.load(handle)
+revision = "YOUR_CHECKPOINT_COMMIT"
+with laya.Router(device="cpu", revision=revision) as runner:
+    report = evaluate_agreement(
+        runner, reference, repeat, model="english",
+        student_provenance={
+            "model": "convaiinnovations/laya", "revision": revision,
+            "settings": {"device": "cpu"},
+        },
+    )
+print(report["overall"])
+```
+
+The runner uses the same `predict(state, questions, model=...)` protocol as the
+labelled harness (for example, `laya.Router`). Language and tags are slice metadata;
+configure the runner's language policy and record it in student provenance. Inputs are
+copied before inference. Runner failures propagate; invalid or incomplete outputs
+raise `EvalError`. A choice flagged `abstention="abstained"` becomes a null
+observation, while its underlying choice must still be a valid label.
+
+The separate `laya-agreement-report/1` report records provenance, input hashes,
+individual paired decisions and rates sliced by question ID, language and tag.
+For every decision, teacher repeat agreement is `repeat == reference`, student
+agreement is `student == reference`, and the paired delta is their difference.
+All rates use the full decision count: abstentions contribute zero agreement and
+reduce `student_coverage`. The 95% percentile interval resamples whole case IDs,
+keeping their questions together, and recomputes the ratio of decision sums. It
+is deterministic for fixed inputs, seed and bootstrap count (100–100000). With
+fewer than two cases the interval is `null`. Slice rates have no intervals.
+
+Agreement is not accuracy, and teacher repeatability is not a theoretical ceiling.
+Both models can agree on a wrong answer. The interval describes variation across
+the supplied cases with their saved observations; it does not capture additional
+teacher generations and assumes independent case IDs. Repeated or related inputs
+can invalidate it. An interval containing zero does not establish equivalence.
+Inspect slices and individual decisions for label skew, and use labelled evals
+for correctness or calibration claims.
+
+[`examples/evals/teacher_agreement.py`](https://github.com/tgundhus/Laya-Pro/blob/main/examples/evals/teacher_agreement.py)
+replays two published teacher observations from a pinned public dataset against
+a local Laya checkpoint, saving the three runs and their report. Its small fixed
+sample demonstrates the workflow, not deployment readiness.
+
 ## Attributing shortlist errors
 
 For a labelled high-cardinality choice set, `laya.evals_shortlist.evaluate_shortlist`

@@ -119,6 +119,7 @@ PYTEST_SUITES = [
     "tests/test_truncation_direction.py",
     "tests/test_compile.py",
     "tests/test_finetune_entrypoints.py",
+    "tests/test_evals_agreement.py",
 ]
 
 
