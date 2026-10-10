@@ -55,6 +55,7 @@ services:
       # third checkpoint routing can choose on demand, and a cap below it reloads one per switch.
       LAYA_MAX_LOADED: "${LAYA_MAX_LOADED:-}"
       LAYA_EXTRA_MODELS: "${LAYA_EXTRA_MODELS:-}"
+      LAYA_IDLE_UNLOAD_SECONDS: "${LAYA_IDLE_UNLOAD_SECONDS:-}"
       # Decision caching is opt-in. A path under /home/laya/decisions persists in its own volume.
       LAYA_CACHE: "${LAYA_CACHE:-0}"
       LAYA_CACHE_PATH: "${LAYA_CACHE_PATH:-}"
@@ -69,6 +70,8 @@ services:
       # as 422. The SDK integrations quote 8192 because that is this service's default, so the
       # default here stays empty: an operator who sets nothing gets the number the docs print.
       LAYA_MAX_TOKEN_BUDGET: "${LAYA_MAX_TOKEN_BUDGET:-}"
+      LAYA_MAX_BATCH_TOKENS: "${LAYA_MAX_BATCH_TOKENS:-}"
+      LAYA_JEV_STRICT: "${LAYA_JEV_STRICT:-}"
       LAYA_LOG_LEVEL: "${LAYA_LOG_LEVEL:-info}"
       # The supply-chain pair: LAYA_REVISION says which Hub commit a checkpoint may load from (a
       # commit, branch, tag, or `reviewed` for the SHAs in laya/revisions.py) and
