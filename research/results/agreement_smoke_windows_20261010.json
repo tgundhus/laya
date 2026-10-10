@@ -1,0 +1,93 @@
+{
+  "schema": "laya-agreement-smoke-summary/1",
+  "date": "2026-10-10",
+  "platform": "Windows",
+  "scope": "First 32 pinned test cases; saved teacher observations and a local English student; reproducibility smoke only.",
+  "example": "examples/evals/teacher_agreement.py",
+  "dataset": {
+    "dataset": "localgate/mmlu-pro-closed",
+    "revision": "de3c3d7bd8870e6ec48f03284f3e48042bae9ecf",
+    "split": "test",
+    "selection": "first 32 rows in the pinned parquet",
+    "file_sha256": "7b1ee7627f19a6ac322aa677a6483549e5ea6e136b6992dba6da0f8a2227176f",
+    "teacher_revision_note": "not recorded in the publisher's manifest"
+  },
+  "teacher": {
+    "model": "google/gemma-4-E2B-it",
+    "revision": null,
+    "settings": {
+      "do_sample": true,
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 64,
+      "max_gen_toks": 6144,
+      "until": [
+        "Question:"
+      ],
+      "thinking": false,
+      "num_fewshot": 0,
+      "option_line_template": "{letter}. {option}",
+      "protocol_sha256": "6f0ac97a38225f523a61803d25d6868e90813ef6873a8170a7e2f2a9e056ef9b",
+      "prompt_template_sha256": "c7738dc9173a6e197b231d87a7eac8418196a1820dbe26affaa52232ac10bf74"
+    },
+    "observations": [
+      {
+        "run_id": "gemma-seed-42",
+        "repeat_index": 0,
+        "seed": 42
+      },
+      {
+        "run_id": "gemma-seed-43",
+        "repeat_index": 1,
+        "seed": 43
+      }
+    ]
+  },
+  "student": {
+    "model": "convaiinnovations/laya",
+    "revision": "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851",
+    "settings": {
+      "device": "cpu",
+      "backend": "eager",
+      "lang": "en",
+      "min_confidence": null,
+      "torch_threads": 2,
+      "laya_version": "0.3.29",
+      "torch_version": "2.14.1+cpu",
+      "transformers_version": "5.19.0"
+    },
+    "seed": 0,
+    "run_id": "student"
+  },
+  "analysis": {
+    "protocol": "teacher-reference-paired/1",
+    "bootstrap_samples": 2000,
+    "seed": 0,
+    "cluster_unit": "case_id",
+    "confidence_level": 0.95,
+    "interval_method": "paired case bootstrap, percentile, ratio of decision sums",
+    "input_fingerprints": {
+      "reference": "9cc138268cf7bc8c45faa2d81bce1fe7922c49ac6bc392db2d6176203f8353f0",
+      "repeat": "08284b9adda29b397ba8a682b62f1a7838a54d74a04e26817302b5ca9d231c55",
+      "student": "ec774fae994951875d556b373e59535ff15a2eb5fe180d59ec01ebd4a5676fff"
+    }
+  },
+  "overall": {
+    "n_cases": 32,
+    "n_decisions": 32,
+    "teacher_repeat_agreement": 0.8125,
+    "student_teacher_agreement": 0.03125,
+    "student_coverage": 1.0,
+    "paired_agreement_delta": -0.78125,
+    "paired_delta_ci95": [
+      -0.90625,
+      -0.625
+    ]
+  },
+  "cli_replay_identical": true,
+  "limits": [
+    "Agreement is not accuracy; the 1/32 student/reference agreement is poor on this small academic panel.",
+    "The teacher model revision is unknown and recorded provenance does not verify independent generations.",
+    "The teacher prompt and Laya typed inputs differ; this does not establish production accuracy or calibration."
+  ]
+}

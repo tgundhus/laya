@@ -15,7 +15,12 @@ This work set out to answer three questions about Laya's decisions:
 3. Where does a request's time go, and how much of it can be removed?
 
 The [October 2026 production review](production-review.md) records the later upstream merge,
-SDK and cache fixes, and checks on Windows. The detailed September reports:
+SDK and cache fixes, and checks on Windows.
+
+The [10 October upstream review](upstream-review-2026-10-10.md) records selected changes
+reviewed through Laya 0.4.2, their measured integration costs and the remaining validation limits.
+
+The detailed September reports:
 
 - [Consistency: Jev against Laya](consistency-jev-vs-laya.md): what varies between runs, and
   how voting compares with replaying decisions.
