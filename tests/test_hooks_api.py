@@ -92,6 +92,17 @@ check_param("Router.__init__", Router.__init__, "sha256_digests", None)
 check_true("Router/resolve", callable(getattr(Router, "resolve", None)))
 check_param("Router.unregister", Router.unregister, "name", inspect.Parameter.empty)
 
+# A likely typo is still a distinct registration; warnings must not silently reroute it.
+with warnings.catch_warnings(record=True) as _registration_warnings:
+    warnings.simplefilter("always")
+    _typo_router = Router(models={"englsh": "./custom-checkpoint"})
+check("Router/typo warning count", len(_registration_warnings), 1)
+check("Router/typo warning category", _registration_warnings[0].category, RuntimeWarning)
+check("Router/typo remains a distinct checkpoint", _typo_router.resolve("englsh"), "englsh")
+check("Router/typo source preserved", _typo_router.models["englsh"], "./custom-checkpoint")
+check("Router/typo leaves English default", _typo_router.default, "english")
+check("Router/typo leaves built-in source", _typo_router.models["english"], Router().models["english"])
+
 # What the constructor does NOT raise over is part of its contract too: a shared
 # `agent_kwargs["expected_sha256"]` overlapping a per-checkpoint `sha256_digests` entry on one file
 # name is the ordinary shape, not a contradiction -- `model.safetensors` is the one name every
