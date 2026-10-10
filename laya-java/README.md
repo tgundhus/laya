@@ -15,7 +15,8 @@ four questions about a document cost one batched encode rather than four round t
 Implemented: tokenizer, sequence builder, config, ONNX inference (fused or split graph), answer
 decoding, `predict`, `predictBatch`, usage and truncation reporting, script and language detection
 (`lang.LanguageDetection`), the question presets (`Presets`), the checkpoint `Router` with its
-load-and-evict lifecycle, the embedding `Shortlist` with its LRU cache, the email cleaner and
+load-and-evict lifecycle and grouped batches, the embedding `Shortlist` with its LRU cache and
+model-based tournaments, the email cleaner and
 state builder (`LayaEmail`), the abstention gate (`ConfidenceGate`), scanning a state longer than
 the context window (`predictLong`), schema-driven decisions (`Decisions.decide` / `decideBatch`),
 and the prediction hooks (`hooks`).
@@ -188,9 +189,26 @@ explicit language, a caller's hint, the built-in detection, then the configured 
 long as you hold it — `predict` leases internally, so the ordinary path needs no thought. An agent
 handed in with `attach` is never closed: the caller keeps ownership.
 
-A deployment whose traffic is mostly not English should set
-`defaultCheckpoint(Checkpoint.MULTILINGUAL)`: an unidentified Latin-script state is no evidence of
-English, and that is the only knob which says so.
+Pro defaults to English for an unidentified state. Set
+`defaultCheckpoint(Checkpoint.MULTILINGUAL)` when that traffic spans languages. The alias
+`"default"` still names English, independently of this setting.
+
+`predictBatch` routes each request, groups compatible requests per checkpoint, and returns results
+in input order:
+
+```java
+List<Prediction> out = router.predictBatch(states, questions);
+List<Prediction> mixed = router.predictBatch(List.of(
+        Router.Request.of(email, Presets.email()),
+        Router.Request.of(ticket, Presets.triage())
+                .options(Router.RouteOptions.none().model("multilingual"))
+                .maxLen(512).headMaxLen(192)));
+```
+
+Requests sharing an ordered question schema, token budgets and applicable language temperatures
+share `Agent.predictBatch` calls. Use `predictBatch(requests, batchSize, sortByLength)` to limit
+states per forward pass. `Router` now implements `BatchPredictor`, so
+`Decisions.decideBatch(router, states, schema)` also works.
 
 ## Detection on its own
 
@@ -248,6 +266,20 @@ passthrough: the labels come back in order and **the embedder is never called**.
 
 Both `Agent` and `Router` implement `Predictor`, so shortlisting works identically against a fixed
 checkpoint or a routed one.
+
+`Shortlist.predictTournament` narrows large choices without an embedder. Each round asks the model
+about balanced groups of at most 16 labels, then carries the winners into the next round. The
+optional fourth argument sets the group size (at least 2).
+
+```java
+Shortlist.Tournament out = Shortlist.predictTournament(agent, state, questions);
+out.prediction();                    // final answers and usage, over the finalists
+out.tournament().get("intent");      // labels(), total(), rounds()
+```
+
+The final probabilities apply to the finalists, and the returned usage covers the final call.
+Tournament selection can discard a good label in an earlier round; evaluate it on your own label
+set before using it for a quality-sensitive decision.
 
 ## Cleaning an email
 
@@ -487,18 +519,24 @@ events no agent can:
 | event | when |
 |---|---|
 | `onRoute` | after a checkpoint is chosen, from every branch of `route` |
-| `onLoad` | after a checkpoint is built — not on a cache hit |
-| `onEvict` | after one is dropped, by `maxLoaded`, `unload` or `unloadAll` |
+| `onLoad` | after a checkpoint is built or attached during a build — not on a cache hit |
+| `onEvict` | after one is dropped, before the `onLoad` that caused the eviction |
 
-`Router.predict` also dispatches one `onPredictStart`/`onPredictEnd` pair for the whole
-route-and-answer call, with `onLoad` and `onEvict` landing inside it. The agent's own pair still
-fires for the forward pass, so a router-level hook and an agent-level hook see different spans.
+`Router.predict` routes and loads first, then dispatches its `onPredictStart`/`onPredictEnd`
+pair. Successful `elapsedMs` excludes cold loading. A routing or loading failure reaches
+`onError` and `onPredictEnd` without a start event. Process-wide default hooks see only the
+router's pair; installed agent hooks still run around their own forward pass.
+
+`Router.predictBatch` dispatches one pair per request. All route events run first; within each
+checkpoint, starts run in input order and ends unwind in reverse. Start hooks may rewrite or skip
+individual requests before they join a shared forward pass. An inference failure reaches every
+started request of that checkpoint; a loading failure reaches each request without a start.
 
 Hooks are dispatched outside the router's lock, so a hook may call back into the router —
 including `loaded()` or another `predict` — without deadlocking.
 
-`ctx.maxLen` / `ctx.headMaxLen` set by a router-level start hook are not honoured:
-`Agent.predict` takes no budget arguments. An agent-level hook can still set them.
+`predictBatch` honours router-level `ctx.maxLen` / `ctx.headMaxLen`. `Router.predict` uses the
+agent's defaults; an agent-level start hook can set budgets on either path.
 
 ```java
 router.hooks().addHook(new Hook() {
@@ -511,19 +549,20 @@ router.hooks().addHook(new Hook() {
 
 | | |
 |---|---|
-| a process-wide default hook sees **two** predict pairs per `Router.predict` | the router's and the agent's. A metric that sums `usage()` on `on_predict_end` double-counts. Install on `router.hooks()` or `agent.hooks()`, not `Hooks.setDefaultHooks`, unless you want both |
 | a throwing `on_evict` hook fails `Router.close()` | every freed checkpoint still receives its event; later failures are attached to the first as suppressed exceptions |
 | calling back into the router from `on_evict` **during `close()`** | throws `this Router is closed`: `close()` marks the router closed before unloading |
 | `concurrent(false)` with an `AsyncHook` | refused before the callback runs; use `concurrent(true)` for executor callbacks |
-| `ctx.maxLen` / `ctx.headMaxLen`, and states past the first | ignored on the router path. `Agent.predict` takes no budget arguments, and the router answers one state |
+| adding states to a batch request context | refused before inference: each request must contain exactly one state |
 
 `on_route` carries its own context, not the predict pair's, so `runId` differs between them. Correlate
-on the model name or `ctx.decision`, not on `runId`.
+on the model name. Route hooks observe the chosen model through `ctx.model()` and cannot replace it.
 
 `AsyncHook.of(hook, executor)` runs a hook on a particular thread — a framework request scope, an
 actor, a UI loop. It waits for the callback, so an exception still reaches the hook policy and the
-mutable `PredictContext` is never read after the call has moved on. Pass a `Duration` to fail a
-callback that overruns.
+callback finishes before the next stage. With a `Duration`, a callback that starts after expiry is
+skipped, and setters refuse late writes from an already running callback. This guard covers context
+setters, not mutations to arbitrary objects stored inside a state or in `ctx.data()`.
+Policy deadlines also apply to executor callbacks nested inside an `AsyncHook`.
 
 ## Option order
 
@@ -601,9 +640,8 @@ the bytecode stays at release 17:
 ./gradlew test -PtestJavaVersion=24    # compiled for 17, executed on 24
 ```
 
-CI runs the model-free suite on **17, 21 and 24** — three different Unicode versions (13.0, 15.0
-and 16.0). The artifact is compiled for 17, so it runs on 17 and anything newer; those three are
-the versions the suite is actually asserted against.
+CI runs the model-free suite on **17 and 21**. The artifact is compiled for 17, so it runs on 17
+and newer. JDK 24 is an optional local check when that toolchain is installed.
 
 This matters more here than in most ports. `\p{L}` and `\p{N}` in `java.util.regex` follow the
 JDK's own Unicode version, and `Character.isLetter` disagrees with itself across JDK 17 (Unicode
