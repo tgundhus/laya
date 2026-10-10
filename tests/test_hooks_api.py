@@ -1075,6 +1075,27 @@ check_param("evaluate_shortlist", evaluate_shortlist, "dataset_path", None)
 for param in ("checkpoint_id", "embedder_id"):
     check_param("evaluate_shortlist", evaluate_shortlist, param, inspect.Parameter.empty)
 
+# Saved observations and a local runner are the two agreement entry points. Keep
+# provenance explicit and statistical controls keyword-only for both callers.
+from laya.evals import compare_agreement, evaluate_agreement  # noqa: E402
+
+check("compare_agreement parameters", list(sig(compare_agreement)),
+      ["reference", "repeat", "student", "bootstrap_samples", "seed"])
+check("evaluate_agreement parameters", list(sig(evaluate_agreement)),
+      ["runner", "reference", "repeat", "student_provenance", "model", "bootstrap_samples", "seed"])
+for _agreement_name, _agreement_fn, _required in (
+        ("compare_agreement", compare_agreement, ("reference", "repeat", "student")),
+        ("evaluate_agreement", evaluate_agreement, ("runner", "reference", "repeat"))):
+    for _agreement_param in _required:
+        check_param(_agreement_name, _agreement_fn, _agreement_param, inspect.Parameter.empty,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    for _agreement_param, _agreement_default in (("bootstrap_samples", 2000), ("seed", 0)):
+        check_param(_agreement_name, _agreement_fn, _agreement_param, _agreement_default,
+                    inspect.Parameter.KEYWORD_ONLY)
+check_param("evaluate_agreement", evaluate_agreement, "student_provenance", inspect.Parameter.empty,
+            inspect.Parameter.KEYWORD_ONLY)
+check_param("evaluate_agreement", evaluate_agreement, "model", None, inspect.Parameter.KEYWORD_ONLY)
+
 
 # docs/hooks/examples.md ## Composition teaches one scope ordering contract; the pre-fix wording
 # ("Installed hooks first, then convenience callables") named only two tiers and put installed at
