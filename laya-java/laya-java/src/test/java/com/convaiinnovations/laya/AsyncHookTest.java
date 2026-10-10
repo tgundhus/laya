@@ -150,6 +150,220 @@ class AsyncHookTest {
     }
 
     @Test
+    @DisplayName("a policy deadline cuts off an AsyncHook's executor callback too")
+    void aPolicyDeadlineAbandonsTheExecutorCallback() throws Exception {
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<String> outcome = new AtomicReference<>();
+        try {
+            Hook async = AsyncHook.of(new Hook() {
+                @Override
+                public void onPredictStart(PredictContext c) {
+                    entered.countDown();
+                    awaitQuietly(release);
+                    try {
+                        c.states(List.of("late"));
+                        outcome.set("accepted");
+                    } catch (IllegalStateException refused) {
+                        outcome.set("refused");
+                    } finally {
+                        done.countDown();
+                    }
+                }
+            }, pool);
+            PredictContext ctx = ctx();
+            Hooks.dispatch(List.of(async), Hooks.Event.PREDICT_START, ctx,
+                    new Hooks.Policy(false, null, Duration.ofMillis(100), ignored -> { }));
+            assertTrue(entered.await(3, TimeUnit.SECONDS));
+            release.countDown();
+            assertTrue(done.await(3, TimeUnit.SECONDS));
+            assertEquals("refused", outcome.get());
+            assertEquals(List.of("state"), ctx.states());
+            AsyncHook.of(Hooks.onPredictEnd(c -> c.states(List.of("next callback"))), pool)
+                    .onPredictEnd(ctx);
+            assertEquals(List.of("next callback"), ctx.states());
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("after an overrun, the same call's next callback on that pooled thread is accepted")
+    void aPooledThreadIsReleasedWhenTheOverrunEnds() {
+        // One thread, so the later callback necessarily runs on the thread that overran. Before
+        // the release, that thread stayed abandoned for this context and the write was refused.
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            assertReleasedAfterOverrun(pool, false);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("the release also happens when the overrunning callback throws")
+    void aPooledThreadIsReleasedWhenTheOverrunThrows() {
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            assertReleasedAfterOverrun(pool, true);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    private static void assertReleasedAfterOverrun(ExecutorService pool, boolean overrunThrows) {
+        AtomicReference<Thread> overran = new AtomicReference<>();
+        AtomicReference<Thread> next = new AtomicReference<>();
+        Hook slow = AsyncHook.of(new Hook() {
+            @Override
+            public void onPredictStart(PredictContext c) {
+                overran.set(Thread.currentThread());
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                if (overrunThrows) {
+                    throw new IllegalStateException("the overrun failed as well");
+                }
+            }
+        }, pool, Duration.ofMillis(50));
+        Hook later = AsyncHook.of(new Hook() {
+            @Override
+            public void onPredictEnd(PredictContext c) {
+                next.set(Thread.currentThread());
+                c.states(List.of("written by the next callback"));
+            }
+        }, pool);
+        PredictContext ctx = ctx();
+        assertThrows(IllegalStateException.class, () -> slow.onPredictStart(ctx));
+        later.onPredictEnd(ctx);                    // queued behind the overrun, then runs
+        assertSame(overran.get(), next.get(), "the point is the SAME pooled thread");
+        assertEquals(List.of("written by the next callback"), ctx.states());
+    }
+
+    @Test
+    @DisplayName("an AsyncHook on an abandoned thread does not lift that abandonment")
+    void anOuterAbandonmentSurvivesAnInnerAsyncHook() throws Exception {
+        // Hooks abandons its timeout thread; that thread then runs an AsyncHook on a direct
+        // executor -- the same thread -- which must not release what it did not abandon.
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<String> outcome = new AtomicReference<>();
+        Hook inner = AsyncHook.of(new Hook() { }, Runnable::run);
+        Hook outer = new Hook() {
+            @Override
+            public void onPredictStart(PredictContext c) {
+                try {
+                    Thread.sleep(200);              // overruns the 50ms policy deadline
+                    inner.onPredictEnd(c);
+                    c.states(List.of("late write"));
+                    outcome.set("accepted");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (RuntimeException refused) {
+                    outcome.set("refused");
+                } finally {
+                    done.countDown();
+                }
+            }
+        };
+        PredictContext ctx = ctx();
+        assertThrows(RuntimeException.class, () -> Hooks.dispatch(List.of(outer),
+                Hooks.Event.PREDICT_START, ctx, Hooks.Policy.raising().timeout(Duration.ofMillis(50))));
+        assertTrue(done.await(3, TimeUnit.SECONDS));
+        assertEquals("refused", outcome.get());
+        assertEquals(List.of("state"), ctx.states());
+    }
+
+    @Test
+    @DisplayName("an interrupted wait cuts the callback off, as a deadline does")
+    void anInterruptedWaitAbandonsTheCallback() throws Exception {
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            CountDownLatch release = new CountDownLatch(1);
+            CountDownLatch started = new CountDownLatch(1);
+            CountDownLatch done = new CountDownLatch(1);
+            Hook async = AsyncHook.of(new Hook() {
+                @Override
+                public void onPredictStart(PredictContext c) {
+                    started.countDown();
+                    awaitQuietly(release);
+                    try {
+                        c.states(List.of("late"));
+                    } catch (RuntimeException refused) {
+                        // refused, which is the point
+                    } finally {
+                        done.countDown();
+                    }
+                }
+            }, pool, Duration.ofSeconds(5));       // timed: an untimed join() ignores interrupts
+            assertLateWriteRefusedAfterInterrupt(ctx -> async.onPredictStart(ctx), started, release,
+                    done);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("an interrupted wait on a Hooks timeout thread cuts that hook off too")
+    void anInterruptedHooksWaitAbandonsTheHook() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(1);
+        Hook slow = new Hook() {
+            @Override
+            public void onPredictStart(PredictContext c) {
+                started.countDown();
+                awaitQuietly(release);
+                try {
+                    c.states(List.of("late"));
+                } catch (RuntimeException refused) {
+                    // refused, which is the point
+                } finally {
+                    done.countDown();
+                }
+            }
+        };
+        assertLateWriteRefusedAfterInterrupt(ctx -> Hooks.dispatch(List.of(slow),
+                Hooks.Event.PREDICT_START, ctx, Hooks.Policy.raising().timeout(Duration.ofSeconds(5))),
+                started, release, done);
+    }
+
+    private static void assertLateWriteRefusedAfterInterrupt(
+            java.util.function.Consumer<PredictContext> waitOn, CountDownLatch started,
+            CountDownLatch release, CountDownLatch done) throws Exception {
+        PredictContext ctx = ctx();
+        AtomicReference<Throwable> caught = new AtomicReference<>();
+        Thread caller = new Thread(() -> {
+            try {
+                waitOn.accept(ctx);
+            } catch (RuntimeException e) {
+                caught.set(e);
+            }
+        });
+        caller.start();
+        assertTrue(started.await(3, TimeUnit.SECONDS));
+        caller.interrupt();
+        caller.join(3_000);
+        assertTrue(caught.get() instanceof IllegalStateException, String.valueOf(caught.get()));
+        release.countDown();                        // only now may the hook try its late write
+        assertTrue(done.await(3, TimeUnit.SECONDS));
+        assertEquals(List.of("state"), ctx.states(), "a write after the caller moved on landed");
+    }
+
+    /** Waits for the test's go-ahead; a latch, so no sleep decides the order of events. */
+    private static void awaitQuietly(CountDownLatch release) {
+        try {
+            release.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    @Test
     @DisplayName("a non-positive timeout is refused rather than meaning 'never wait'")
     void refusesANonPositiveTimeout() {
         ExecutorService pool = Executors.newSingleThreadExecutor();

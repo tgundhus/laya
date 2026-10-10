@@ -67,12 +67,12 @@ import java.util.Set;
  *       the one the reference's own {@code decide_batch} always takes.</li>
  *   <li>{@code routing} is not reported. {@link Prediction} carries no routing block, so there is
  *       nothing to pass through; {@link Router} reports its decision at the point it makes it.</li>
- *   <li>A <b>batched</b> decision cannot route per state. The reference's {@code decide_batch}
- *       special-cases a {@code route_batch}-capable runner and sends one request per state "so
- *       states may route to different checkpoints"; {@link Router} here implements
- *       {@link Predictor} and not {@link BatchPredictor}, so {@link #decideBatch} will not take
- *       one at all. Batching a router means deciding what a shared forward pass over two
- *       checkpoints is, which is a design question and not a port.</li>
+ *   <li>A batched decision on a {@link Router} takes no routing keywords. The reference's
+ *       {@code decide_batch} copies {@code model}, {@code task}, {@code lang},
+ *       {@code lang_guess} and the token budgets onto every request; here a router routes each
+ *       state on its own. A pin is a lambda runner,
+ *       {@code (states, asked) -> router.predictBatch(states, asked, options)}; a budget is a
+ *       list of {@link Router.Request}s.</li>
  *   <li>An {@code enum} must be an <b>array</b>. The reference measures and iterates whatever
  *       is there, so {@code "enum": "abc"} becomes a three-option choice over {@code "a"},
  *       {@code "b"}, {@code "c"} — a schema nobody wrote, built from a typo — and

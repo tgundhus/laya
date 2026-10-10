@@ -2,11 +2,13 @@ package com.convaiinnovations.laya;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.convaiinnovations.laya.Router.Checkpoint;
 import com.convaiinnovations.laya.hooks.Hook;
+import com.convaiinnovations.laya.hooks.Hooks;
 import com.convaiinnovations.laya.hooks.PredictContext;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -14,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -56,6 +59,11 @@ class RouterHooksTest {
         @Override
         public void onPredictEnd(PredictContext ctx) {
             note("end", ctx);
+        }
+
+        @Override
+        public void onError(PredictContext ctx) {
+            note("error", ctx);
         }
     }
 
@@ -118,7 +126,8 @@ class RouterHooksTest {
             router.load("english");
             router.load("multilingual");               // maxLoaded 1, so english must go
             assertTrue(trace.events.contains("evict:english"), trace.events.toString());
-            assertEquals(List.of("load:english", "load:multilingual", "evict:english"),
+            // The reference's order: the victim's on_evict, then the build's on_load.
+            assertEquals(List.of("load:english", "evict:english", "load:multilingual"),
                     trace.events);
         }
     }
@@ -148,11 +157,11 @@ class RouterHooksTest {
                     trace.events.toString());
             assertEquals(1, trace.events.stream().filter(e -> e.startsWith("end:")).count(),
                     trace.events.toString());
-            // on_route first, then on_load inside the predict pair -- the reference's order.
-            // Derived from the trace, not hard-coded: which checkpoint answers is the default's
-            // business, and this test is about the sequence.
+            // The reference's order: route and load run BEFORE on_predict_start, so elapsed_ms
+            // excludes the cold load. Derived from the trace, not hard-coded: which checkpoint
+            // answers is the default's business, and this test is about the sequence.
             List<String> kinds = trace.events.stream().map(e -> e.split(":")[0]).toList();
-            assertEquals(List.of("route", "start", "load", "end"), kinds,
+            assertEquals(List.of("route", "load", "start", "end"), kinds,
                     trace.events.toString());
         }
     }
@@ -251,6 +260,414 @@ class RouterHooksTest {
             // freed while the session stayed open.
             assertEquals(List.of(Checkpoint.ENGLISH), router.unload("english"));
         }
+    }
+
+    /** English's session throws on close, so evicting it fails after multilingual has published. */
+    private static Router.AgentFactory angryEnglish(Path root) {
+        return checkpoint -> TinyCheckpoint.agent(root, checkpoint == Checkpoint.ENGLISH
+                ? new TinyCheckpoint.RecordingSession() {
+                    @Override
+                    public void close() {
+                        super.close();
+                        throw new IllegalStateException("a native close can fail");
+                    }
+                }
+                : new TinyCheckpoint.RecordingSession());
+    }
+
+    @Test
+    @DisplayName("lease still dispatches on_evict and on_load when closing the victim throws")
+    void leaseDispatchesWhenTheEvictedCloseThrows(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        Trace trace = new Trace();
+        try (Router router = Router.builder().agents(angryEnglish(root)).maxLoaded(1).build()) {
+            router.load("english");
+            router.hooks().addHook(trace);
+            assertThrows(IllegalStateException.class, () -> router.lease("multilingual"));
+            assertEquals(List.of("evict:english", "load:multilingual"), trace.events);
+        }
+    }
+
+    @Test
+    @DisplayName("a failed eviction hook does not discard the load event the acquire owes")
+    void aFailedEvictionStillDispatchesLoad(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        Trace trace = new Trace();
+        try (Router router = Router.builder().agents(angryEnglish(root)).maxLoaded(1).build()) {
+            router.load("english");
+            router.hooks().addHook(trace);
+            router.hooks().addHook(throwsOnceOnEvict(new AssertionError("sink failed")));
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                    () -> router.lease("multilingual"));
+            assertEquals("a native close can fail", failure.getMessage());
+            assertEquals(1, failure.getSuppressed().length);
+            assertEquals(List.of("evict:english", "load:multilingual"), trace.events);
+            assertEquals(List.of(Checkpoint.MULTILINGUAL), router.unload("multilingual"));
+        }
+    }
+
+    @Test
+    @DisplayName("an eviction hook Error still dispatches every checkpoint freed by close")
+    void closeDispatchesEveryEvictionAfterAHookError(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        Router router = Router.builder().agents(new StubAgents(root)).maxLoaded(3).build();
+        router.preload(List.of("english", "multilingual"));
+        List<String> evicted = new ArrayList<>();
+        AssertionError failure = new AssertionError("sink unavailable");
+        router.hooks().addHook(new Hook() {
+            @Override
+            public void onEvict(PredictContext ctx) {
+                evicted.add(ctx.model());
+                throw failure;
+            }
+        });
+        assertEquals(failure, assertThrows(AssertionError.class, router::close));
+        assertEquals(List.of("english", "multilingual"), evicted);
+        assertEquals(List.of(), router.loaded());
+        router.close();
+    }
+
+    @Test
+    @DisplayName("a hook failing on that owed dispatch is attached to the close failure, not swapped")
+    void anOwedHookFailureDoesNotMaskTheCloseFailure(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        try (Router router = Router.builder().agents(angryEnglish(root)).maxLoaded(1).build()) {
+            router.load("english");
+            AtomicBoolean once = new AtomicBoolean();   // only once: close() evicts again
+            router.hooks().addHook(new Hook() {
+                @Override
+                public void onEvict(PredictContext ctx) {
+                    if (once.compareAndSet(false, true)) {
+                        throw new IllegalArgumentException("the sink refused it");
+                    }
+                }
+            });
+            IllegalStateException thrown =
+                    assertThrows(IllegalStateException.class, () -> router.lease("multilingual"));
+            assertEquals("a native close can fail", thrown.getMessage());
+            assertEquals(1, thrown.getSuppressed().length);
+            assertEquals("the sink refused it", thrown.getSuppressed()[0].getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("a load failure in predict reaches on_error and on_predict_end, with no start")
+    void predictReportsALoadFailure(@TempDir Path root) throws IOException {
+        Trace trace = new Trace();
+        Router.AgentFactory broken = checkpoint -> {
+            throw new IllegalStateException("no weights here");
+        };
+        try (Router router = Router.builder().agents(broken).build()) {
+            router.hooks().addHook(trace);
+            IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                    () -> router.predict("hello", questions()));
+            assertEquals("no weights here", thrown.getMessage());
+            // The load was attempted on a decided checkpoint, so error and end name it, as the
+            // reference's ctx.model does once route() has returned.
+            String model = trace.events.get(0).split(":")[1];
+            assertEquals(List.of("route:" + model, "error:" + model, "end:" + model), trace.events);
+        }
+    }
+
+    @Test
+    @DisplayName("a routing failure in predict reaches on_error and on_predict_end, as in the reference")
+    void predictReportsARouteFailure(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        Trace trace = new Trace();
+        try (Router router = Router.builder().agents(new StubAgents(root)).build()) {
+            router.hooks().addHook(trace);
+            assertThrows(RuntimeException.class, () -> router.predict("hello", questions(),
+                    Router.RouteOptions.none().model("no-such-checkpoint")));
+            assertEquals(List.of("error:null", "end:null"), trace.events);
+        }
+    }
+
+    @Test
+    @DisplayName("load: a hook failing on the owed dispatch is attached to the close failure")
+    void loadDoesNotMaskTheCloseFailure(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        try (Router router = Router.builder().agents(angryEnglish(root)).maxLoaded(1).build()) {
+            router.load("english");
+            router.hooks().addHook(throwsOnceOnEvict(new IllegalArgumentException("the sink refused it")));
+            IllegalStateException thrown =
+                    assertThrows(IllegalStateException.class, () -> router.load("multilingual"));
+            assertEquals("a native close can fail", thrown.getMessage());
+            assertEquals(1, thrown.getSuppressed().length);
+        }
+    }
+
+    @Test
+    @DisplayName("unload: a hook failing on the owed dispatch is attached to the close failure")
+    void unloadDoesNotMaskTheCloseFailure(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        try (Router router = Router.builder().agents(angryEnglish(root)).maxLoaded(2).build()) {
+            router.load("english");
+            router.hooks().addHook(throwsOnceOnEvict(new IllegalArgumentException("the sink refused it")));
+            IllegalStateException thrown =
+                    assertThrows(IllegalStateException.class, () -> router.unload("english"));
+            assertEquals("a native close can fail", thrown.getMessage());
+            assertEquals(1, thrown.getSuppressed().length);
+        }
+    }
+
+    @Test
+    @DisplayName("an Error from a hook on the owed dispatch is attached too, not swapped in")
+    void anOwedHookErrorDoesNotMaskTheCloseFailure(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        try (Router router = Router.builder().agents(angryEnglish(root)).maxLoaded(1).build()) {
+            router.load("english");
+            router.hooks().addHook(throwsOnceOnEvict(new AssertionError("an Error from a hook")));
+            IllegalStateException thrown =
+                    assertThrows(IllegalStateException.class, () -> router.lease("multilingual"));
+            assertEquals("a native close can fail", thrown.getMessage());
+            assertTrue(thrown.getSuppressed()[0] instanceof AssertionError);
+        }
+    }
+
+    @Test
+    @DisplayName("on_load still fires when an attach wins the race with the build, as in the reference")
+    void loadDispatchesWhenAnAttachWinsTheRace(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        Trace trace = new Trace();
+        AtomicReference<Router> self = new AtomicReference<>();
+        Router.AgentFactory racing = checkpoint -> {
+            // Attached while this build is in progress, so the build loses and is discarded.
+            self.get().attach("english",
+                    TinyCheckpoint.agent(root, new TinyCheckpoint.RecordingSession()));
+            return TinyCheckpoint.agent(root, new TinyCheckpoint.RecordingSession());
+        };
+        try (Router router = Router.builder().agents(racing).maxLoaded(2).build()) {
+            self.set(router);
+            router.hooks().addHook(trace);
+            router.load("english");
+            assertEquals(List.of("load:english"), trace.events);
+        }
+    }
+
+    @Test
+    @DisplayName("a hook rethrowing ctx.error() from any error or end event leaves the real failure")
+    void rethrowingCtxErrorNeverReplacesTheFailure(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        // A start hook failing goes through Hooks.around; a load failing through failedBeforeStart.
+        for (String rethrowIn : List.of("error", "end")) {
+            Hook rethrow = new Hook() {
+                @Override
+                public void onPredictStart(PredictContext ctx) {
+                    throw new IllegalStateException("start refused");
+                }
+
+                @Override
+                public void onError(PredictContext ctx) {
+                    if (rethrowIn.equals("error")) {
+                        throw (RuntimeException) ctx.error();
+                    }
+                }
+
+                @Override
+                public void onPredictEnd(PredictContext ctx) {
+                    if (rethrowIn.equals("end")) {
+                        throw (RuntimeException) ctx.error();
+                    }
+                }
+            };
+            try (Router router = Router.builder().agents(new StubAgents(root)).build()) {
+                router.hooks().addHook(rethrow);
+                IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                        () -> router.predict("hello", questions()));
+                assertEquals("start refused", thrown.getMessage(), "rethrown in " + rethrowIn);
+            }
+        }
+        Router.AgentFactory broken = checkpoint -> {
+            throw new IllegalStateException("no weights here");
+        };
+        try (Router router = Router.builder().agents(broken).build()) {
+            router.hooks().addHook(new Hook() {
+                @Override
+                public void onPredictEnd(PredictContext ctx) {
+                    throw (RuntimeException) ctx.error();
+                }
+            });
+            IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                    () -> router.predict("hello", questions()));
+            assertEquals("no weights here", thrown.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("failedBeforeStart refuses a null failure and a context that already has an outcome")
+    void failedBeforeStartRefusesMisuse() {
+        PredictContext fresh = new PredictContext(List.of("s"), Map.of(), "english", null);
+        assertThrows(NullPointerException.class, () -> Hooks.failedBeforeStart(List.of(), fresh,
+                Hooks.Policy.raising(), null, System.nanoTime()));
+        PredictContext reported = new PredictContext(List.of("s"), Map.of(), "english", null);
+        Hooks.failedBeforeStart(List.of(), reported, Hooks.Policy.raising(),
+                new IllegalStateException("first"), System.nanoTime());
+        assertThrows(IllegalStateException.class, () -> Hooks.failedBeforeStart(List.of(),
+                reported, Hooks.Policy.raising(), new IllegalStateException("second"),
+                System.nanoTime()));
+        assertEquals("first", reported.error().getMessage());
+    }
+
+    /** A factory that keeps every session it hands out, so a test can see which were closed. */
+    private static Router.AgentFactory recording(Path root, List<TinyCheckpoint.RecordingSession> out) {
+        return checkpoint -> {
+            TinyCheckpoint.RecordingSession session = new TinyCheckpoint.RecordingSession();
+            out.add(session);
+            return TinyCheckpoint.agent(root, session);
+        };
+    }
+
+    @Test
+    @DisplayName("a hooked predict releases its lease, so unloading closes the agent")
+    void hookedPredictReleasesItsLease(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        List<TinyCheckpoint.RecordingSession> sessions = new ArrayList<>();
+        try (Router router = Router.builder().agents(recording(root, sessions)).build()) {
+            router.hooks().addHook(new Trace());
+            router.predict("hello", questions());
+            router.unloadAll();
+            assertEquals(1, sessions.size());
+            assertTrue(sessions.get(0).closed, "a held lease keeps a retired agent open forever");
+        }
+    }
+
+    @Test
+    @DisplayName("a hooked predict whose start hook throws still releases its lease")
+    void hookedPredictReleasesItsLeaseOnFailure(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        List<TinyCheckpoint.RecordingSession> sessions = new ArrayList<>();
+        try (Router router = Router.builder().agents(recording(root, sessions)).build()) {
+            router.hooks().addHook(new Hook() {
+                @Override
+                public void onPredictStart(PredictContext ctx) {
+                    throw new IllegalStateException("start refused");
+                }
+            });
+            assertThrows(IllegalStateException.class, () -> router.predict("hello", questions()));
+            router.unloadAll();
+            assertTrue(sessions.get(0).closed, "a held lease keeps a retired agent open forever");
+        }
+    }
+
+    @Test
+    @DisplayName("unloadAll: every eviction is dispatched and a hook failure is attached, not swapped")
+    void unloadAllDoesNotMaskTheCloseFailure(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        Trace trace = new Trace();
+        try (Router router = Router.builder().agents(angryEnglish(root)).maxLoaded(2).build()) {
+            router.load("english");
+            router.load("multilingual");
+            router.hooks().addHook(trace);            // first, so it sees the event that throws
+            router.hooks().addHook(throwsOnceOnEvict(new IllegalArgumentException("the sink refused it")));
+            IllegalStateException thrown =
+                    assertThrows(IllegalStateException.class, router::unloadAll);
+            assertEquals("a native close can fail", thrown.getMessage());
+            assertEquals(1, thrown.getSuppressed().length);
+            assertEquals(List.of("evict:english", "evict:multilingual"), trace.events,
+                    "a hook failure on the first eviction must not skip the second");
+        }
+    }
+
+    @Test
+    @DisplayName("null state or questions are refused before routing, with or without hooks")
+    void nullsAreRefusedBeforeAnyLoad(@TempDir Path root) throws IOException {
+        TinyCheckpoint.write(root, 64, 32);
+        for (boolean hooked : new boolean[] {true, false}) {
+            StubAgents agents = new StubAgents(root);
+            Trace trace = new Trace();
+            try (Router router = Router.builder().agents(agents).build()) {
+                if (hooked) {
+                    router.hooks().addHook(trace);
+                }
+                assertThrows(IllegalArgumentException.class, () -> router.predict("hello", null));
+                assertThrows(IllegalArgumentException.class,
+                        () -> router.predict(null, questions()));
+                assertEquals(0, agents.builds, "hooked=" + hooked + ": a refused call loaded");
+                assertEquals(List.of(), trace.events);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("a failure before start: elapsedMs covers the load, ctx.error is the failure")
+    void aFailureBeforeStartIsTimedAndCarriesTheError(@TempDir Path root) throws IOException {
+        IllegalStateException failure = new IllegalStateException("no weights here");
+        Router.AgentFactory slow = checkpoint -> {
+            try {
+                Thread.sleep(60);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            throw failure;
+        };
+        AtomicReference<Double> elapsed = new AtomicReference<>();
+        AtomicReference<Throwable> seen = new AtomicReference<>();
+        try (Router router = Router.builder().agents(slow).build()) {
+            router.hooks().addHook(new Hook() {
+                @Override
+                public void onPredictEnd(PredictContext ctx) {
+                    elapsed.set(ctx.elapsedMs());
+                    seen.set(ctx.error());
+                }
+            });
+            long before = System.nanoTime();
+            assertSame(failure, assertThrows(IllegalStateException.class,
+                    () -> router.predict("hello", questions())));
+            double wall = (System.nanoTime() - before) / 1_000_000.0;
+            assertTrue(elapsed.get() >= 50.0, "elapsedMs " + elapsed.get() + " missed the load");
+            assertTrue(elapsed.get() <= wall, "elapsedMs " + elapsed.get() + " exceeds the call");
+            assertSame(failure, seen.get());
+        }
+    }
+
+    @Test
+    @DisplayName("an on_error hook that rethrows ctx.error() leaves the caller the real failure")
+    void aRethrowingErrorHookDoesNotReplaceTheFailure(@TempDir Path root) throws IOException {
+        Router.AgentFactory broken = checkpoint -> {
+            throw new IllegalStateException("no weights here");
+        };
+        try (Router router = Router.builder().agents(broken).build()) {
+            router.hooks().addHook(new Hook() {
+                @Override
+                public void onError(PredictContext ctx) {
+                    throw (RuntimeException) ctx.error();     // log-and-rethrow
+                }
+            });
+            IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                    () -> router.predict("hello", questions()));
+            assertEquals("no weights here", thrown.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("an Error while loading still reaches on_error and on_predict_end")
+    void anErrorBeforeStartIsReported(@TempDir Path root) throws IOException {
+        Trace trace = new Trace();
+        Router.AgentFactory native_ = checkpoint -> {
+            throw new UnsatisfiedLinkError("no onnxruntime here");
+        };
+        try (Router router = Router.builder().agents(native_).build()) {
+            router.hooks().addHook(trace);
+            assertThrows(UnsatisfiedLinkError.class, () -> router.predict("hello", questions()));
+            List<String> kinds = trace.events.stream().map(e -> e.split(":")[0]).toList();
+            assertEquals(List.of("route", "error", "end"), kinds, trace.events.toString());
+        }
+    }
+
+    /** A hook whose first on_evict throws {@code failure}; later ones (from close()) do not. */
+    private static Hook throwsOnceOnEvict(Throwable failure) {
+        AtomicBoolean once = new AtomicBoolean();
+        return new Hook() {
+            @Override
+            public void onEvict(PredictContext ctx) {
+                if (once.compareAndSet(false, true)) {
+                    if (failure instanceof Error error) {
+                        throw error;
+                    }
+                    throw (RuntimeException) failure;
+                }
+            }
+        };
     }
 
     @Test
