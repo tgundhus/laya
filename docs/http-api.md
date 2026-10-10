@@ -44,6 +44,7 @@ Everything is environment variables, so one image serves a laptop dev run and a 
 | `LAYA_CACHE_RENEW_ON_HIT` | renew expiry on use | `0` |
 | `LAYA_LOG_LEVEL` | uvicorn log level | `info` |
 | `LAYA_MAX_CONCURRENT` | requests admitted past auth at once; excess gets `503` | `16` |
+| `LAYA_MAX_BATCH_TOKENS` | cap on tokens collated in a batch forward pass | `131072` |
 | `LAYA_MAX_BATCH_TOKENS` | tokens one `/v1/systemone/batch` FORWARD PASS may collate (`states` x questions x row width); a larger batch is split into several passes, not refused | `131072` |
 | `LAYA_JEV_STRICT` | serve the strict Jev wire contract: no root `routing`, no per-answer `action` / `answer_confidence`, no `confidence` on noul answers, and `usage` reduced to `input_tokens` + `output_tokens`. For clients that validate the response against the Jev contract with no extra fields | `0` |
 
@@ -165,12 +166,12 @@ hide that. The detail is the same `unknown model` text core raises, plus the rem
     "queue": {"type": "choice", "choice": "billing",
               "probabilities": {"billing": 0.9519, "tech": 0.0327, "other": 0.0154},
               "confidence": 0.797, "answer_confidence": 0.9519,
-              "action": {"act_probability": 1.0}},
+              "action": {"act_probability": 1.0}, "x_jev_confidence": 0.9278},
     "urgency": {"type": "score", "score": 1.6994,
                 "legend": {"0": "calm", "1": "firm", "2": "angry", "3": "furious"},
                 "probabilities": {"0": 0.0249, "1": 0.4136, "2": 0.3985, "3": 0.1629},
                 "confidence": 0.1925, "answer_confidence": 0.4136,
-                "action": {"act_probability": 1.0}}
+                "action": {"act_probability": 1.0}, "x_jev_confidence": 0.2507}
   },
   "usage": {"input_tokens": 83, "output_tokens": 0, "state_tokens": 12,
             "state_tokens_dropped": 0, "truncated": false, "truncated_questions": []},
@@ -188,10 +189,10 @@ name of the decision head, and the checkpoint that answered is in `routing`.
 
 | answer type | keys |
 |---|---|
-| `choice` | `choice` (the argmax option), `probabilities` per option |
-| `score` | `score` (expected level index, may fall between levels), `probabilities` keyed `"0".. "k-1"`, `legend` mapping index to the level text |
+| `choice` | `choice` (the argmax option), `probabilities` per option, `x_jev_confidence` |
+| `score` | `score` (expected level index, may fall between levels), `probabilities` keyed `"0".. "k-1"`, `legend` mapping index to the level text, `x_jev_confidence` |
 | `noul` | `noul`, the probability of the yes option |
-| all | `confidence`, `answer_confidence`, and `action.act_probability` |
+| all | `type`, `confidence`, `answer_confidence`, and `action.act_probability` |
 | gate | `abstention`, `abstention_threshold` and `low_confidence`, written by the abstention gate -- see below |
 
 The gate row is the abstention report (#361), and it is the only way a caller can see that the gate
@@ -241,7 +242,7 @@ the question ids. A `lang_guess` leaves no key of its own -- the hint it acted o
 `reason`. The `model` and `task` branches report `workflow` as `null` too, because they answer
 before the question ids are read.
 
-### Confidence: two numbers, not interchangeable
+### Confidence: three numbers, not interchangeable
 
 - `answer_confidence` is the probability mass on the reported answer (`max(p)`). It is the
   quantity temperature scaling fits and the one this repo's ECE figures are computed on, so it
@@ -250,9 +251,12 @@ before the question ids are read.
 - `confidence` means something different per type: normalized entropy `1 - H(p)/log(k)` on
   `choice` and `score`, and `max(p_yes, p_no)` on `noul` (where it equals `answer_confidence`).
 
-Never compare the two against one threshold. Also note the difference when porting from Jev:
-TypeSafe defines confidence as `(n*p_max - 1)/(n - 1)`, so a threshold carried over from a Jev
-deployment gates differently on Laya's entropy value.
+- `x_jev_confidence` uses the [Jev adapter's formulas](https://github.com/typesafe-ai/system-one-adapter-python/blob/main/src/system_one_adapter/_utils/confidence_metrics.py)
+  on choice and score answers: scaled peak mass for choice, concentration around the modal
+  level for score. It is omitted on noul answers and invalid distributions.
+
+Use each field with thresholds fitted for that measure. A Jev confidence threshold can be
+compared with `x_jev_confidence`; Laya's `min_confidence` gate continues to use `answer_confidence`.
 
 ### Strict Jev contract: `LAYA_JEV_STRICT`
 
@@ -268,7 +272,8 @@ answering, on both `/v1/systemone` and `/v1/systemone/batch`:
 - a `score` answer keeps `type`, `score`, `probabilities`, `confidence` and `legend`;
 - a `noul` answer keeps `type` and `noul`;
 - `usage` keeps `input_tokens` and `output_tokens`; the truncation facts and the collapsed-
-  options ceiling are not sent.
+  options ceiling are not sent;
+- `x_jev_confidence` is not sent.
 
 The projection keeps only the contracted keys and recomputes nothing: every value is the one the
 result already carries, so the probabilities and scores a strict client reads are identical to

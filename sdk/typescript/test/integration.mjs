@@ -43,10 +43,22 @@ test('JavaScript → HTTP → Python Router → real offline Agent inference', {
 
   const result = await client.predict(fixture.state, fixture.questions, { model: 'english' });
   const { routing, ...prediction } = result;
-  assert.deepEqual(prediction, fixture.expected, 'SDK answers must exactly match direct Python inference');
+  const modelAnswers = Object.fromEntries(Object.entries(prediction.answers).map(([id, answer]) => {
+    const { x_jev_confidence: compatibilityConfidence, ...modelAnswer } = answer;
+    if (answer.type === 'choice' || answer.type === 'score') {
+      assert.equal(typeof compatibilityConfidence, 'number', `${id} must include HTTP compatibility confidence`);
+      assert.ok(Number.isFinite(compatibilityConfidence) && compatibilityConfidence >= 0 && compatibilityConfidence <= 1);
+    } else {
+      assert.equal(compatibilityConfidence, undefined, 'noul has no compatibility confidence extension');
+    }
+    return [id, modelAnswer];
+  }));
+  assert.deepEqual({ ...prediction, answers: modelAnswers }, fixture.expected,
+    'SDK model answers must exactly match direct Python inference');
   assert.equal(routing.model, 'english');
   assert.equal(result.answers.single.choice, 'only');
   assert.equal(result.answers.single.probabilities.only, 1);
+  assert.equal(result.answers.single.x_jev_confidence, 1);
   assert.ok(result.usage.input_tokens > 0);
   assert.equal(result.usage.output_tokens, 0);
   const batch = await client.predictBatch([fixture.state, fixture.state], fixture.questions,

@@ -345,6 +345,9 @@ These apply to the `laya-serve` service only.
 | `LAYA_API_KEY` | (none) | when set, requires `Authorization: Bearer <key>` |
 | `LAYA_ROOT_PATH` | (empty) | public URL prefix for FastAPI when behind a reverse proxy; the proxy should strip it before forwarding |
 | `LAYA_MAX_TOKEN_BUDGET` | `8192` | cap on per-request `max_len` and `head_max_len` overrides |
+| `LAYA_MAX_BATCH_TOKENS` | `131072` | tokens one batch forward pass may collate; larger batches are split into several passes |
+| `LAYA_IDLE_UNLOAD_SECONDS` | `0` | unload idle checkpoints after this many seconds; the next request loads them again |
+| `LAYA_JEV_STRICT` | `0` | `1` projects responses onto the strict Jev wire contract, removing Laya extensions |
 | `LAYA_SHA256_DIGESTS` | (none) | JSON digests checked before a checkpoint is parsed: `{artifact: digest}` for every checkpoint, or `{model: {artifact: digest}}` per checkpoint. See [Security](security.md) |
 | `LAYA_EXTRA_MODELS` | (none) | Additional checkpoint names and paths as JSON |
 | `LAYA_CACHE` | `0` | Enable process-local memory decision caching |

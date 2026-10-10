@@ -299,6 +299,26 @@ test('prediction validation rejects malformed required fields and optional exten
   }
 });
 
+test('Jev confidence is optional, preserved and validated for choice and score answers', async () => {
+  const payload = structuredClone(allAnswerPrediction);
+  payload.answers.team.x_jev_confidence = 0.8;
+  payload.answers.urgency.x_jev_confidence = 0.4;
+  const result = await new Laya({ fetch: async () => json(payload) }).predict('hello', allAnswerQuestions);
+  assert.equal(result.answers.team.x_jev_confidence, 0.8);
+  assert.equal(result.answers.urgency.x_jev_confidence, 0.4);
+  assert.equal(result.answers.refund.x_jev_confidence, undefined);
+  const legacy = await new Laya({ fetch: async () => json(allAnswerPrediction) }).predict('hello', allAnswerQuestions);
+  assert.equal(legacy.answers.team.x_jev_confidence, undefined);
+  for (const value of [-0.1, 1.1, NaN, 'high']) {
+    const invalid = structuredClone(payload);
+    invalid.answers.team.x_jev_confidence = value;
+    await assert.rejects(new Laya({ fetch: async () => json(invalid) }).predict('hello', allAnswerQuestions), LayaResponseError);
+  }
+  const invalid = structuredClone(payload);
+  invalid.answers.refund.x_jev_confidence = 0.8;
+  await assert.rejects(new Laya({ fetch: async () => json(invalid) }).predict('hello', allAnswerQuestions), LayaResponseError);
+});
+
 // The key set is what a live `/v1/systemone` answer carries: both agents build these six keys for
 // any non-empty question set, and `options` joins them when the head budget leaves some question's
 // options sharing a token span (#538). The counts are chosen to exercise a cut state, which a

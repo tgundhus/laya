@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -90,6 +91,17 @@ check_param("Router.__init__", Router.__init__, "sha256_digests", None)
 # ...and the checkpoints a caller registers beside the built-ins: `resolve` and `unregister` are the instance side
 check_true("Router/resolve", callable(getattr(Router, "resolve", None)))
 check_param("Router.unregister", Router.unregister, "name", inspect.Parameter.empty)
+
+# A likely typo is still a distinct registration; warnings must not silently reroute it.
+with warnings.catch_warnings(record=True) as _registration_warnings:
+    warnings.simplefilter("always")
+    _typo_router = Router(models={"englsh": "./custom-checkpoint"})
+check("Router/typo warning count", len(_registration_warnings), 1)
+check("Router/typo warning category", _registration_warnings[0].category, RuntimeWarning)
+check("Router/typo remains a distinct checkpoint", _typo_router.resolve("englsh"), "englsh")
+check("Router/typo source preserved", _typo_router.models["englsh"], "./custom-checkpoint")
+check("Router/typo leaves English default", _typo_router.default, "english")
+check("Router/typo leaves built-in source", _typo_router.models["english"], Router().models["english"])
 
 # What the constructor does NOT raise over is part of its contract too: a shared
 # `agent_kwargs["expected_sha256"]` overlapping a per-checkpoint `sha256_digests` entry on one file
@@ -1012,8 +1024,50 @@ check("serve/BODY_REFUSALS names nothing but hooks",
       [key for key in _http_refusals if "hook" not in key and "predict" not in key], [])
 check("serve forwards and refuses disjoint sets", sorted(set(_http_controls) & set(_http_refusals)), [])
 
+# The HTTP compatibility field is additive; strict mode and the existing confidence keep
+# their meanings. Reused Router results must not acquire transport-only fields.
+from laya.confidence import jev_confidence  # noqa: E402
+from laya.serve import _add_jev_confidence, _project_jev_strict  # noqa: E402
+
+check("jev_confidence parameters", list(sig(jev_confidence)), ["answer"])
+check_param("jev_confidence", jev_confidence, "answer", inspect.Parameter.empty,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD)
+_wire_result = {"model": "test", "answers": {
+    "q": {"type": "choice", "choice": "a", "probabilities": {"a": 0.8, "b": 0.2}, "confidence": 0.3},
+    "n": {"type": "noul", "noul": 0.8}}, "usage": {"input_tokens": 1, "output_tokens": 0}}
+_wire_served = _add_jev_confidence(_wire_result)
+check("serve/Jev confidence field", _wire_served["answers"]["q"]["x_jev_confidence"], 0.6)
+check("serve/existing confidence preserved", _wire_served["answers"]["q"]["confidence"], 0.3)
+check_true("serve/router payload remains unchanged", "x_jev_confidence" not in _wire_result["answers"]["q"])
+check_true("serve/noul has no Jev confidence", "x_jev_confidence" not in _wire_served["answers"]["n"])
+check_true("serve/strict contract excludes compatibility additions",
+           "x_jev_confidence" not in _project_jev_strict(_wire_served)["answers"]["q"])
+
 # The opt-in shortlist evaluator is a public Python entry point. Pin its required
 # provenance arguments without adding an eager import to the package root.
+from laya.shortlist import predict_shortlist  # noqa: E402
+
+class _ShortlistOrderProbe:
+    def predict(self, state, questions, **kwargs):
+        self.questions = questions
+        return {"answers": {}}
+
+_order_questions = {"q": {"type": "choice", "instructions": "Choose", "criteria": ["a", "b", "c"],
+                           "option_order": [2, 1, 0]}}
+_order_probe = _ShortlistOrderProbe()
+with warnings.catch_warnings(record=True) as _shortlist_warnings:
+    warnings.simplefilter("always")
+    predict_shortlist(_order_probe, "state", _order_questions, lambda texts: [[1., 0.]] * len(texts), k=2)
+check("shortlist/narrowing warning count", len(_shortlist_warnings), 1)
+check("shortlist/narrowing warning category", _shortlist_warnings[0].category, RuntimeWarning)
+check_true("shortlist/narrowing drops invalid permutation", "option_order" not in _order_probe.questions["q"])
+check("shortlist/narrowing preserves caller permutation", _order_questions["q"]["option_order"], [2, 1, 0])
+with warnings.catch_warnings(record=True) as _shortlist_warnings:
+    warnings.simplefilter("always")
+    predict_shortlist(_order_probe, "state", _order_questions, None, k=3)
+check("shortlist/passthrough emits no warning", len(_shortlist_warnings), 0)
+check("shortlist/passthrough keeps permutation", _order_probe.questions["q"]["option_order"], [2, 1, 0])
+
 from laya.evals_shortlist import evaluate_shortlist  # noqa: E402
 
 check_param("evaluate_shortlist", evaluate_shortlist, "k", 20)
