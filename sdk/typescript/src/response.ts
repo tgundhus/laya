@@ -92,6 +92,9 @@ export function validatePrediction(value: unknown, questions: Questions): void {
     if (answer.answer_confidence !== undefined) {
       expect(probability(answer.answer_confidence), `answers.${id}.answer_confidence`);
     }
+    if (answer.x_jev_confidence !== undefined) {
+      expect(question.type !== 'noul' && probability(answer.x_jev_confidence), `answers.${id}.x_jev_confidence`);
+    }
     if (answer.low_confidence !== undefined) {
       expect(answer.low_confidence === true, `answers.${id}.low_confidence`);
     }

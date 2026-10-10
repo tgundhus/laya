@@ -1012,6 +1012,25 @@ check("serve/BODY_REFUSALS names nothing but hooks",
       [key for key in _http_refusals if "hook" not in key and "predict" not in key], [])
 check("serve forwards and refuses disjoint sets", sorted(set(_http_controls) & set(_http_refusals)), [])
 
+# The HTTP compatibility field is additive; strict mode and the existing confidence keep
+# their meanings. Reused Router results must not acquire transport-only fields.
+from laya.confidence import jev_confidence  # noqa: E402
+from laya.serve import _add_jev_confidence, _project_jev_strict  # noqa: E402
+
+check("jev_confidence parameters", list(sig(jev_confidence)), ["answer"])
+check_param("jev_confidence", jev_confidence, "answer", inspect.Parameter.empty,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD)
+_wire_result = {"model": "test", "answers": {
+    "q": {"type": "choice", "choice": "a", "probabilities": {"a": 0.8, "b": 0.2}, "confidence": 0.3},
+    "n": {"type": "noul", "noul": 0.8}}, "usage": {"input_tokens": 1, "output_tokens": 0}}
+_wire_served = _add_jev_confidence(_wire_result)
+check("serve/Jev confidence field", _wire_served["answers"]["q"]["x_jev_confidence"], 0.6)
+check("serve/existing confidence preserved", _wire_served["answers"]["q"]["confidence"], 0.3)
+check_true("serve/router payload remains unchanged", "x_jev_confidence" not in _wire_result["answers"]["q"])
+check_true("serve/noul has no Jev confidence", "x_jev_confidence" not in _wire_served["answers"]["n"])
+check_true("serve/strict contract excludes compatibility additions",
+           "x_jev_confidence" not in _project_jev_strict(_wire_served)["answers"]["q"])
+
 # The opt-in shortlist evaluator is a public Python entry point. Pin its required
 # provenance arguments without adding an eager import to the package root.
 from laya.evals_shortlist import evaluate_shortlist  # noqa: E402

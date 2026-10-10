@@ -29,6 +29,7 @@ from laya.serve import (  # noqa: E402
     DEFAULT_MAX_TOKEN_BUDGET,
     MAX_BODY_BYTES,
     MAX_STATE_CHARS,
+    _add_jev_confidence,
     _apply_thread_limit,
     _check_request_limits,
     _env_bool,
@@ -252,6 +253,39 @@ def test_jev_strict_leaves_an_unknown_answer_shape_unchanged(monkeypatch):
     body = client.post("/v1/systemone", json=REQ).json()
     assert body["answers"]["odd"] == {"type": "weird", "payload": 1}
     assert "routing" not in body
+
+
+def test_choice_and_score_answers_carry_jev_confidence(monkeypatch):
+    """Each choice and score answer reports Jev's `confidence` beside Laya's own (#302)."""
+    client, _ = _strict_client(monkeypatch, None)
+    answers = client.post("/v1/systemone", json=REQ).json()["answers"]
+    # choice: (max(p) - 1/n) / (1 - 1/n) over billing 0.9519 / tech 0.0327 / other 0.0154
+    assert answers["queue"]["x_jev_confidence"] == 0.9278
+    # score: 1 - sum(p_i * |i - mode|) / D with mode 1 and D = 2/3, so 1 - 0.35 / (2/3)
+    assert answers["urgency"]["x_jev_confidence"] == 0.475
+    # Laya's own numbers are untouched, and a noul answer has no Jev confidence to report
+    assert answers["queue"]["confidence"] == 0.797
+    assert answers["urgency"]["confidence"] == 0.1925
+    assert "x_jev_confidence" not in answers["threat"]
+    # the router's own answer dicts are not edited, so a reused result cannot leak the field
+    assert "x_jev_confidence" not in FULL_ANSWERS["queue"]
+
+
+def test_batch_answers_carry_jev_confidence(monkeypatch):
+    client, _ = _strict_client(monkeypatch, None)
+    data = client.post("/v1/systemone/batch", json={"states": ["one", "two"],
+                                                    "questions": REQ["questions"]}).json()
+    assert [item["answers"]["queue"]["x_jev_confidence"] for item in data["results"]] == [0.9278, 0.9278]
+
+
+def test_jev_strict_leaves_out_jev_confidence(monkeypatch):
+    """Strict mode serves only the contracted keys, so the `x_` addition is not among them."""
+    client, _ = _strict_client(monkeypatch, "1")
+    single = client.post("/v1/systemone", json=REQ).json()
+    batch = client.post("/v1/systemone/batch", json={"states": ["one"],
+                                                     "questions": REQ["questions"]}).json()
+    for answers in (single["answers"], batch["results"][0]["answers"]):
+        assert all("x_jev_confidence" not in answer for answer in answers.values())
 
 
 def test_known_model_is_honoured(monkeypatch):
@@ -3106,6 +3140,19 @@ def _gate_written_keys():
     return sorted(written)
 
 
+def _serve_added_keys():
+    """Every key the server adds onto an answer the agent built, by answer type (#302).
+
+    Read off the server's own `_add_jev_confidence` run on one answer of each type, rather than
+    transcribed, so a key it starts or stops adding moves this list with it.
+    """
+    probe = {"choice": {"type": "choice", "probabilities": {"a": 0.6, "b": 0.4}},
+             "score": {"type": "score", "probabilities": {"0": 0.6, "1": 0.4}},
+             "noul": {"type": "noul", "noul": 0.6}}
+    served = _add_jev_confidence({"answers": probe})["answers"]
+    return {qtype: sorted(set(served[qtype]) - set(probe[qtype])) for qtype in probe}
+
+
 def _md_answer_table(section):
     """The `| answer type | keys |` table as rows: which keys the page says an answer carries.
 
@@ -3144,9 +3191,10 @@ def test_http_api_page_documents_the_gate_report_on_an_answer():
     read a response page that said the answer had been "marked" without saying what the mark is called,
     what state the answer is in, or what threshold produced it.
 
-    So the table is compared against both writers: the `answers[qid] = {...}` literals of each agent,
-    and the `a[...] = ...` assignments of the gate. Both directions, and against the printed sample too
-    -- which must carry no gate report, because the request the page prints sets no threshold.
+    So the table is compared against every writer: the `answers[qid] = {...}` literals of each agent,
+    the `a[...] = ...` assignments of the gate, and the keys the server adds (#302). Both directions,
+    and against the printed sample too -- which must carry no gate report, because the request the
+    page prints sets no threshold.
     """
     page = open(os.path.join(ROOT, "docs", "http-api.md"), encoding="utf-8").read()
     section = page[page.index("### Response"):page.index("### Confidence")]
@@ -3167,11 +3215,12 @@ def test_http_api_page_documents_the_gate_report_on_an_answer():
     # The row's first column is the discriminator every answer stamps, so it is documented by the row
     # that documents the type rather than as a key inside the cell.
     discriminator = {"type"}
+    served = _serve_added_keys()
     for qtype, built in torch_site.items():
         documented = rows[qtype] | rows["all"] | rows["gate"] | discriminator
-        assert documented == set(built) | set(gate), (
-            "the %s rows say an answer carries %s, the agents build %s and the gate adds %s" % (
-                qtype, sorted(documented), built, gate))
+        assert documented == set(built) | set(gate) | set(served[qtype]), (
+            "the %s rows say an answer carries %s, the agents build %s, the gate adds %s and the "
+            "server adds %s" % (qtype, sorted(documented), built, gate, served[qtype]))
 
     # And the sample is one answer to the request the page itself prints, which sends no threshold:
     # so its answers show the always-on keys and no gate report at all.

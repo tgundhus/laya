@@ -87,6 +87,11 @@ client.predict('hello', questions, { minConfidence: dynamicThresholds });
 new Laya({ model: 'english' });
 // @ts-expect-error A score answer has no choice field.
 result.answers.priority.choice;
+const jevChoiceConfidence: number | undefined = result.answers.team.x_jev_confidence;
+const jevScoreConfidence: number | undefined = result.answers.priority.x_jev_confidence;
+// @ts-expect-error Noul answers carry no Jev confidence field.
+result.answers.refund.x_jev_confidence;
+void [jevChoiceConfidence, jevScoreConfidence];
 // @ts-expect-error Unknown question IDs are not valid.
 result.answers.unknown;
 // @ts-expect-error Unknown choice labels are not valid.

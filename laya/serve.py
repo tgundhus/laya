@@ -8,6 +8,12 @@ working unchanged. All this module adds is the HTTP surface Laya itself does not
 ship: a ``POST /v1/systemone`` route and its ``POST /v1/systemone/batch`` sibling,
 an optional bearer check, and a health probe.
 
+Each ``choice`` and ``score`` answer also carries ``x_jev_confidence``: the
+``confidence`` Jev's own formula gives for the same probabilities. Laya's
+``confidence`` is normalized entropy and keeps that meaning; a client porting a
+threshold from Jev reads ``x_jev_confidence`` instead (#302). ``LAYA_JEV_STRICT``
+leaves it out with the other additions.
+
 Configuration is entirely via environment variables so the same entry point
 serves a laptop dev run and a systemd unit:
 
@@ -46,6 +52,7 @@ env var                    meaning                                        defaul
                            a ``["repo", "subfolder"]`` pair. Served under
                            explicit ``model=`` like a built-in.
 ``LAYA_MAX_TOKEN_BUDGET``  cap on per-request max_len / head_max_len       8192
+``LAYA_MAX_BATCH_TOKENS``  cap on batch forward tokens (states x q x len)  131072
 ``LAYA_JEV_STRICT``        if set, serve the strict Jev wire contract: no   0
                            root `routing`, no per-answer `action` /
                            `answer_confidence`, no `confidence` on noul
@@ -205,6 +212,23 @@ def _project_jev_strict(result: Dict[str, Any]) -> Dict[str, Any]:
     return {"model": result["model"], "answers": answers,
             "usage": {"input_tokens": usage.get("input_tokens", 0),
                       "output_tokens": usage.get("output_tokens", 0)}}
+
+
+def _add_jev_confidence(result: Dict[str, Any]) -> Dict[str, Any]:
+    """`result` with `x_jev_confidence` on every choice and score answer (#302).
+
+    The `x_` prefix keeps it clear of any field Jev may add later. An answer whose
+    probabilities give no usable number is left without the field rather than given a guess.
+    The result is copied, not edited, so a router that reuses its answer dicts is unaffected.
+    """
+    from .confidence import jev_confidence
+    if not isinstance(result.get("answers"), dict):
+        return result
+    answers: Dict[str, Any] = {}
+    for qid, answer in result["answers"].items():
+        conf = jev_confidence(answer) if isinstance(answer, dict) else None
+        answers[qid] = answer if conf is None else {**answer, "x_jev_confidence": round(conf, 4)}
+    return {**result, "answers": answers}
 
 
 def _published_model_ids() -> Dict[str, str]:
@@ -1243,6 +1267,8 @@ def create_app(router: Optional[Any] = None):
                 infer_ms = (time.perf_counter() - t0) * 1000.0
                 if _env_bool("LAYA_JEV_STRICT", False):
                     result = _project_jev_strict(result)
+                else:
+                    result = _add_jev_confidence(result)
                 from fastapi.responses import JSONResponse
                 return JSONResponse(
                     content=result,
@@ -1383,6 +1409,8 @@ def create_app(router: Optional[Any] = None):
                 infer_ms = (time.perf_counter() - t0) * 1000.0
                 if _env_bool("LAYA_JEV_STRICT", False):
                     batch_res["results"] = [_project_jev_strict(item) for item in batch_res["results"]]
+                else:
+                    batch_res["results"] = [_add_jev_confidence(item) for item in batch_res["results"]]
                 from fastapi.responses import JSONResponse
                 return JSONResponse(
                     content=batch_res,

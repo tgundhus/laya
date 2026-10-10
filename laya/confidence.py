@@ -35,6 +35,58 @@ def answer_confidence_value(answer: Dict[str, Any]) -> Optional[float]:
     return None
 
 
+def jev_confidence(answer: Dict[str, Any]) -> Optional[float]:
+    """Return the Jev adapter's confidence for a choice or score answer.
+
+    Choice scales peak probability against uniform mass. Score compares distance from the
+    modal level with uniform mean absolute deviation about the center. This is a concentration
+    measure; it does not change Laya's confidence or abstention threshold.
+
+    Zero mass is treated as uniform. Invalid weights or score indices give None.
+    """
+    if not isinstance(answer, dict):
+        return None
+    kind = answer.get("type")
+    probabilities = answer.get("probabilities")
+    if kind not in ("choice", "score") or not isinstance(probabilities, dict) or not probabilities:
+        return None
+    try:
+        if kind == "score":
+            keys = sorted(probabilities, key=int)
+            if any(isinstance(key, bool) or not isinstance(key, (int, str))
+                   or str(key) != str(int(key)) for key in keys):
+                return None
+            if [int(key) for key in keys] != list(range(len(keys))):
+                return None
+            values = [probabilities[key] for key in keys]
+        else:
+            values = list(probabilities.values())
+        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in values):
+            return None
+        p = [float(value) for value in values]
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not all(math.isfinite(v) and v >= 0.0 for v in p):
+        return None
+    n = len(p)
+    if n == 1:
+        return 1.0
+    largest = max(p)
+    if largest:
+        p = [v / largest for v in p]
+        total = sum(p)
+        p = [v / total for v in p]
+    else:
+        p = [1.0 / n] * n
+    if kind == "choice":
+        return min(1.0, max(0.0, (max(p) - 1.0 / n) / (1.0 - 1.0 / n)))
+    mode = max(range(n), key=p.__getitem__)
+    spread = sum(v * abs(i - mode) for i, v in enumerate(p))
+    center = (n - 1) / 2
+    uniform_spread = sum(abs(i - center) for i in range(n)) / n
+    return max(0.0, 1.0 - spread / uniform_spread)
+
+
 def _gate_confidence(answer: Dict[str, Any]) -> Optional[float]:
     """The number the abstention gate compares against `min_confidence`, or None if there is none.
 
