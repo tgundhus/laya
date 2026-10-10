@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1033,6 +1034,29 @@ check_true("serve/strict contract excludes compatibility additions",
 
 # The opt-in shortlist evaluator is a public Python entry point. Pin its required
 # provenance arguments without adding an eager import to the package root.
+from laya.shortlist import predict_shortlist  # noqa: E402
+
+class _ShortlistOrderProbe:
+    def predict(self, state, questions, **kwargs):
+        self.questions = questions
+        return {"answers": {}}
+
+_order_questions = {"q": {"type": "choice", "instructions": "Choose", "criteria": ["a", "b", "c"],
+                           "option_order": [2, 1, 0]}}
+_order_probe = _ShortlistOrderProbe()
+with warnings.catch_warnings(record=True) as _shortlist_warnings:
+    warnings.simplefilter("always")
+    predict_shortlist(_order_probe, "state", _order_questions, lambda texts: [[1., 0.]] * len(texts), k=2)
+check("shortlist/narrowing warning count", len(_shortlist_warnings), 1)
+check("shortlist/narrowing warning category", _shortlist_warnings[0].category, RuntimeWarning)
+check_true("shortlist/narrowing drops invalid permutation", "option_order" not in _order_probe.questions["q"])
+check("shortlist/narrowing preserves caller permutation", _order_questions["q"]["option_order"], [2, 1, 0])
+with warnings.catch_warnings(record=True) as _shortlist_warnings:
+    warnings.simplefilter("always")
+    predict_shortlist(_order_probe, "state", _order_questions, None, k=3)
+check("shortlist/passthrough emits no warning", len(_shortlist_warnings), 0)
+check("shortlist/passthrough keeps permutation", _order_probe.questions["q"]["option_order"], [2, 1, 0])
+
 from laya.evals_shortlist import evaluate_shortlist  # noqa: E402
 
 check_param("evaluate_shortlist", evaluate_shortlist, "k", 20)
