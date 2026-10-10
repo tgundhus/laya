@@ -30,7 +30,9 @@ package com.convaiinnovations.laya.hooks;
  * <p>{@code AsyncHook} requires concurrent dispatch. A serialized registry refuses it before
  * the callback runs, because a callback on another thread cannot re-enter the registry's lock.
  *
- * <p>A hook runs on the calling thread, so it is as thread-safe as the call around it. Install
+ * <p>A hook runs on the calling thread, on the thread a {@link Hooks.Policy#timeout()} runs it
+ * on, or on an {@code AsyncHook}'s executor, and in each case the caller waits for it until a
+ * deadline expires -- so until it overruns, it is as thread-safe as the call around it. Install
  * one that is not, and set {@link HookRegistry#concurrent(boolean)} to false to have dispatch
  * serialise it.
  */

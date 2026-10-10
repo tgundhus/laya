@@ -1,5 +1,7 @@
 package com.convaiinnovations.laya.hooks;
 
+import static java.util.Objects.requireNonNull;
+
 import com.convaiinnovations.laya.Prediction;
 import com.convaiinnovations.laya.Question;
 import java.time.Duration;
@@ -572,6 +574,8 @@ public final class Hooks {
             // flag: a caller up the stack that polls `Thread.interrupted()` to decide whether to
             // shut down would otherwise be told it was never asked to.
             Thread.currentThread().interrupt();
+            // The call stops waiting here, so the hook is cut off exactly as on a deadline.
+            ctx.abandon(runner);
             throw new IllegalStateException("interrupted while waiting for hook "
                     + hookName(hook) + "." + event.wireName(), interrupted);
         }
@@ -746,7 +750,7 @@ public final class Hooks {
             } catch (RuntimeException | Error hookFailure) {
                 // Attached, never substituted: the thing that broke the request is what the
                 // caller has to catch, and a failing observer must not be able to hide it.
-                problem.addSuppressed(hookFailure);
+                attach(problem, hookFailure);
             }
         }
 
@@ -760,7 +764,7 @@ public final class Hooks {
             if (raised == null) {
                 throw hookFailure;
             }
-            raised.addSuppressed(hookFailure);
+            attach(raised, hookFailure);
         }
 
         if (raised instanceof RuntimeException problem) {
@@ -770,5 +774,127 @@ public final class Hooks {
             throw problem;
         }
         return ctx.results();
+    }
+
+    /**
+     * Reports a failure that happened before {@code on_predict_start} could fire -- routing or
+     * loading, which the reference runs inside its predict {@code try} -- as {@code on_error} and
+     * then {@code on_predict_end}, with {@code elapsedMs} measured from {@code startedAtNanos}.
+     * A hook failure is attached to {@code problem}, never substituted.
+     *
+     * <p>For a {@link com.convaiinnovations.laya.Predictor} that must do work before its start
+     * event, as {@code Router} does. Pass a context no hook has seen: one that already carries
+     * results or an error is refused, though a context mid-call without either is not detected.
+     */
+    public static void failedBeforeStart(List<? extends Hook> hooks, PredictContext ctx,
+                                         Policy policy, Throwable problem, long startedAtNanos) {
+        requireNonNull(problem, "problem");
+        if (ctx.results() != null || ctx.error() != null) {
+            throw new IllegalStateException(
+                    "failedBeforeStart needs a fresh context; this one already has an outcome");
+        }
+        ctx.error(problem);
+        try {
+            dispatch(hooks, Event.ERROR, ctx, policy);
+        } catch (RuntimeException | Error hookFailure) {
+            attach(problem, hookFailure);
+        }
+        ctx.elapsedMs((System.nanoTime() - startedAtNanos) / 1_000_000.0);
+        try {
+            dispatch(hooks, Event.PREDICT_END, ctx, policy);
+        } catch (RuntimeException | Error hookFailure) {
+            attach(problem, hookFailure);
+        }
+    }
+
+    /**
+     * {@code addSuppressed}, except when a hook rethrew the failure it was shown: a throwable
+     * cannot suppress itself, and trying replaces the real failure with an
+     * {@code IllegalArgumentException}.
+     */
+    private static void attach(Throwable problem, Throwable hookFailure) {
+        if (hookFailure != problem) {
+            problem.addSuppressed(hookFailure);
+        }
+    }
+
+    /**
+     * {@link #around} for many requests that share forward passes: each keeps its own context and
+     * its own start and end, while {@code inference} answers the ones still pending in one go.
+     *
+     * <p>The reference's {@code Router.predict_batch} sequence. Every context starts, in order,
+     * before any inference; {@code inference} must assign {@code results} on each context it is
+     * handed. Contexts then end in <b>reverse</b> of the order they started, so a hook that sets
+     * something in start and resets it in end unwinds the last one first. On a failure every
+     * started context fails with it, a skipped one included, and gets the error event before its
+     * end; a hook throwing on a failed context is attached to the failure. Every context gets its
+     * end even when another's end hook throws; the first such throw is raised afterwards.
+     *
+     * @param inference answers the contexts no start hook answered; not called when there are none
+     */
+    public static void aroundGroup(List<? extends Hook> hooks, List<PredictContext> contexts,
+                                   Policy policy, Consumer<List<PredictContext>> inference) {
+        List<PredictContext> started = new ArrayList<>(contexts.size());
+        Throwable raised = null;
+        try {
+            for (PredictContext ctx : contexts) {
+                started.add(ctx);
+                dispatch(hooks, Event.PREDICT_START, ctx, policy);
+            }
+            List<PredictContext> pending = new ArrayList<>();
+            for (PredictContext ctx : started) {
+                if (ctx.results() != null) {
+                    continue;
+                }
+                pending.add(ctx);
+            }
+            if (!pending.isEmpty()) {
+                inference.accept(List.copyOf(pending));
+            }
+            // Totalled before any end, so a malformed result fails the whole group rather than
+            // escaping after some of its requests have already ended.
+            List<Totals> totals = new ArrayList<>(started.size());
+            for (PredictContext ctx : started) {
+                totals.add(ctx.results() == null ? null : aggregateUsage(ctx.results()));
+            }
+            for (int i = 0; i < started.size(); i++) {
+                started.get(i).usage(totals.get(i));
+            }
+        } catch (RuntimeException | Error problem) {
+            raised = problem;
+        }
+
+        double now = System.nanoTime();
+        for (PredictContext ctx : started) {
+            ctx.elapsedMs((now - ctx.startedAt()) / 1_000_000.0);
+            if (raised != null) {
+                ctx.error(raised);
+            }
+        }
+        Throwable firstEndFailure = null;
+        for (int i = started.size() - 1; i >= 0; i--) {
+            PredictContext ctx = started.get(i);
+            List<Event> events = raised == null ? List.of(Event.PREDICT_END)
+                    : List.of(Event.ERROR, Event.PREDICT_END);
+            for (Event event : events) {
+                try {
+                    dispatch(hooks, event, ctx, policy);
+                } catch (RuntimeException | Error hookFailure) {
+                    if (raised != null) {
+                        attach(raised, hookFailure);
+                    } else if (firstEndFailure == null) {
+                        firstEndFailure = hookFailure;
+                    }
+                }
+            }
+        }
+
+        Throwable failure = raised != null ? raised : firstEndFailure;
+        if (failure instanceof RuntimeException problem) {
+            throw problem;
+        }
+        if (failure instanceof Error problem) {
+            throw problem;
+        }
     }
 }

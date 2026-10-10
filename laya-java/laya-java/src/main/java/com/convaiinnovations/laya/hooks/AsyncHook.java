@@ -23,10 +23,16 @@ import java.util.function.Consumer;
  *
  * <p>Except on a deadline. {@code CompletableFuture.cancel} does not interrupt a task already
  * running on an executor, so an overrunning callback keeps going. It is {@link
- * PredictContext#abandon abandoned} instead, exactly as {@link Hooks} does for a hook that
- * overruns {@code hooks_timeout}: anything it writes to the context afterwards is refused. It still
- * occupies the executor's thread until it returns, so a single-threaded executor has none left for
- * the next callback -- size the executor for the deadline, or leave the deadline off.
+ * PredictContext#abandon abandoned} instead, as {@link Hooks} does for a hook that overruns
+ * {@code hooks_timeout}: anything it writes to the context afterwards is refused. Unlike that
+ * case the executor's thread is reused, so the abandonment ends when the overrunning task
+ * returns, and a later callback of the same call on that thread is accepted; an abandonment
+ * made by anything else on that thread stays in force. A callback that had not started when the
+ * caller stopped waiting -- on the deadline, or on an interrupt while it waited for one -- never
+ * runs. Without a deadline the wait ignores interrupts, so it always ends with the callback. An
+ * abandoned callback still occupies the executor's thread until it returns, so a single-threaded
+ * executor has none left for the next callback -- size the executor for the deadline, or leave
+ * the deadline off.
  */
 public final class AsyncHook implements Hook {
 
@@ -97,11 +103,38 @@ public final class AsyncHook implements Hook {
         // The executor picks the thread, so the task reports it back: abandoning the context needs
         // the thread that will be writing to it.
         AtomicReference<Thread> runner = new AtomicReference<>();
+        Thread caller = Thread.currentThread();
+        // One gate decides start, expiry, abandon and release, so none of them races another: a
+        // task starting at the deadline does not run unabandoned, a task finishing at it does not
+        // stay abandoned, and only an abandonment made here is released here.
+        Object gate = new Object();
+        boolean[] gaveUp = new boolean[1];
+        boolean[] finished = new boolean[1];
+        boolean[] abandonedHere = new boolean[1];
         CompletableFuture<Void> running;
         try {
             running = CompletableFuture.runAsync(() -> {
-                runner.set(Thread.currentThread());
-                callback.accept(ctx);
+                Thread self = Thread.currentThread();
+                synchronized (gate) {
+                    if (gaveUp[0]) {
+                        return;                     // the call gave up before this started
+                    }
+                    if (!ctx.enterAsync(caller, self)) {
+                        return;                     // an outer policy deadline already expired
+                    }
+                    runner.set(self);
+                }
+                try {
+                    callback.accept(ctx);
+                } finally {
+                    synchronized (gate) {
+                        finished[0] = true;
+                        if (abandonedHere[0]) {
+                            ctx.release(self);
+                        }
+                        ctx.exitAsync(caller, self);
+                    }
+                }
             }, executor);
         } catch (RuntimeException rejected) {
             // A saturated or shut-down executor. Thrown as-is so the hook policy decides, exactly
@@ -127,10 +160,7 @@ public final class AsyncHook implements Hook {
         } catch (TimeoutException expired) {
             // cancel(true) cannot interrupt a task already running on an executor, so the callback
             // is cut off from the call instead: whatever it writes from here on is refused.
-            Thread overrunning = runner.get();
-            if (overrunning != null) {
-                ctx.abandon(overrunning);
-            }
+            giveUp(gate, gaveUp, finished, abandonedHere, runner, ctx);
             running.cancel(true);
             throw new IllegalStateException(
                     delegate + " did not finish " + event + " within " + timeout, expired);
@@ -138,8 +168,27 @@ public final class AsyncHook implements Hook {
             // The flag is restored before unwinding, so a caller using interruption to cancel is
             // not left thinking the interrupt was swallowed.
             Thread.currentThread().interrupt();
+            // The call stops waiting here just as it does on a deadline, so the same cut-off.
+            giveUp(gate, gaveUp, finished, abandonedHere, runner, ctx);
             running.cancel(true);
             throw new IllegalStateException(delegate + " was interrupted in " + event, interrupted);
+        }
+    }
+
+    /**
+     * The call has stopped waiting: a callback not yet started never runs, and a running one is
+     * cut off.
+     */
+    private static void giveUp(Object gate, boolean[] gaveUp, boolean[] finished,
+                               boolean[] abandonedHere, AtomicReference<Thread> runner,
+                               PredictContext ctx) {
+        synchronized (gate) {
+            gaveUp[0] = true;
+            Thread overrunning = runner.get();
+            if (overrunning != null && !finished[0]) {
+                ctx.abandon(overrunning);
+                abandonedHere[0] = true;
+            }
         }
     }
 

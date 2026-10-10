@@ -1096,6 +1096,26 @@ check_param("evaluate_agreement", evaluate_agreement, "student_provenance", insp
             inspect.Parameter.KEYWORD_ONLY)
 check_param("evaluate_agreement", evaluate_agreement, "model", None, inspect.Parameter.KEYWORD_ONLY)
 
+# The Java additions have compiled behavioral tests in their JDK lanes. Pin their
+# public overloads here too so the shared API guard tracks these SDK entry points.
+_java_source_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "laya-java", "laya-java",
+                               "src", "main", "java", "com", "convaiinnovations", "laya")
+for _java_file, _java_method, _java_return, _java_overloads in (
+        ("Router.java", "predictBatch", "List<Prediction>", [
+            "List<?> states, Map<String, Question> questions",
+            "List<?> states, Map<String, Question> questions, RouteOptions options",
+            "List<Request> requests",
+            "List<Request> requests, int batchSize, boolean sortByLength"]),
+        ("Shortlist.java", "predictTournament", "Tournament", [
+            "Predictor predictor, Object state, Map<String, Question> questions, int groupSize",
+            "Predictor predictor, Object state, Map<String, Question> questions"])):
+    with open(os.path.join(_java_source_dir, _java_file), encoding="utf-8") as _java_handle:
+        _java_source = _java_handle.read()
+    _java_pattern = r"public\s+(?:static\s+)?%s\s+%s\((.*?)\)\s*\{" % (
+        re.escape(_java_return), re.escape(_java_method))
+    check("Java/%s public overloads" % _java_method,
+          [" ".join(p.split()) for p in re.findall(_java_pattern, _java_source, re.DOTALL)], _java_overloads)
+
 
 # docs/hooks/examples.md ## Composition teaches one scope ordering contract; the pre-fix wording
 # ("Installed hooks first, then convenience callables") named only two tiers and put installed at

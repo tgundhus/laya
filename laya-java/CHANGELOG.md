@@ -107,9 +107,10 @@ see [Installing](README.md#installing).
 - `lang.LanguageDetection`: script and language detection, the eight public fields and the
   fourteen intermediate steps the reference exposes.
 - `Presets`: the five preset question sets, compared against the reference word for word.
-- `Router`: checkpoint selection with its reason strings, plus a load-and-evict lifecycle with
-  leases, so a checkpoint in use is never closed under a caller.
+- `Router`: checkpoint selection with its reason strings, grouped `predictBatch` requests, and a
+  load-and-evict lifecycle with leases, so a checkpoint in use is never closed under a caller.
 - `Shortlist`: cosine ranking over a caller's embedder, with an LRU cache and numpy's tie order.
+  `predictTournament` offers model-based elimination without an embedder.
 - `LayaEmail`: `cleanEmailBody` and `emailState`, with the English, Portuguese, Spanish and French
   marker sets, and `emailQuestions` re-exported from `Presets`.
 - `Decisions`: schema-driven decisions — `decide` and `decideBatch` over a JSON schema. An

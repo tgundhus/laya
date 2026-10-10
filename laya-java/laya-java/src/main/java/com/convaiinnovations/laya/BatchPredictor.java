@@ -7,14 +7,13 @@ import java.util.Map;
  * Anything that can answer one question set over many states in a shared forward pass.
  *
  * <p>Separate from {@link Predictor} rather than folded into it, because not every runtime
- * batches. {@link Agent} does; {@link Router} does not — it selects a checkpoint per state, so
- * there is no single graph call to share. The reference draws the same line at runtime, raising
- * {@code TypeError} when a runner has no {@code predict_batch} rather than looping {@code decide}
- * N times behind the caller's back; here the line is drawn by the type, so the same mistake does
- * not compile.
+ * batches. The reference draws the same line at runtime, raising {@code TypeError} when a runner
+ * has no {@code predict_batch} rather than looping {@code decide} N times behind the caller's
+ * back; here the line is drawn by the type, so the same mistake does not compile.
  *
- * <p>{@link Agent#predictBatch(List, Map)} already had this signature, so this interface names an
- * existing capability rather than adding one.
+ * <p>{@link Agent} shares one graph call across the states. {@link Router} routes each state and
+ * shares one call per checkpoint, so states that route apart are still answered together where
+ * they can be.
  */
 public interface BatchPredictor {
 

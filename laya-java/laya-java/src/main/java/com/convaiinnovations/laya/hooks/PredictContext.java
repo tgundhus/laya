@@ -4,6 +4,7 @@ import com.convaiinnovations.laya.Prediction;
 import com.convaiinnovations.laya.Predictor;
 import com.convaiinnovations.laya.Question;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,16 +26,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * sit in a set keyed by the call rather than by its contents, which is what a Java object does
  * by default — so there is no {@code equals} or {@code hashCode} here, on purpose.
  *
- * <p>Not thread-safe, and not meant to be: hooks run on the calling thread, in order. The one
- * exception is the thread a {@link Hooks.Policy#timeout} runs a hook on, which keeps running
+ * <p>Not thread-safe, and not meant to be: hooks run in order, on the calling thread or, for an
+ * {@link AsyncHook}, on its executor while the caller waits. The exception is a hook that
+ * overruns a {@link Hooks.Policy#timeout} or an {@code AsyncHook} deadline, which keeps running
  * after its deadline expires while the call moves on without it — see {@link #states(List)} for
  * what this class does about that and what it cannot do.
  *
  * <p>Two of the reference's fields are absent. {@code router} and {@code decision} carry a
- * {@code RouteDecision} to an {@code on_route} hook, and nothing in this port dispatches that
- * event yet — {@link com.convaiinnovations.laya.Router} does its own selection without hooks. A
- * field that is always null is not a port of a field, it is a promise the caller cannot tell
- * from a bug. What the reference splits across {@code agent} and {@code router} is one field
+ * {@code RouteDecision} to an {@code on_route} hook. {@link com.convaiinnovations.laya.Router}
+ * dispatches {@code on_route} with the chosen checkpoint in {@link #model()} and no states,
+ * questions or decision, so a hook here observes the route but cannot replace it, which the
+ * reference allows. What the reference splits across {@code agent} and {@code router} is one field
  * here, {@link #predictor}, because both are a {@link Predictor}.
  */
 public final class PredictContext {
@@ -60,10 +62,11 @@ public final class PredictContext {
     private volatile Throwable error;
 
     /**
-     * Threads whose deadline expired, and whose writes are therefore refused.
+     * Threads the call stopped waiting for -- on a deadline or an interrupt -- whose writes are
+     * therefore refused.
      *
-     * <p>Empty for every call that does not use {@link Hooks.Policy#timeout}, and at most one
-     * entry per overrun. A set rather than a flag because a chain can overrun more than once.
+     * <p>Empty unless the call stopped waiting for some hook, and at most one entry each time it
+     * did. A set rather than a flag because that can happen more than once in one chain.
      */
     private final Set<Thread> abandoned = ConcurrentHashMap.newKeySet();
 
@@ -157,7 +160,7 @@ public final class PredictContext {
      * store", which is a narrowing, not a proof — and the guard is cheap enough to be worth the
      * narrowing on its own.
      *
-     * @throws IllegalStateException when the calling thread's deadline has already expired
+     * @throws IllegalStateException when the call has already stopped waiting for this thread
      */
     public void states(List<?> replacement) {
         refuseIfAbandoned("states");
@@ -172,7 +175,7 @@ public final class PredictContext {
     /**
      * Replaces the questions, keeping the given iteration order — a choice's options are positional.
      *
-     * @throws IllegalStateException when the calling thread's deadline has already expired; see
+     * @throws IllegalStateException when the call has already stopped waiting for this thread; see
      *     {@link #states(List)}
      */
     public void questions(Map<String, Question> replacement) {
@@ -195,7 +198,7 @@ public final class PredictContext {
     /**
      * Replaces the results. From an end hook this is what the caller receives.
      *
-     * @throws IllegalStateException when the calling thread's deadline has already expired; see
+     * @throws IllegalStateException when the call has already stopped waiting for this thread; see
      *     {@link #states(List)}
      */
     public void results(List<Prediction> replacement) {
@@ -211,7 +214,7 @@ public final class PredictContext {
     /**
      * Overrides the token budget for this call.
      *
-     * @throws IllegalStateException when the calling thread's deadline has already expired; see
+     * @throws IllegalStateException when the call has already stopped waiting for this thread; see
      *     {@link #states(List)}
      */
     public void maxLen(Integer replacement) {
@@ -227,7 +230,7 @@ public final class PredictContext {
     /**
      * Overrides the head budget for this call.
      *
-     * @throws IllegalStateException when the calling thread's deadline has already expired; see
+     * @throws IllegalStateException when the call has already stopped waiting for this thread; see
      *     {@link #states(List)}
      */
     public void headMaxLen(Integer replacement) {
@@ -288,7 +291,7 @@ public final class PredictContext {
      * "nothing", and an empty call has nothing to answer.
      *
      * @throws IllegalArgumentException when the count is neither 1 nor one per state
-     * @throws IllegalStateException when the calling thread's deadline has already expired; see
+     * @throws IllegalStateException when the call has already stopped waiting for this thread; see
      *     {@link #states(List)}
      */
     public void skip(List<Prediction> results) {
@@ -304,18 +307,67 @@ public final class PredictContext {
     /**
      * Cuts {@code runner} off from this call: nothing it writes from here on is accepted.
      *
-     * <p>Called by {@link Hooks} the moment a hook's deadline expires, which is the moment the
-     * call stops being able to wait for it. See {@link #states(List)}.
+     * <p>Called the moment the call stops waiting for a hook, on its deadline or on an interrupt.
+     * See {@link #states(List)}.
      */
     void abandon(Thread runner) {
-        abandoned.add(runner);
+        synchronized (asyncChildren) {
+            if (abandoned.add(runner)) {
+                for (Thread child : asyncChildren.getOrDefault(runner, List.of())) {
+                    abandon(child);
+                }
+            }
+        }
+    }
+
+    // Guarded by itself. An AsyncHook may delegate again, so a policy deadline must cut off
+    // descendants of its timeout thread as well as the thread that was waiting for them.
+    private final Map<Thread, List<Thread>> asyncChildren = new IdentityHashMap<>();
+
+    /** Registers a running executor callback, or refuses one whose caller already gave up. */
+    boolean enterAsync(Thread caller, Thread runner) {
+        synchronized (asyncChildren) {
+            if (abandoned.contains(caller)) {
+                return false;
+            }
+            if (caller != runner) {
+                asyncChildren.computeIfAbsent(caller, key -> new ArrayList<>()).add(runner);
+            }
+            return true;
+        }
+    }
+
+    /** The callback is done; its pooled thread can serve a later event of this context. */
+    void exitAsync(Thread caller, Thread runner) {
+        synchronized (asyncChildren) {
+            if (caller == runner) {
+                return;                     // never release a direct executor's outer guard
+            }
+            List<Thread> children = asyncChildren.get(caller);
+            if (children != null) {
+                children.remove(runner);
+                if (children.isEmpty()) {
+                    asyncChildren.remove(caller);
+                }
+            }
+            abandoned.remove(runner);
+        }
+    }
+
+    /**
+     * Undoes one {@link #abandon} once the overrunning task has returned, so a pooled thread that
+     * runs this call's next callback is not refused for the previous one's overrun. Only the
+     * caller that abandoned a thread may release it.
+     */
+    void release(Thread runner) {
+        abandoned.remove(runner);
     }
 
     private void refuseIfAbandoned(String what) {
         if (!abandoned.isEmpty() && abandoned.contains(Thread.currentThread())) {
             throw new IllegalStateException(String.format(
-                    "laya: hook thread %s exceeded its deadline and was abandoned; this call has "
-                    + "moved on, so ctx.%s() is refused rather than applied to it",
+                    "laya: hook thread %s was abandoned when the call stopped waiting for it; "
+                    + "this call has moved on, so ctx.%s() is refused rather than applied to it",
                     Thread.currentThread().getName(), what));
         }
     }

@@ -1104,6 +1104,284 @@ def shortlist():
     return payload
 
 
+def _tournament_rank(label):
+    """The stand-in model's preference: the lowest FNV-1a of `rank:<label>` wins any group."""
+    return _fnv1a(("rank:%s" % label).encode("utf-8"))
+
+
+class _TournamentRecorder:
+    """Answers every choice with its best-ranked label and records each call, in order."""
+
+    def __init__(self):
+        self.calls = []
+
+    def predict(self, state, questions, **kwargs):
+        from laya import shortlist as mod
+
+        self.calls.append({qid: dict(qdef) for qid, qdef in questions.items()})
+        answers = {}
+        for qid, qdef in questions.items():
+            if qdef.get("type") == "choice":
+                labels = [key for key, _value in mod._criteria_items(qdef["criteria"])]
+                answers[qid] = {"type": "choice", "choice": min(labels, key=_tournament_rank)}
+        return {"model": "stub-%d" % len(self.calls), "answers": answers}
+
+
+def _asked(questions):
+    """A recorded call: each question's type, instructions, labels, and dict criteria verbatim.
+
+    Labels are read without validation, so a call the reference really made with a duplicated
+    list label is recorded as made.
+    """
+    out = {}
+    for qid, qdef in questions.items():
+        entry = {"type": qdef.get("type"), "instructions": qdef.get("instructions")}
+        if qdef.get("type") == "choice":
+            entry["labels"] = list(qdef["criteria"])
+            if isinstance(qdef["criteria"], dict):
+                entry["criteria"] = qdef["criteria"]
+        out[qid] = entry
+    return out
+
+
+def tournament():
+    """`predict_tournament`'s grouping, rounds and final call, against a deterministic stub model.
+
+    The stub prefers the label with the lowest FNV-1a of `rank:<label>`, reproducible in any
+    language, so every call the reference makes -- the groups of each round, their order, the
+    winners carried forward and the final cut -- can be replayed by a port and compared exactly.
+    """
+    from laya import shortlist as mod
+
+    state = "My card was charged twice for the same order last Tuesday."
+
+    def run(questions, group_size=None):
+        recorder = _TournamentRecorder()
+        before = json.dumps(questions, sort_keys=False)
+        kwargs = {} if group_size is None else {"group_size": group_size}
+        result = mod.predict_tournament(recorder, state, questions, **kwargs)
+        return recorder, result, before == json.dumps(questions, sort_keys=False)
+
+    # Every split size, from the calls the reference actually makes on one bare-label choice.
+    splits = []
+    sweep = [(g, n) for g in (2, 3, 5) for n in range(1, 41)]
+    sweep += [(16, n) for n in (1, 15, 16, 17, 31, 32, 33, 77, 150, 255, 256, 257, 300, 1000)]
+    for group_size, n in sweep:
+        labels = ["l%04d" % i for i in range(n)]
+        recorder, result, _same = run(
+            {"q": {"type": "choice", "instructions": "pick", "criteria": labels}}, group_size)
+        splits.append({
+            "group_size": group_size,
+            "n": n,
+            "rounds": [[len(q["criteria"]) for q in call.values()] for call in recorder.calls[:-1]],
+            "finalists": result["tournament"]["q"]["labels"],
+            "choice": result["answers"]["q"]["choice"],
+        })
+
+    big = {label: "about " + label for label in ["l%02d" % i for i in range(20)]}
+    banking = [
+        "card_arrival", "card_delivery_estimate", "card_not_working", "cash_withdrawal_charge",
+        "declined_card_payment", "direct_debit_payment_not_recognised", "exchange_rate",
+        "failed_transfer", "lost_or_stolen_card", "pending_card_payment",
+        "refund_not_showing_up", "request_refund", "reverted_card_payment", "top_up_failed",
+        "transfer_fee_charged", "verify_my_identity", "wrong_amount_of_cash_received",
+    ]
+    cases = []
+    for name, questions, group_size in [
+        ("default-group-77", {"q": {"type": "choice", "instructions": "pick",
+                                    "criteria": ["l%03d" % i for i in range(77)]}}, None),
+        ("mixed-group-8", {
+            "big": {"type": "choice", "instructions": "pick", "criteria": big},
+            "small": {"type": "choice", "instructions": "pick", "criteria": ["x", "y"]},
+            "level": {"type": "score", "instructions": "rate", "criteria": ["low", "high"]},
+            "urgent": {"type": "noul", "instructions": "Is this urgent?"},
+        }, 8),
+        ("nothing-to-narrow", {
+            "small": {"type": "choice", "instructions": "pick", "criteria": ["x", "y"]},
+            "level": {"type": "score", "instructions": "rate", "criteria": ["low", "high"]},
+        }, None),
+        ("two-choices-different-rounds", {
+            "wide": {"type": "choice", "instructions": "Which one?",
+                     "criteria": ["w%03d" % i for i in range(300)]},
+            "narrow": {"type": "choice", "instructions": "Which other?",
+                       "criteria": ["n%02d" % i for i in range(40)]},
+        }, None),
+        ("described-criteria", {"intent": {
+            "type": "choice", "instructions": "What does the customer want?",
+            "criteria": dict([(label, None if i % 4 == 0 else ("" if i % 4 == 1 else
+                               (i if i % 4 == 2 else label.replace("_", " "))))
+                              for i, label in enumerate(banking)])}}, 3),
+        ("group-of-one", {"q": {"type": "choice", "instructions": "pick",
+                                "criteria": ["e", "d", "c", "b", "a"]}}, 2),
+        ("criteria-order-not-sorted", {"q": {"type": "choice", "instructions": "pick",
+                                             "criteria": list(reversed(banking))}}, 4),
+    ]:
+        recorder, result, unchanged = run(questions, group_size)
+        cases.append({
+            "name": name,
+            "group_size": group_size,
+            "questions": questions,
+            "calls": [_asked(call) for call in recorder.calls],
+            "model": result["model"],
+            "answers": {qid: answer["choice"] for qid, answer in result["answers"].items()},
+            "tournament": result["tournament"],
+            "caller_questions_unmutated": unchanged,
+        })
+
+    # A model that answers outside the group, with a non-label, or not at all. The reference
+    # advances whatever a round answered and fails only on a missing answer (at once) or when a
+    # dict-criteria question is cut to a label it lacks.
+    class Fixed:
+        def __init__(self, mode, label=None):
+            self.mode, self.label, self.calls = mode, label, []
+
+        def predict(self, state, questions, **kwargs):
+            self.calls.append({qid: dict(qdef) for qid, qdef in questions.items()})
+            if self.mode == "missing":
+                answers = {}
+            elif self.mode == "no-choice":
+                answers = {qid: {"type": "noul", "noul": 0.5} for qid in questions}
+            else:
+                answers = {qid: {"type": "choice", "choice": self.label} for qid in questions}
+            return {"model": "fixed-%d" % len(self.calls), "answers": answers}
+
+    def forty(as_list, n=40):
+        labels = ["l%02d" % i if n <= 100 else "l%03d" % i for i in range(n)]
+        return labels if as_list else {label: "about " + label for label in labels}
+
+    irregular = []
+    for name, criteria, mode, label in [
+        ("dict-out-of-group", forty(False), "label", "l39"),
+        ("list-out-of-group", forty(True), "label", "l39"),
+        ("dict-non-label", forty(False), "label", "zzz"),
+        ("list-non-label", forty(True), "label", "zzz"),
+        ("dict-non-label-next-round", forty(False, 300), "label", "zzz"),
+        ("list-non-label-two-rounds", forty(True, 300), "label", "zzz"),
+        ("dict-missing-answer", forty(False), "missing", None),
+        ("list-missing-answer", forty(True), "missing", None),
+        ("dict-answer-without-choice", forty(False), "no-choice", None),
+    ]:
+        questions = {"q": {"type": "choice", "instructions": "pick", "criteria": criteria}}
+        model = Fixed(mode, label)
+        row = {"name": name, "group_size": 16, "mode": mode, "label": label,
+               "questions": questions}
+        try:
+            result = mod.predict_tournament(model, state, questions, group_size=16)
+            row["error"] = None
+            row["answers"] = {qid: a["choice"] for qid, a in result["answers"].items()}
+            row["tournament"] = result["tournament"]
+        except Exception as failure:
+            row["error"] = type(failure).__name__
+            row["message"] = str(failure)
+        row["calls"] = [_asked(call) for call in model.calls]
+        irregular.append(row)
+
+    refusals = []
+    for bad in (1, 0, -3):
+        try:
+            mod.predict_tournament(_TournamentRecorder(), state, {}, group_size=bad)
+            refusals.append({"group_size": bad, "error": None})
+        except Exception as failure:
+            refusals.append({"group_size": bad, "error": type(failure).__name__,
+                             "message": str(failure)})
+
+    return {
+        "default_group_size": mod.DEFAULT_TOURNAMENT_GROUP,
+        "state": state,
+        "rank_probe": {label: str(_tournament_rank(label)) for label in ["", "a", "l0001", "注文"]},
+        "splits": splits,
+        "cases": cases,
+        "irregular": irregular,
+        "refusals": refusals,
+    }
+
+
+TOURNAMENT_GOLDEN_CASES = [
+    ("banking-default-group", "My new card still has not arrived after two weeks.", {
+        "intent": {"type": "choice", "instructions": "What does the customer want?",
+                   "criteria": [
+                       "activate_my_card", "age_limit", "apple_pay_or_google_pay",
+                       "atm_support", "automatic_top_up", "balance_not_updated_after_bank_transfer",
+                       "beneficiary_not_allowed", "cancel_transfer", "card_about_to_expire",
+                       "card_acceptance", "card_arrival", "card_delivery_estimate",
+                       "card_linking", "card_not_working", "card_payment_fee_charged",
+                       "card_payment_not_recognised", "card_swallowed", "cash_withdrawal_charge",
+                       "change_pin", "compromised_card", "contactless_not_working",
+                       "country_support", "declined_card_payment", "declined_cash_withdrawal",
+                       "declined_transfer", "edit_personal_details", "exchange_charge",
+                       "exchange_rate", "failed_transfer", "fiat_currency_support",
+                       "get_physical_card", "lost_or_stolen_card", "lost_or_stolen_phone",
+                       "order_physical_card", "passcode_forgotten", "pending_card_payment",
+                       "refund_not_showing_up", "request_refund", "terminate_account",
+                       "top_up_failed"]},
+    }, None),
+    ("mixed-group-8", "We were billed twice for March and want a refund today.", {
+        "dept": {"type": "choice", "instructions": "Which team owns this?",
+                 "criteria": {"billing": "invoices and charges", "refunds": "money sent back",
+                              "fraud": "unauthorised activity", "cards": "card problems",
+                              "transfers": "bank transfers", "loans": "credit and loans",
+                              "savings": "savings products", "kyc": "identity checks",
+                              "support": "general help", "legal": "complaints and law",
+                              "sales": "new products", "tech": "app bugs"}},
+        "urgent": {"type": "noul", "instructions": "This needs a human today."},
+    }, 8),
+    ("nothing-to-narrow", "The app crashes when I open statements.", {
+        "intent": {"type": "choice", "instructions": "What is wrong?",
+                   "criteria": {"bug": "the app fails", "billing": "a charge", "other": "else"}},
+    }, None),
+]
+
+
+def tournament_golden():
+    """`predict_tournament` on a real graph: every call's answers and the final usage.
+
+    Needs an exported graph, like `predict.json`, and records `skipped` without one. A round's
+    winners decide what the next call is asked, so each case is checked here to have a decisive
+    answer in every group: a near-tie would make the replay platform-dependent.
+    """
+    import os
+
+    graph = os.environ.get("LAYA_ONNX_GRAPH")
+    model = os.environ.get("LAYA_PREDICT_MODEL", "multilingual")
+    rig = os.environ.get("LAYA_FIXTURE_CHECKPOINTS", DEFAULT_CHECKPOINT_ROOT)
+    if not graph or not os.path.exists(graph):
+        return {"skipped": "set LAYA_ONNX_GRAPH to an exported laya.onnx to record this family"}
+    checkpoint = os.path.join(rig, model)
+    for needed in ("rl_agent_config.json", "tokenizer/tokenizer.json"):
+        if not os.path.isfile(os.path.join(checkpoint, *needed.split("/"))):
+            return {"skipped": "set LAYA_FIXTURE_CHECKPOINTS to a root whose %s checkpoint has "
+                               "%s, to record this family" % (model, needed)}
+    from laya import shortlist as mod
+    from laya.onnx_agent import ONNXAgent
+
+    agent = ONNXAgent(checkpoint, onnx_path=graph)
+
+    class Recording:
+        def __init__(self):
+            self.calls = []
+
+        def predict(self, state, questions, **kwargs):
+            result = agent.predict(state, questions, **kwargs)
+            self.calls.append({"asked": _asked(questions), "answers": result["answers"],
+                               "usage": result["usage"]})
+            return result
+
+    cases = []
+    for name, state, questions, group_size in TOURNAMENT_GOLDEN_CASES:
+        recording = Recording()
+        kwargs = {} if group_size is None else {"group_size": group_size}
+        result = mod.predict_tournament(recording, state, questions, **kwargs)
+        for call in recording.calls[:-1]:
+            for qid, answer in call["answers"].items():
+                top = sorted(answer["probabilities"].values(), reverse=True)
+                if len(top) > 1 and top[0] - top[1] <= 1e-3:
+                    raise AssertionError("%s: round answer %s is not decisive" % (name, qid))
+        cases.append({"name": name, "state": state, "group_size": group_size,
+                      "questions": questions, "calls": recording.calls,
+                      "model": result["model"], "tournament": result["tournament"]})
+    return {"checkpoint": model, "graph": os.path.basename(graph), "cases": cases}
+
+
 # How many decimals of a cosine are safe to record. The reference computes its scores with
 # `np.dot(matrix, vector)`, a BLAS matrix-vector product, and how BLAS blocks that accumulation
 # differs between implementations -- measured here: on Apple Accelerate one row of a four-row
@@ -4957,6 +5235,8 @@ FAMILIES = {
     "presets.json": presets,
     "router.json": router,
     "shortlist.json": shortlist,
+    "tournament.json": tournament,
+    "tournament_golden.json": tournament_golden,
     "tokenizer_ids.json": tokenizer_ids,
     "decode_text.json": decode_text,
     "sequences.json": sequences,
@@ -4969,7 +5249,7 @@ FAMILIES = {
 }
 
 
-def render(payload):
+def render(payload, compact_tables=False):
     """One canonical serialisation, so `--check` compares content and never formatting.
 
     `sort_keys` is deliberately OFF. Key order is not formatting here, it is data: a `choice`
@@ -4980,6 +5260,18 @@ def render(payload):
     was wrong in exactly the way the fixture existed to prevent. Python dicts preserve insertion
     order and this generator builds them deterministically, so the output is still canonical.
     """
+    if compact_tables:
+        # Keep each generated case on one line rather than repeating thousands of label lines.
+        rows = []
+        for key, value in payload.items():
+            prefix = "  " + json.dumps(key) + ": "
+            if isinstance(value, list):
+                rendered = ",\n".join("    " + json.dumps(row, ensure_ascii=False,
+                                                      separators=(",", ":")) for row in value)
+                rows.append(prefix + "[\n" + rendered + "\n  ]")
+            else:
+                rows.append(prefix + json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+        return "{\n" + ",\n".join(rows) + "\n}\n"
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
 
@@ -5073,7 +5365,7 @@ def main(argv=None):
         examined += 1
         path = os.path.join(FIXTURES, filename)
         payload = build()
-        fresh = render(payload)
+        fresh = render(payload, compact_tables=filename.startswith("tournament"))
         if unverifiable(payload) and os.path.exists(path):
             unverified.append(filename)
             continue

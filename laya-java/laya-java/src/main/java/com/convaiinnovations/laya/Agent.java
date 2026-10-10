@@ -231,17 +231,30 @@ public final class Agent implements AutoCloseable, Predictor, BatchPredictor {
     public List<Prediction> predictBatch(List<?> states, Map<String, Question> questions,
                                          String language, int batchSize, boolean sortByLength,
                                          HookCall call) {
+        return predictBatch(states, questions, language, batchSize, sortByLength, call, null,
+                null);
+    }
+
+    /**
+     * {@link #predictBatch(List, Map, String, int, boolean, HookCall)} with the token budgets
+     * seeded on the context, so this agent's own start hooks can still replace them. For
+     * {@link Router#predictBatch(List)}, which carries a per-request budget.
+     */
+    List<Prediction> predictBatch(List<?> states, Map<String, Question> questions,
+                                  String language, int batchSize, boolean sortByLength,
+                                  HookCall call, Integer maxLen, Integer headMaxLen) {
         // Before any hook: a closed agent cannot answer, and dispatching a start hook that then
         // watched the call fail would report a prediction that was never going to happen.
         if (closed) {
             throw new IllegalStateException(
                     "this agent is closed; open a new one rather than reusing it");
         }
-        PredictContext ctx = new PredictContext(states, questions, modelName, this);
+        PredictContext ctx = new PredictContext(states, questions, modelName, this, maxLen,
+                headMaxLen);
         return Hooks.around(hooks.composeFor(call), ctx, hooks.policyFor(call),
-                (hooked, asked, maxLen, headMaxLen) ->
-                        infer(hooked, asked, language, batchSize, sortByLength, maxLen,
-                                headMaxLen));
+                (hooked, asked, tokens, headTokens) ->
+                        infer(hooked, asked, language, batchSize, sortByLength, tokens,
+                                headTokens));
     }
 
     /**
